@@ -954,7 +954,24 @@ class TestLibraryAuthenticator:
                 authenticator.register_anonymous_provider(anonymous)
         assert "Anonymous access cannot be combined" in str(excinfo.value)
 
-    def test_anonymous_provider_excludes_saml(self, db: DatabaseTransactionFixture):
+    @pytest.mark.parametrize(
+        "provider_spec, register_method",
+        [
+            (BaseSAMLAuthenticationProvider, "register_saml_provider"),
+            (BaseOIDCAuthenticationProvider, "register_oidc_provider"),
+        ],
+    )
+    def test_anonymous_provider_excludes_oauth_provider(
+        self,
+        db: DatabaseTransactionFixture,
+        provider_spec: type[
+            BaseSAMLAuthenticationProvider | BaseOIDCAuthenticationProvider
+        ],
+        register_method: str,
+    ):
+        # An already-registered anonymous provider blocks every identifying
+        # OAuth-style provider (SAML and OIDC), via the guard shared by their
+        # register_* methods.
         authenticator = LibraryAuthenticator(
             _db=db.session,
             library=db.default_library(),
@@ -962,9 +979,9 @@ class TestLibraryAuthenticator:
         authenticator.register_anonymous_provider(
             MagicMock(spec=AnonymousAuthenticationProvider)
         )
-        saml = MagicMock(spec=BaseSAMLAuthenticationProvider)
+        provider = MagicMock(spec=provider_spec)
         with pytest.raises(CannotLoadConfiguration) as excinfo:
-            authenticator.register_saml_provider(saml)
+            getattr(authenticator, register_method)(provider)
         assert "Anonymous access cannot be combined" in str(excinfo.value)
 
     def test_authenticated_patron_basic(
