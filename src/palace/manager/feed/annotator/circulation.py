@@ -707,7 +707,7 @@ class LibraryAnnotator(CirculationManagerAnnotator):
 
         :param library_allows_anonymous_access: A boolean indicating
           whether this library is explicitly configured for anonymous
-          access. If this is true, some extra links may be added, for
+          access. If this is true, some extra links may be added for
           direct acquisition of titles that would normally require a
           loan. It is only ever true when ``library_identifies_patrons``
           is false.
