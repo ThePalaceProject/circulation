@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 import flask
 from flask import Response, make_response, url_for
 from psycopg2 import OperationalError
+from redis.exceptions import AuthenticationError as RedisAuthenticationError
 from werkzeug.exceptions import HTTPException
 
 from palace.util.log import LoggerMixin
@@ -23,6 +24,7 @@ from palace.manager.core.problem_details import INVALID_URN
 from palace.manager.feed.acquisition import LookupAcquisitionFeed, OPDSAcquisitionFeed
 from palace.manager.feed.facets.feed import Facets
 from palace.manager.search.pagination import Pagination
+from palace.manager.service.redis.exception import TRANSIENT_REDIS_ERRORS
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.util.opds_writer import OPDSMessage
 from palace.manager.util.problem_detail import BaseProblemDetailException, ProblemDetail
@@ -276,10 +278,20 @@ class ErrorHandler(LoggerMixin):
                 # WARN.
                 log_method = self.log.warning
             response = make_response(document.response)
-        elif isinstance(exception, OperationalError):
-            # This is an error, but it is probably unavoidable. Likely it was caused by
-            # the database dropping our connection which can happen then the database is
-            # restarted for maintenance. We'll log it at log level WARN.
+        elif isinstance(
+            exception, (OperationalError, *TRANSIENT_REDIS_ERRORS)
+        ) and not isinstance(exception, RedisAuthenticationError):
+            # A backing service briefly dropped our connection, rather than a bug in
+            # our own code: the database (psycopg2 OperationalError, e.g. the
+            # connection dropping during a maintenance restart), the application
+            # Redis client, or the Celery broker while publishing a task. These are
+            # usually unavoidable blips (e.g. an ElastiCache reboot), so we log at
+            # WARN and ask the client to retry rather than returning a 500.
+            #
+            # A redis AuthenticationError is also a ConnectionError subclass, but it
+            # signals a persistent credential/ACL misconfiguration rather than a
+            # blip, so we exclude it -- it falls through to the 500/ERROR path below
+            # rather than being hidden behind a retryable 503.
             log_method = self.log.warning
             body = "Service temporarily unavailable. Please try again later."
             response = make_response(body, 503, {"Content-Type": "text/plain"})

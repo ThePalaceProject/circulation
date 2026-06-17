@@ -11,6 +11,7 @@ from flask_babel import Babel, lazy_gettext as _
 from freezegun import freeze_time
 from psycopg2 import OperationalError
 from pytest import LogCaptureFixture
+from redis.exceptions import AuthenticationError as RedisAuthenticationError
 
 from palace.util.log import LogLevel
 
@@ -40,6 +41,7 @@ from palace.manager.feed.facets.feed import Facets
 from palace.manager.feed.facets.search import SearchFacets
 from palace.manager.feed.worklist.base import WorkList
 from palace.manager.search.pagination import Pagination
+from palace.manager.service.redis.exception import TRANSIENT_REDIS_ERRORS
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.util.opds_writer import OPDSFeed, OPDSMessage
 from palace.manager.util.problem_detail import (
@@ -602,6 +604,56 @@ class TestErrorHandler:
         assert len(caplog.records) == 1
         log_record = caplog.records[0]
         assert log_record.levelname == LogLevel.warning
+
+    @pytest.mark.parametrize("exception_cls", TRANSIENT_REDIS_ERRORS)
+    def test_handle_transient_redis_error(
+        self,
+        error_handler_fixture: ErrorHandlerFixture,
+        caplog: LogCaptureFixture,
+        exception_cls: type[Exception],
+    ):
+        # A transient failure reaching Redis -- either the application Redis client
+        # or the Celery broker while publishing a task -- is treated like the
+        # database OperationalError above: logged at WARN and returned as a 503 so
+        # the client retries, rather than surfaced as a 500.
+        caplog.set_level(LogLevel.warning)
+        handler = error_handler_fixture.handler()
+        with error_handler_fixture.app.test_request_context("/"):
+            try:
+                self.raise_exception(exception_cls("redis unavailable"))
+            except Exception as exception:
+                response = handler.handle(exception)
+
+            assert isinstance(response, Response)
+            assert 503 == response.status_code
+            assert (
+                "Service temporarily unavailable. Please try again later."
+                == response.get_data(as_text=True)
+            )
+
+        assert len(caplog.records) == 1
+        assert caplog.records[0].levelname == LogLevel.warning
+
+    def test_handle_redis_authentication_error_is_not_retryable(
+        self, error_handler_fixture: ErrorHandlerFixture, caplog: LogCaptureFixture
+    ):
+        # A redis AuthenticationError is a ConnectionError subclass, but it means a
+        # persistent credential/ACL misconfiguration, not a transient blip. It must
+        # NOT be mapped to a retryable 503; it falls through to the 500/ERROR path
+        # so the misconfiguration is visible rather than hidden behind "try again".
+        caplog.set_level(LogLevel.warning)
+        handler = error_handler_fixture.handler()
+        with error_handler_fixture.app.test_request_context("/"):
+            try:
+                self.raise_exception(RedisAuthenticationError("bad password"))
+            except Exception as exception:
+                response = handler.handle(exception)
+
+            assert isinstance(response, Response)
+            assert 500 == response.status_code
+
+        assert len(caplog.records) == 1
+        assert caplog.records[0].levelname == LogLevel.error
 
 
 class TestCompressibleAnnotator:
