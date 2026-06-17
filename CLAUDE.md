@@ -225,6 +225,11 @@ being lost.
 - Add a small doc comment to private/internal functions as needed, it doesn't need to be as detailed as public functions
 - Update module-level docstrings if functionality changes
 
+**Environment Variables:**
+- Whenever you add, rename, remove, or change the default of an environment variable that the
+  application reads (typically `PALACE_*`, plus legacy vars like `SIMPLIFIED_PRODUCTION_DATABASE`),
+  you MUST update `README.md` in the same change.
+
 **Pre-commit Hooks:**
 - When doing a commit, the pre-commit hooks will run automatically
 - If any hook fails, it should make the required changes and you should re-stage the files and commit again
