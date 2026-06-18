@@ -230,6 +230,15 @@ pass a broker URL and a result backend URL to the application.
         ```sh
         export PALACE_CELERY_RESULT_BACKEND="redis://localhost:6379/2"
         ```
+- `PALACE_CELERY_BROKER_TRANSPORT_OPTIONS_HEALTH_CHECK_INTERVAL`: How often, in seconds, the Celery broker's
+    Redis connection is health-checked (PINGed) before reuse, so a connection left stale by a Redis restart is
+    transparently re-established. Ignored by the SQS broker. The default is `30` (optional).
+- `PALACE_CELERY_REDIS_BACKEND_HEALTH_CHECK_INTERVAL`: How often, in seconds, the Celery result backend's Redis
+    connection is health-checked (PINGed) before reuse, with the same effect as above. The default is `30` (optional).
+- `PALACE_CELERY_RESULT_BACKEND_ALWAYS_RETRY`: Whether a result-backend write that hits a transient connection
+    error is retried, rather than failing a task that has already done its work. The default is `true` (optional).
+- `PALACE_CELERY_RESULT_BACKEND_MAX_RETRIES`: The maximum number of times a result-backend write is retried when
+    `PALACE_CELERY_RESULT_BACKEND_ALWAYS_RETRY` is enabled. The default is `3` (optional).
 
 We support overriding a number of other Celery settings via environment variables, but in most cases
 the defaults should be sufficient. The full list of settings can be found in
@@ -247,6 +256,9 @@ Celery and caching, we recommend that you use a separate database for each purpo
         ```
 - `PALACE_REDIS_KEY_PREFIX`: The prefix to use for keys stored in the Redis instance. The default is `palace`.
     This is useful if you want to use the same Redis database for multiple Circulation Manager instances (optional).
+- `PALACE_REDIS_HEALTH_CHECK_INTERVAL`: How often, in seconds, an idle Redis connection is health-checked
+    (PINGed) before reuse, so a connection left stale by a Redis restart is transparently re-established
+    rather than failing a command. The default is `30` (optional).
 
 #### General
 

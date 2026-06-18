@@ -47,14 +47,20 @@ class CloudwatchCameraFixture:
         namespace: str = "namespace",
         upload_size: int = 100,
         queues: list[str] | None = None,
+        health_check_interval: int | None = 30,
     ) -> None:
         queues = queues or ["queue1", "queue2"]
+        broker_transport_options: dict[str, str | int] = {
+            "global_keyprefix": manager_name
+        }
+        if health_check_interval is not None:
+            broker_transport_options["health_check_interval"] = health_check_interval
         self.app.conf = {
             "broker_url": broker_url,
             "result_backend": result_backend,
             "cloudwatch_statistics_region": region,
             "cloudwatch_statistics_dryrun": dry_run,
-            "broker_transport_options": {"global_keyprefix": manager_name},
+            "broker_transport_options": broker_transport_options,
             "cloudwatch_statistics_namespace": namespace,
             "cloudwatch_statistics_upload_size": upload_size,
             "task_queues": [self.mock_queue(queue) for queue in queues],
@@ -118,6 +124,21 @@ class TestCloudwatch:
         cloudwatch_camera.mock_get_redis.assert_called_once_with(
             "redis://testtesttest:1234/0",
             "manager",
+            30,
+        )
+
+    def test__init__health_check_interval_defaults_when_unset(
+        self, cloudwatch_camera: CloudwatchCameraFixture
+    ):
+        # When broker_transport_options omits health_check_interval, the camera
+        # falls back to the same default CeleryConfiguration uses (30s) rather
+        # than silently disabling health checks.
+        cloudwatch_camera.configure_app(health_check_interval=None)
+        cloudwatch_camera.create_cloudwatch()
+        cloudwatch_camera.mock_get_redis.assert_called_once_with(
+            "redis://testtesttest:1234/0",
+            "manager",
+            30,
         )
 
     def test__init__error(self, cloudwatch_camera: CloudwatchCameraFixture):
@@ -131,10 +152,31 @@ class TestCloudwatch:
         cloudwatch = cloudwatch_camera.create_cloudwatch()
         assert cloudwatch.cloudwatch_client is None
 
+    def test_get_redis_client_connection_resilience(self):
+        # The camera's own broker connection must carry the resilience settings:
+        # the configured health_check_interval (so a connection left stale by a
+        # Redis restart is re-established) and fail-fast socket timeouts (so a
+        # read against a dead socket doesn't hang the monitoring thread).
+        # Building the pool does not open a connection, so we can assert on its
+        # connection_kwargs directly.
+        client = Cloudwatch.get_redis_client(
+            "redis://localhost", "prefix", health_check_interval=30
+        )
+        connection_kwargs = client.connection_pool.connection_kwargs
+        # health_check_interval is threaded through, so pin the value we passed.
+        assert connection_kwargs["health_check_interval"] == 30
+        # The socket timeouts are fixed inside get_redis_client; assert they are
+        # configured (a real fail-fast timeout, not None) without coupling the
+        # test to the specific values.
+        assert connection_kwargs["socket_timeout"] is not None
+        assert connection_kwargs["socket_connect_timeout"] is not None
+
     def test_get_redis_client_prefixes_lindex(self):
         # kombu's PrefixedStrictRedis does not include LINDEX in its prefixed-command list,
         # so we need to patch it to make sure we can read the timestamp on the oldest message.
-        client = Cloudwatch.get_redis_client("redis://localhost", "prefix")
+        client = Cloudwatch.get_redis_client(
+            "redis://localhost", "prefix", health_check_interval=30
+        )
         with patch.object(redis.Redis, "execute_command") as mock_execute:
             client.lindex("apply", -1)
             client.llen("apply")

@@ -13,3 +13,9 @@ class RedisConfiguration(ServiceConfiguration):
 
     socket_timeout: float | None = 15.0
     socket_connect_timeout: float | None = 5.0
+
+    # Connection resilience settings.
+    # health_check_interval causes redis-py to PING an idle connection before
+    # reuse, and if the PING fails (e.g. the connection was left stale by a Redis
+    # reboot) it disconnects and re-establishes it transparently.
+    health_check_interval: int = 30

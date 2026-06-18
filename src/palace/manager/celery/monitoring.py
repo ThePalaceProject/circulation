@@ -126,19 +126,36 @@ class Cloudwatch(Polaroid):
         self.cloudwatch_client = (
             boto3.client("cloudwatch", region_name=region) if not dryrun else None
         )
-        self.manager_name = self.app.conf.get("broker_transport_options", {}).get(
-            "global_keyprefix"
+        broker_transport_options = self.app.conf.get("broker_transport_options", {})
+        self.manager_name = broker_transport_options.get("global_keyprefix")
+        self.redis_client = self.get_redis_client(
+            broker_url,
+            self.manager_name,
+            # Fall back to the same default CeleryConfiguration uses, so a missing
+            # value keeps health checks on rather than silently disabling them.
+            broker_transport_options.get("health_check_interval", 30),
         )
-        self.redis_client = self.get_redis_client(broker_url, self.manager_name)
         self.namespace = self.app.conf.get("cloudwatch_statistics_namespace")
         self.upload_size = self.app.conf.get("cloudwatch_statistics_upload_size")
         self.queues = {queue.name for queue in self.app.conf.get("task_queues")}
 
     @classmethod
     def get_redis_client(
-        cls, broker_url: str, global_keyprefix: str | None
+        cls,
+        broker_url: str,
+        global_keyprefix: str | None,
+        health_check_interval: int,
     ) -> _PrefixedRedis:
-        connection_pool = ConnectionPool.from_url(broker_url)
+        connection_pool = ConnectionPool.from_url(
+            broker_url,
+            # The camera opens its own redis-py connection to the broker Redis.
+            # We set timeouts to match the application redis service configuration.
+            socket_timeout=15.0,
+            socket_connect_timeout=5.0,
+            # health_check_interval is threaded through from the broker's
+            # PALACE_CELERY_BROKER_TRANSPORT_OPTIONS_HEALTH_CHECK_INTERVAL.
+            health_check_interval=health_check_interval,
+        )
         return _PrefixedRedis(
             connection_pool=connection_pool, global_keyprefix=global_keyprefix
         )
