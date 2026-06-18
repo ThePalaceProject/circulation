@@ -242,7 +242,10 @@ def equivalency_coverage_reset_on_equivalency_delete(
             input_id, output_id, *parent_ids
         )
     except Exception as e:
-        log.warning(f"Failed to mark dirty identifiers on equivalency delete: {e}")
+        log.warning(
+            f"Failed to mark dirty identifiers on equivalency delete: {e}",
+            exc_info=True,
+        )
 
 
 @Listener.before_flush(Equivalency, ListenerState.new)
@@ -263,7 +266,10 @@ def equivalency_coverage_reset_on_equivalency_create(
             input_id, output_id
         )
     except Exception as e:
-        log.warning(f"Failed to mark dirty identifiers on equivalency create: {e}")
+        log.warning(
+            f"Failed to mark dirty identifiers on equivalency create: {e}",
+            exc_info=True,
+        )
 
 
 @Listener.before_flush(Identifier, ListenerState.new)
