@@ -140,7 +140,9 @@ class Cloudwatch(Polaroid):
         self.redis_client = self.get_redis_client(
             broker_url,
             self.manager_name,
-            broker_transport_options.get("health_check_interval", 0),
+            # Fall back to the same default CeleryConfiguration uses, so a missing
+            # value keeps health checks on rather than silently disabling them.
+            broker_transport_options.get("health_check_interval", 30),
         )
         self.namespace = self.app.conf.get("cloudwatch_statistics_namespace")
         self.upload_size = self.app.conf.get("cloudwatch_statistics_upload_size")
