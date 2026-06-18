@@ -28,6 +28,7 @@ from celery import shared_task
 
 from palace.util.datetime_helpers import utc_now
 
+from palace.manager.api.circulation.exceptions import RemoteInitiatedServerError
 from palace.manager.celery.importer import workflow_lock_guard
 from palace.manager.celery.task import Task
 from palace.manager.celery.utils import ModelNotFoundError, load_from_id, signature_with
@@ -194,12 +195,20 @@ def import_purchase_records_for_all_collections(
     )
 
 
+# BibliothecaAPI.marc_request raises RemoteInitiatedServerError (via ErrorParser)
+# when Bibliotheca returns a non-200 body or a malformed/"Unknown error"/
+# "Authentication failed" document. ErrorParser documents these as transient
+# errors on the Bibliotheca side that happen relatively frequently, so they are
+# retried like the HTTP-level remote errors. RemoteInitiatedServerError is a
+# sibling of RemoteIntegrationException (both derive from IntegrationException),
+# not a subclass, so it must be listed explicitly in both autoretry_for and
+# throws — otherwise an exhausted retry surfaces as an unhandled task exception.
 @shared_task(
     queue=QueueNames.default,
     bind=True,
     max_retries=4,
-    autoretry_for=(BadResponseException, RequestTimedOut),
-    throws=(RemoteIntegrationException,),
+    autoretry_for=(BadResponseException, RequestTimedOut, RemoteInitiatedServerError),
+    throws=(RemoteIntegrationException, RemoteInitiatedServerError),
     retry_backoff=60,
 )
 def import_purchase_records_by_collection(

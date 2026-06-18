@@ -12,6 +12,7 @@ import pytest
 from palace.util.datetime_helpers import datetime_utc, utc_now
 from palace.util.log import LogLevel
 
+from palace.manager.api.circulation.exceptions import RemoteInitiatedServerError
 from palace.manager.celery.importer import import_workflow_lock
 from palace.manager.celery.tasks import apply, bibliotheca
 from palace.manager.celery.tasks.bibliotheca import (
@@ -857,6 +858,45 @@ class TestImportPurchaseRecordsByCollection:
             redis_fixture.client, collection.id, random_value="any"
         )
         assert workflow_lock.locked()
+
+    def test_remote_initiated_server_error_retried_and_expected(
+        self,
+        bibliotheca_purchase_record_task_fixture: BibliothecaPurchaseRecordTaskFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+    ) -> None:
+        """marc_request raises RemoteInitiatedServerError for transient Bibliotheca-side
+        failures (non-200 body, malformed/"Unknown error" document). It must be retried
+        and declared expected rather than surfacing as an unhandled task exception.
+
+        RemoteInitiatedServerError is a sibling of RemoteIntegrationException (both derive
+        from IntegrationException), not a subclass, so it has to be listed explicitly in
+        autoretry_for and throws. This guards against either being dropped.
+        """
+        task = bibliotheca.import_purchase_records_by_collection
+        assert RemoteInitiatedServerError in task.autoretry_for
+        assert RemoteInitiatedServerError in task.throws
+
+        collection = bibliotheca_purchase_record_task_fixture.collection
+        bibliotheca_purchase_record_task_fixture.stamp_purchase_record(
+            finish=utc_now() - timedelta(days=5)
+        )
+
+        with patch(
+            "palace.manager.integration.license.bibliotheca_purchase_record_importer.BibliothecaAPI"
+        ) as mock_api_cls:
+            mock_api_cls.return_value.marc_request.side_effect = (
+                RemoteInitiatedServerError("boom", BibliothecaAPI.SERVICE_NAME)
+            )
+
+            with celery_fixture.patch_retry_backoff():
+                bibliotheca.import_purchase_records_by_collection.delay(
+                    collection_id=collection.id
+                ).get(propagate=False)
+
+            # Retried on every attempt (1 initial + max_retries=4) rather than
+            # failing immediately as an unhandled exception.
+            assert mock_api_cls.return_value.marc_request.call_count == 5
 
     @patch(
         "palace.manager.integration.license.bibliotheca_purchase_record_importer.BibliothecaAPI"
