@@ -32,6 +32,7 @@ from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.integration.license.boundless.constants import (
     BAKER_TAYLOR_KDRM_PARAMS,
 )
+from palace.manager.service.redis.exception import TRANSIENT_REDIS_ERRORS
 from palace.manager.service.redis.models.patron_activity import PatronActivity
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import (
@@ -69,10 +70,25 @@ class LoanController(CirculationManagerController):
         if patron.authorization_identifier and refresh:
             header = self.authorization_header()
             credential = self.manager.auth.get_credential_from_header(header)
-            for collection in PatronActivity.collections_ready_for_sync(
-                self.redis_client, patron
-            ):
-                sync_patron_activity.apply_async((collection.id, patron.id, credential))
+            try:
+                for collection in PatronActivity.collections_ready_for_sync(
+                    self.redis_client, patron
+                ):
+                    # retry=False: fail fast instead of blocking the request on
+                    # Celery's publish-retry loop if the broker is down (see
+                    # _queue_patron_activity_sync). The error is swallowed below.
+                    sync_patron_activity.apply_async(
+                        (collection.id, patron.id, credential), retry=False
+                    )
+            except TRANSIENT_REDIS_ERRORS:
+                # Best-effort: both reading the sync state and queuing the tasks go
+                # through Redis. If it is briefly unavailable we still serve the
+                # loans feed; the patron sees fresh data on their next refresh.
+                self.log.warning(
+                    "Could not queue patron activity sync; Redis appears to be "
+                    "temporarily unavailable.",
+                    exc_info=True,
+                )
 
         # Then make the feed.
         feed = OPDSAcquisitionFeed.active_loans_for(self.circulation, patron)
@@ -83,6 +99,36 @@ class LoanController(CirculationManagerController):
         )
 
         return response
+
+    def _queue_patron_activity_sync(
+        self, collection_id: int, patron_id: int, credential: str | None
+    ) -> None:
+        """Best-effort queue of a forced patron-activity sync after a successful
+        borrow or revoke.
+
+        The loan or hold change has already succeeded; this task only refreshes
+        our local copy of the patron's activity from the remote provider. A
+        transient Redis/broker outage (e.g. an ElastiCache reboot) must therefore
+        not turn that success into an error for the patron, so we swallow it and
+        log a warning -- the patron will get fresh data on their next refresh.
+        """
+        try:
+            # retry=False: a dead broker should fail fast rather than block the
+            # web request through Celery's publish-retry loop. The resulting
+            # BrokerOperationalError is transient and swallowed below.
+            sync_patron_activity.apply_async(
+                (collection_id, patron_id, credential),
+                {"force": True},
+                countdown=5,
+                retry=False,
+            )
+        except TRANSIENT_REDIS_ERRORS:
+            self.log.warning(
+                "Could not queue patron activity sync for collection %s; Redis "
+                "appears to be temporarily unavailable.",
+                collection_id,
+                exc_info=True,
+            )
 
     def borrow(
         self, identifier_type: str, identifier: str, mechanism_id: int | None = None
@@ -134,10 +180,8 @@ class LoanController(CirculationManagerController):
         if is_new and self.circulation.supports_patron_activity(
             loan_or_hold.license_pool
         ):
-            sync_patron_activity.apply_async(
-                (loan_or_hold.license_pool.collection.id, patron.id, credential),
-                {"force": True},
-                countdown=5,
+            self._queue_patron_activity_sync(
+                loan_or_hold.license_pool.collection.id, patron.id, credential
             )
 
         # If we have a loan, serve a feed that tells the patron how to fulfill the loan. If a hold,
@@ -538,11 +582,7 @@ class LoanController(CirculationManagerController):
         # If the api supports it, queue up a task to sync the patron's activity with the remote.
         # That way we are sure we have the most up-to-date information.
         if self.circulation.supports_patron_activity(pool):
-            sync_patron_activity.apply_async(
-                (pool.collection.id, patron.id, credential),
-                {"force": True},
-                countdown=5,
-            )
+            self._queue_patron_activity_sync(pool.collection.id, patron.id, credential)
 
         annotator = self.manager.annotator(None)
         single_entry_feed = OPDSAcquisitionFeed.single_entry(work, annotator)

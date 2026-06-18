@@ -14,6 +14,7 @@ from flask import Response as FlaskResponse, url_for
 from werkzeug import Response as wkResponse
 
 from palace.util.datetime_helpers import utc_now
+from palace.util.log import LogLevel
 
 from palace.manager.api.circulation.base import BaseCirculationAPI
 from palace.manager.api.circulation.data import HoldInfo, LoanInfo
@@ -52,6 +53,7 @@ from palace.manager.core.problem_details import INTEGRATION_ERROR, INVALID_INPUT
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.integration.license.bibliotheca import BibliothecaAPI
 from palace.manager.integration.license.opds.opds1.api import OPDSAPI
+from palace.manager.service.redis.exception import TRANSIENT_REDIS_ERRORS
 from palace.manager.service.redis.models.patron_activity import PatronActivity
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.classification import Genre
@@ -328,6 +330,7 @@ class TestLoanController:
                 ),
                 {"force": True},
                 countdown=5,
+                retry=False,
             )
 
             # A loan has been created for this license pool.
@@ -1194,7 +1197,136 @@ class TestLoanController:
             ),
             {"force": True},
             countdown=5,
+            retry=False,
         )
+
+    @pytest.mark.parametrize("exception", TRANSIENT_REDIS_ERRORS)
+    def test_revoke_swallows_transient_redis_error(
+        self,
+        loan_fixture: LoanFixture,
+        caplog: pytest.LogCaptureFixture,
+        exception: type[Exception],
+    ):
+        # Revoking succeeds, but queuing the follow-up patron-activity sync hits a
+        # transient Redis/broker outage. The revoke must still succeed -- the blip
+        # is swallowed and logged rather than surfaced as an error to the patron.
+        caplog.set_level(LogLevel.warning)
+        headers = {"Authorization": loan_fixture.valid_auth}
+        with loan_fixture.request_context_with_library("/", headers=headers):
+            patron = loan_fixture.manager.loans.authenticated_patron_from_request()
+            assert isinstance(patron, Patron)
+            loan_fixture.pool.loan_to(patron)
+            loan_fixture.manager.d_circulation.queue_checkin(loan_fixture.pool)
+
+            with patch(
+                "palace.manager.api.controller.loan.sync_patron_activity"
+            ) as sync_task:
+                sync_task.apply_async.side_effect = exception("redis unavailable")
+                response = loan_fixture.manager.loans.revoke(loan_fixture.pool_id)
+
+        assert response.status_code == 200
+        sync_task.apply_async.assert_called_once()
+        assert "Could not queue patron activity sync" in caplog.text
+
+    @pytest.mark.parametrize("exception", TRANSIENT_REDIS_ERRORS)
+    def test_borrow_swallows_transient_redis_error(
+        self,
+        loan_fixture: LoanFixture,
+        caplog: pytest.LogCaptureFixture,
+        exception: type[Exception],
+    ):
+        # A new loan/hold queues the same best-effort follow-up sync as revoke (via
+        # the shared helper). A transient Redis/broker outage must not turn the
+        # successful borrow into an error -- it is swallowed and logged.
+        caplog.set_level(LogLevel.warning)
+        work = loan_fixture.db.work(
+            with_license_pool=True, with_open_access_download=False
+        )
+        pool = work.license_pools[0]
+        loan_fixture.manager.d_circulation.queue_checkout(
+            pool,
+            LoanInfo.from_license_pool(
+                pool,
+                start_date=utc_now(),
+                end_date=utc_now() + datetime.timedelta(seconds=3600),
+            ),
+        )
+        headers = {"Authorization": loan_fixture.valid_auth}
+        with loan_fixture.request_context_with_library("/", headers=headers):
+            loan_fixture.manager.loans.authenticated_patron_from_request()
+            with patch(
+                "palace.manager.api.controller.loan.sync_patron_activity"
+            ) as sync_task:
+                sync_task.apply_async.side_effect = exception("redis unavailable")
+                borrow_response = loan_fixture.manager.loans.borrow(
+                    loan_fixture.identifier_type, loan_fixture.identifier_identifier
+                )
+
+        assert isinstance(borrow_response, FlaskResponse)
+        assert borrow_response.status_code == 201
+        sync_task.apply_async.assert_called_once()
+        assert "Could not queue patron activity sync" in caplog.text
+
+    @pytest.mark.parametrize("exception", TRANSIENT_REDIS_ERRORS)
+    def test_sync_swallows_transient_redis_error(
+        self,
+        loan_fixture: LoanFixture,
+        redis_fixture: RedisFixture,
+        caplog: pytest.LogCaptureFixture,
+        exception: type[Exception],
+    ):
+        # The Redis *read* (collections_ready_for_sync) fails here. If Redis is
+        # briefly unavailable we must still serve the loans feed rather than 500.
+        caplog.set_level(LogLevel.warning)
+        with (
+            loan_fixture.request_context_with_library(
+                "loans/?refresh=true",
+                headers=dict(Authorization=loan_fixture.valid_auth),
+            ),
+            patch.object(
+                PatronActivity,
+                "collections_ready_for_sync",
+                side_effect=exception("redis unavailable"),
+            ),
+        ):
+            loan_fixture.manager.loans.authenticated_patron_from_request()
+            response = loan_fixture.manager.loans.sync()
+
+        assert isinstance(response, FlaskResponse)
+        assert response.status_code == 200
+        assert "Could not queue patron activity sync" in caplog.text
+
+    @pytest.mark.parametrize("exception", TRANSIENT_REDIS_ERRORS)
+    def test_sync_swallows_transient_redis_error_when_queuing(
+        self,
+        loan_fixture: LoanFixture,
+        redis_fixture: RedisFixture,
+        caplog: pytest.LogCaptureFixture,
+        exception: type[Exception],
+    ):
+        # Companion to the read-path test above: here the Redis read succeeds and
+        # returns at least one collection, but publishing the sync task to the
+        # broker fails. That apply_async call lives inside the same try block, so a
+        # broker outage must be swallowed too -- this guards against a future
+        # refactor that moves the publish call outside the guard.
+        caplog.set_level(LogLevel.warning)
+        with (
+            loan_fixture.request_context_with_library(
+                "loans/?refresh=true",
+                headers=dict(Authorization=loan_fixture.valid_auth),
+            ),
+            patch(
+                "palace.manager.api.controller.loan.sync_patron_activity"
+            ) as sync_task,
+        ):
+            sync_task.apply_async.side_effect = exception("redis unavailable")
+            loan_fixture.manager.loans.authenticated_patron_from_request()
+            response = loan_fixture.manager.loans.sync()
+
+        assert isinstance(response, FlaskResponse)
+        assert response.status_code == 200
+        sync_task.apply_async.assert_called_once()
+        assert "Could not queue patron activity sync" in caplog.text
 
     @pytest.mark.parametrize(
         *OPDSSerializationTestHelper.PARAMETRIZED_SINGLE_ENTRY_ACCEPT_HEADERS
@@ -1329,6 +1461,7 @@ class TestLoanController:
             ),
             {"force": True},
             countdown=5,
+            retry=False,
         )
 
     def test_revoke_hold_exception(
@@ -1565,6 +1698,7 @@ class TestLoanController:
         for collection in patron_collections:
             sync_task.apply_async.assert_any_call(
                 (collection.id, patron.id, loan_fixture.valid_credentials["password"]),
+                retry=False,
             )
 
         # Set up some loans and holds
@@ -1671,6 +1805,7 @@ class TestLoanController:
                 patron.id,
                 loan_fixture.valid_credentials["password"],
             ),
+            retry=False,
         )
 
     @pytest.mark.parametrize(
