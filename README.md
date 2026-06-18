@@ -230,6 +230,15 @@ pass a broker URL and a result backend URL to the application.
         ```sh
         export PALACE_CELERY_RESULT_BACKEND="redis://localhost:6379/2"
         ```
+- `PALACE_CELERY_BROKER_TRANSPORT_OPTIONS_HEALTH_CHECK_INTERVAL`: How often, in seconds, the Celery broker's
+    Redis connection is health-checked (PINGed) before reuse, so a connection left stale by a Redis restart is
+    transparently re-established. Ignored by the SQS broker. The default is `30` (optional).
+- `PALACE_CELERY_REDIS_BACKEND_HEALTH_CHECK_INTERVAL`: How often, in seconds, the Celery result backend's Redis
+    connection is health-checked (PINGed) before reuse, with the same effect as above. The default is `30` (optional).
+- `PALACE_CELERY_RESULT_BACKEND_ALWAYS_RETRY`: Whether a result-backend write that hits a transient connection
+    error is retried, rather than failing a task that has already done its work. The default is `true` (optional).
+- `PALACE_CELERY_RESULT_BACKEND_MAX_RETRIES`: The maximum number of times a result-backend write is retried when
+    `PALACE_CELERY_RESULT_BACKEND_ALWAYS_RETRY` is enabled. The default is `3` (optional).
 
 We support overriding a number of other Celery settings via environment variables, but in most cases
 the defaults should be sufficient. The full list of settings can be found in
