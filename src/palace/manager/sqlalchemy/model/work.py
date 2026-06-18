@@ -932,16 +932,24 @@ class Work(Base, LoggerMixin):
         )
         return changed
 
-    def _get_default_audience(self) -> str | None:
-        """Return the default audience.
+    def _get_default_audience(self) -> str:
+        """Return the default audience to assume when classification finds no
+        audience evidence.
 
-        :return: Default audience
+        Uses a license pool's collection-level ``default_audience`` if one is
+        configured; otherwise falls back to ``AUDIENCE_ADULT``. This never
+        returns ``None``: recalculating a Work's presentation must not be able
+        to *erase* its audience (see the FB BISAC repair, PP-4204), so the
+        worst case for an evidence-less Work is ``Adult`` rather than a ``NULL``
+        audience.
+
+        :return: A default audience string (never ``None``).
         """
         for license_pool in self.license_pools:
             if license_pool.collection.default_audience:
                 return license_pool.collection.default_audience
 
-        return None
+        return Classifier.AUDIENCE_ADULT
 
     def calculate_presentation(
         self,
@@ -1378,6 +1386,12 @@ class Work(Base, LoggerMixin):
 
         if new_fiction != old_fiction:
             self.fiction = new_fiction
+        # Never let a recalculation erase a known audience. If the classifier
+        # came back with no audience (e.g. it gathered no usable
+        # classifications on this pass), keep whatever we already had rather
+        # than writing NULL over a previously-determined audience.
+        if new_audience is None and old_audience is not None:
+            new_audience = old_audience
         if new_audience != old_audience:
             self.audience = new_audience
 

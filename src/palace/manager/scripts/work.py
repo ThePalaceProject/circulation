@@ -8,7 +8,10 @@ from sqlalchemy.orm import Query, Session
 
 from palace.util.exceptions import PalaceValueError
 
-from palace.manager.celery.tasks.work import classify_unchecked_subjects
+from palace.manager.celery.tasks.work import (
+    classify_unchecked_subjects,
+    reclassify_null_audience_works,
+)
 from palace.manager.data_layer.policy.presentation import (
     PresentationCalculationPolicy,
 )
@@ -247,3 +250,22 @@ class WorkOPDSScript(WorkPresentationScript):
         choose_cover=False,
         update_search_index=True,
     )
+
+
+class ReclassifyNullAudienceWorksScript(Script):
+    """Manually dispatch the ``reclassify_null_audience_works`` Celery task.
+
+    The work itself happens in the Celery task; this script just queues it. It
+    exists for convenience, in case we need to re-run the null-audience repair
+    on demand.
+
+    TODO: Remove this script when the ``reclassify_null_audience_works`` Celery
+    task is removed (see PP-4330).
+    """
+
+    def do_run(self, *args: Any, **kwargs: Any) -> None:
+        reclassify_null_audience_works.delay()
+        self.log.info(
+            'The "reclassify_null_audience_works" task has been queued for '
+            "execution. See the celery logs for details about task execution."
+        )

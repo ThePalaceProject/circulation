@@ -8,6 +8,7 @@ import pytest
 from palace.util.exceptions import PalaceValueError
 
 from palace.manager.scripts.work import (
+    ReclassifyNullAudienceWorksScript,
     ReclassifyWorksForUncheckedSubjectsScript,
     WorkProcessingScript,
 )
@@ -186,4 +187,14 @@ class TestReclassifyWorksForUncheckedSubjectsScript:
         with patch("palace.manager.scripts.work.classify_unchecked_subjects") as task:
 
             ReclassifyWorksForUncheckedSubjectsScript().run()
+            assert task.delay.call_count == 1
+
+
+class TestReclassifyNullAudienceWorksScript:
+    def test_run(self, db: DatabaseTransactionFixture):
+        """The script queues the reclassify_null_audience_works Celery task."""
+        with patch(
+            "palace.manager.scripts.work.reclassify_null_audience_works"
+        ) as task:
+            ReclassifyNullAudienceWorksScript(db.session).run()
             assert task.delay.call_count == 1
