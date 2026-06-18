@@ -933,8 +933,7 @@ class TestOPDSAcquisitionFeed:
 
         # Regression test for the borrow flow: borrow() passes a status (200/201)
         # for a successful loan/hold, but when single_entry yields an OPDSMessage
-        # the message's own status code must win -- without the caller-supplied
-        # status colliding with it (which previously raised a TypeError).
+        # the message's own status code must win.
         response = OPDSAcquisitionFeed.single_entry_loans_feed(
             MagicMock(),
             pool,

@@ -66,9 +66,6 @@ class BaseOPDSFeed(FeedInterface, LoggerMixin):
     ) -> OPDSFeedResponse:
         """Serialize the feed using the serializer protocol"""
         serializer = get_serializer(mime_types)
-        # The serializer dictates the content type, so set it directly rather
-        # than passing it as a second explicit argument alongside ``**kwargs``
-        # (which would be a duplicate keyword once ``kwargs`` is typed).
         kwargs["content_type"] = serializer.content_type()
         return OPDSFeedResponse(
             serializer.serialize_feed(
@@ -85,15 +82,10 @@ class BaseOPDSFeed(FeedInterface, LoggerMixin):
         **response_kwargs: Unpack[ResponseKwargs],
     ) -> OPDSEntryResponse:
         serializer = get_serializer(mime_types)
-        # The serializer dictates the content type, so set it directly rather
-        # than passing it as a second explicit argument alongside the forwarded
-        # ``**response_kwargs`` (which would be a duplicate keyword).
         response_kwargs["content_type"] = serializer.entry_content_type()
         if isinstance(entry, OPDSMessage):
             # An OPDSMessage represents an error condition, so its own status
-            # code always wins over any status supplied by the caller (e.g. the
-            # 200/201 used for a successful borrow). Setting it into the kwargs
-            # dict overrides the caller value without passing ``status`` twice.
+            # code always wins over any status supplied by the caller.
             response_kwargs["status"] = entry.status_code
             return OPDSEntryResponse(
                 response=serializer.to_string(serializer.serialize_opds_message(entry)),

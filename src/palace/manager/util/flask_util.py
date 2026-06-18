@@ -22,10 +22,7 @@ class ResponseKwargs(TypedDict, total=False):
     """The optional keyword arguments accepted by :class:`Response`.
 
     Mirrors every parameter of ``Response.__init__`` except the positional
-    ``response`` body. Typing the ``**kwargs`` that get forwarded through the
-    OPDS response/feed helpers with ``Unpack[ResponseKwargs]`` lets mypy
-    statically catch duplicate, unknown, or mistyped response options -- which
-    a bare ``**kwargs: Any`` silently hides until they raise at runtime.
+    ``response`` body.
     """
 
     status: int | None
