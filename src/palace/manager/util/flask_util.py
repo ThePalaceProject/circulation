@@ -4,7 +4,7 @@ import datetime
 import json
 import time
 from json import JSONDecodeError
-from typing import Any
+from typing import Any, TypedDict, Unpack
 from wsgiref.handlers import format_date_time
 
 from flask import Response as FlaskResponse
@@ -16,6 +16,22 @@ from werkzeug.datastructures import MultiDict
 from palace.util.datetime_helpers import utc_now
 
 from palace.manager.util.opds_writer import OPDSFeed
+
+
+class ResponseKwargs(TypedDict, total=False):
+    """The optional keyword arguments accepted by :class:`Response`.
+
+    Mirrors every parameter of ``Response.__init__`` except the positional
+    ``response`` body.
+    """
+
+    status: int | None
+    headers: dict[str, Any]
+    mimetype: str
+    content_type: str
+    direct_passthrough: bool
+    max_age: int | str
+    private: bool | None
 
 
 class Response(FlaskResponse):
@@ -165,7 +181,7 @@ class OPDSFeedResponse(Response):
 class OPDSEntryResponse(Response):
     """A convenience specialization of Response for typical OPDS entries."""
 
-    def __init__(self, response: Any = None, **kwargs: Any) -> None:
+    def __init__(self, response: Any = None, **kwargs: Unpack[ResponseKwargs]) -> None:
         kwargs.setdefault("mimetype", OPDSFeed.ENTRY_TYPE)
         super().__init__(response, **kwargs)
 

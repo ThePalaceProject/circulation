@@ -17,7 +17,11 @@ from palace.manager.feed.serializer.opds import (
 )
 from palace.manager.feed.serializer.opds2 import OPDS2Serializer
 from palace.manager.feed.types import FeedData, LinkKwargs, WorkEntry
-from palace.manager.util.flask_util import OPDSEntryResponse, OPDSFeedResponse
+from palace.manager.util.flask_util import (
+    OPDSEntryResponse,
+    OPDSFeedResponse,
+    ResponseKwargs,
+)
 from palace.manager.util.opds_writer import OPDSMessage
 
 
@@ -58,15 +62,15 @@ class BaseOPDSFeed(FeedInterface, LoggerMixin):
     def as_response(
         self,
         mime_types: MIMEAccept | None = None,
-        **kwargs: Any,
+        **kwargs: Unpack[ResponseKwargs],
     ) -> OPDSFeedResponse:
         """Serialize the feed using the serializer protocol"""
         serializer = get_serializer(mime_types)
+        kwargs["content_type"] = serializer.content_type()
         return OPDSFeedResponse(
             serializer.serialize_feed(
                 self._feed, precomposed_entries=self._precomposed_entries
             ),
-            content_type=serializer.content_type(),
             **kwargs,
         )
 
@@ -75,14 +79,17 @@ class BaseOPDSFeed(FeedInterface, LoggerMixin):
         cls,
         entry: WorkEntry | OPDSMessage,
         mime_types: MIMEAccept | None = None,
-        **response_kwargs: Any,
+        **response_kwargs: Unpack[ResponseKwargs],
     ) -> OPDSEntryResponse:
         serializer = get_serializer(mime_types)
+        response_kwargs["content_type"] = serializer.entry_content_type()
         if isinstance(entry, OPDSMessage):
+            # An OPDSMessage carries its own status code reflecting the real
+            # outcome for the work (e.g. 403 when unfulfillable), so it always
+            # wins over any status supplied by the caller.
+            response_kwargs["status"] = entry.status_code
             return OPDSEntryResponse(
                 response=serializer.to_string(serializer.serialize_opds_message(entry)),
-                status=entry.status_code,
-                content_type=serializer.entry_content_type(),
                 **response_kwargs,
             )
 
@@ -94,7 +101,6 @@ class BaseOPDSFeed(FeedInterface, LoggerMixin):
             response=serializer.to_string(
                 serializer.serialize_work_entry(entry.computed)
             ),
-            content_type=serializer.entry_content_type(),
             **response_kwargs,
         )
 

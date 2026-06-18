@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Unpack
 
 from dependency_injector.wiring import Provide, inject
 from sqlalchemy.orm import Query, Session
+from werkzeug.datastructures import MIMEAccept
 
 from palace.util.datetime_helpers import utc_now
 from palace.util.exceptions import PalaceValueError
@@ -46,7 +47,11 @@ from palace.manager.sqlalchemy.model.lane import (
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.patron import Hold, Loan, Patron
 from palace.manager.sqlalchemy.model.work import Work
-from palace.manager.util.flask_util import OPDSEntryResponse, OPDSFeedResponse
+from palace.manager.util.flask_util import (
+    OPDSEntryResponse,
+    OPDSFeedResponse,
+    ResponseKwargs,
+)
 from palace.manager.util.opds_writer import AtomFeed, OPDSMessage
 from palace.manager.util.problem_detail import ProblemDetail
 
@@ -220,7 +225,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
             default_facet=is_default,
         )
 
-    def as_error_response(self, **kwargs: Any) -> OPDSFeedResponse:
+    def as_error_response(self, **kwargs: Unpack[ResponseKwargs]) -> OPDSFeedResponse:
         """Convert this feed into an OPDSFeedResponse that should be treated
         by intermediaries as an error -- that is, treated as private
         and not cached.
@@ -557,7 +562,8 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         item: LicensePool | Loan | Hold | None,
         annotator: LibraryAnnotator | None = None,
         fulfillment: UrlFulfillment | None = None,
-        **response_kwargs: Any,
+        mime_types: MIMEAccept | None = None,
+        **response_kwargs: Unpack[ResponseKwargs],
     ) -> OPDSEntryResponse | ProblemDetail:
         """A single entry as a standalone feed specific to a patron"""
         if not item:
@@ -617,7 +623,7 @@ class OPDSAcquisitionFeed(BaseOPDSFeed):
         if isinstance(entry, OPDSMessage):
             response_kwargs["max_age"] = 0
 
-        return cls.entry_as_response(entry, **response_kwargs)
+        return cls.entry_as_response(entry, mime_types=mime_types, **response_kwargs)
 
     @classmethod
     def single_entry(

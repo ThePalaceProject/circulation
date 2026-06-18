@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Self
+from typing import Self, Unpack
 
 from sqlalchemy.orm import Session
 from werkzeug.datastructures import MIMEAccept
@@ -15,7 +15,7 @@ from palace.manager.feed.types import DataEntry, DataEntryTypes, Link, LinkConte
 from palace.manager.feed.util import strftime
 from palace.manager.feed.worklist.base import WorkList
 from palace.manager.search.pagination import Pagination
-from palace.manager.util.flask_util import OPDSFeedResponse
+from palace.manager.util.flask_util import OPDSFeedResponse, ResponseKwargs
 from palace.manager.util.opds_writer import OPDSFeed
 
 
@@ -90,7 +90,7 @@ class NavigationFeed(BaseOPDSFeed):
     def as_response(
         self,
         mime_types: MIMEAccept | None = None,
-        **kwargs: Any,
+        **kwargs: Unpack[ResponseKwargs],
     ) -> OPDSFeedResponse:
         response = super().as_response(mime_types=mime_types, **kwargs)
         # OPDS1 navigation feeds use a distinct content type from acquisition feeds.

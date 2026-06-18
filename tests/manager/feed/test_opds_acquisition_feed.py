@@ -126,6 +126,16 @@ class TestOPDSFeedProtocol:
         assert response.status_code == 204
         assert dict(description="Test OPDS Message", urn="URN") == response.json
 
+        # A caller-supplied status (e.g. the 200/201 used for a successful
+        # borrow) must not collide with the message's own status code. The
+        # message's status code wins, since it represents an error condition.
+        response = BaseOPDSFeed.entry_as_response(
+            OPDSMessage("URN", 403, "Test OPDS Message"),
+            status=201,
+        )
+        assert isinstance(response, OPDSEntryResponse)
+        assert response.status_code == 403
+
 
 class MockAnnotator(CirculationManagerAnnotator):
     def __init__(self):
@@ -262,12 +272,9 @@ class TestOPDSAcquisitionFeed:
         feed.generate_feed()
 
         # Some other piece of code set expectations for how this feed should
-        # be cached.
-        kwargs = dict(max_age=101, private=False)
-
-        # But we know that something has gone wrong and the feed is
+        # be cached, but we know that something has gone wrong and the feed is
         # being served as an error message.
-        response = feed.as_error_response(**kwargs)
+        response = feed.as_error_response(max_age=101, private=False)
         assert isinstance(response, OPDSFeedResponse)
 
         # The content of the feed is unchanged.
@@ -923,6 +930,20 @@ class TestOPDSAcquisitionFeed:
         response = OPDSAcquisitionFeed.single_entry_loans_feed(MagicMock(), pool)
         assert isinstance(response, OPDSEntryResponse)
         assert response.status_code == 403
+
+        # Regression test for the borrow flow: borrow() passes a status (200/201)
+        # for a successful loan/hold, but when single_entry yields an OPDSMessage
+        # the message's own status code must win.
+        response = OPDSAcquisitionFeed.single_entry_loans_feed(
+            MagicMock(),
+            pool,
+            status=201,
+            mime_types=MIMEAccept([("application/opds+json", 1.0)]),
+        )
+        assert isinstance(response, OPDSEntryResponse)
+        assert response.status_code == 403
+        # An error response is never cached.
+        assert response.max_age == 0
 
     def test_single_entry_with_edition(self, db: DatabaseTransactionFixture):
         work = db.work(with_license_pool=True)
