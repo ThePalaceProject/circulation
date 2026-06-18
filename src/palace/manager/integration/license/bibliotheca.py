@@ -284,6 +284,17 @@ class BibliothecaAPI(
         response = self.request(url)
         if response.status_code != 200:
             raise ErrorParser().process_first(response.content)
+        if not response.content.strip():
+            # Bibliotheca sometimes returns an empty body (HTTP 200 with no
+            # XML document) for a window that contains no purchase records.
+            # pymarc's parse_xml_to_array raises SAXException("no element
+            # found") on an empty document, so treat an empty body as "no
+            # records" and yield nothing rather than letting it propagate.
+            self.log.info(
+                f"Bibliotheca MARC request to '{url}' returned an empty "
+                "response body; treating as no records."
+            )
+            return
         yield from parse_xml_to_array(BytesIO(response.content))
 
     def bibliographic_lookup_request(self, identifiers: CollectionT[str]) -> bytes:
