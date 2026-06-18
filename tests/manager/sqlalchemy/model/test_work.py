@@ -2491,6 +2491,52 @@ class TestWorkConsolidation:
         commercial_work = abcd_commercial.work
         assert (commercial_work, False) == abcd_commercial.calculate_work()
 
+    def test_calculate_work_does_not_recurse_when_editions_point_to_work(
+        self, db: DatabaseTransactionFixture
+    ):
+        # Regression test for a RecursionError seen in production
+        # (apply.bibliographic_apply -> calculate_work). When a Work
+        # erroneously contains two commercial LicensePools (with different
+        # identifiers) whose presentation editions both still point back at
+        # that Work, calculate_work() used to ping-pong between the two
+        # pools forever. It cleared ``pool.work`` before the recursive call
+        # but left ``pool.presentation_edition.work`` set, so the recursive
+        # call re-resolved the pool back to the same Work (via the
+        # ``elif presentation_edition.work`` branch) and kicked the other
+        # pool out again, and so on until the stack was exhausted.
+
+        # Here's a Work with a commercial edition of "abcd".
+        work = db.work(with_license_pool=True)
+        [commercial_1] = work.license_pools
+        commercial_1.open_access = False
+
+        # Due to an earlier error, the Work also contains a _second_
+        # commercial edition, with a different identifier.
+        edition, commercial_2 = db.edition(with_license_pool=True)
+        commercial_2.open_access = False
+        work.license_pools.append(commercial_2)
+
+        # Unlike the artificially-clean state in
+        # test_calculate_work_fixes_work_in_invalid_state, both presentation
+        # editions still point at the shared Work. This is the normal,
+        # internally-consistent state for a Work's license pools, and it is
+        # what triggered the infinite recursion in production.
+        commercial_1.presentation_edition.work = work
+        commercial_2.presentation_edition.work = work
+
+        # Calling calculate_work() terminates (rather than raising
+        # RecursionError) and separates the two pools into their own Works.
+        work_after, is_new = commercial_1.calculate_work()
+        assert work_after == work
+        assert is_new is False
+
+        # The pool we called calculate_work() on keeps the Work; the other
+        # one has been kicked out and given a Work of its own.
+        assert commercial_1.work == work
+        assert commercial_2.work is not None
+        assert commercial_2.work != work
+        assert [commercial_2] == commercial_2.work.license_pools
+
     def test_calculate_work_fixes_incorrectly_grouped_books(
         self, db: DatabaseTransactionFixture
     ):
