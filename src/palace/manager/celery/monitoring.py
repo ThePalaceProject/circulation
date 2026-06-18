@@ -106,15 +106,6 @@ class Cloudwatch(Polaroid):
 
     clear_after = True  # clear after flush (incl, state.event_count).
 
-    # The camera opens its own redis-py connection to the broker Redis, separate
-    # from the connections kombu manages for publish/consume. Unlike kombu's
-    # consume connection -- which uses blocking BRPOP and so must not carry a
-    # socket_timeout -- the camera only issues instant reads (LINDEX/LLEN), so it
-    # can safely fail fast on a dead socket rather than hang. These mirror the
-    # application Redis client's socket timeouts (see service/redis).
-    SOCKET_TIMEOUT = 15.0
-    SOCKET_CONNECT_TIMEOUT = 5.0
-
     def __init__(
         self,
         *args: Any,
@@ -155,14 +146,14 @@ class Cloudwatch(Polaroid):
         global_keyprefix: str | None,
         health_check_interval: int,
     ) -> _PrefixedRedis:
-        # health_check_interval is threaded through from the broker's
-        # PALACE_CELERY_BROKER_TRANSPORT_OPTIONS_HEALTH_CHECK_INTERVAL so this
-        # idle monitoring connection is PING-checked and re-established after a
-        # Redis restart, the same way the other connections now are.
         connection_pool = ConnectionPool.from_url(
             broker_url,
-            socket_timeout=cls.SOCKET_TIMEOUT,
-            socket_connect_timeout=cls.SOCKET_CONNECT_TIMEOUT,
+            # The camera opens its own redis-py connection to the broker Redis.
+            # We set timeouts to match the application redis service configuration.
+            socket_timeout=15.0,
+            socket_connect_timeout=5.0,
+            # health_check_interval is threaded through from the broker's
+            # PALACE_CELERY_BROKER_TRANSPORT_OPTIONS_HEALTH_CHECK_INTERVAL.
             health_check_interval=health_check_interval,
         )
         return _PrefixedRedis(

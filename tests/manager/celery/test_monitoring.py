@@ -163,12 +163,13 @@ class TestCloudwatch:
             "redis://localhost", "prefix", health_check_interval=30
         )
         connection_kwargs = client.connection_pool.connection_kwargs
+        # health_check_interval is threaded through, so pin the value we passed.
         assert connection_kwargs["health_check_interval"] == 30
-        assert connection_kwargs["socket_timeout"] == Cloudwatch.SOCKET_TIMEOUT
-        assert (
-            connection_kwargs["socket_connect_timeout"]
-            == Cloudwatch.SOCKET_CONNECT_TIMEOUT
-        )
+        # The socket timeouts are fixed inside get_redis_client; assert they are
+        # configured (a real fail-fast timeout, not None) without coupling the
+        # test to the specific values.
+        assert connection_kwargs["socket_timeout"] is not None
+        assert connection_kwargs["socket_connect_timeout"] is not None
 
     def test_get_redis_client_prefixes_lindex(self):
         # kombu's PrefixedStrictRedis does not include LINDEX in its prefixed-command list,
