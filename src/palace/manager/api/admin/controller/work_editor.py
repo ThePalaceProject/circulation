@@ -51,7 +51,6 @@ from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.customlist import CustomList
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
-from palace.manager.sqlalchemy.model.lane import Lane
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import RightsStatus
 from palace.manager.sqlalchemy.model.measurement import Measurement
@@ -730,15 +729,12 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
         if staff_data_source is None:
             self._db.rollback()
             raise ProblemDetailException(INVALID_INPUT)
-        affected_lanes = set()
 
         # Remove entries for lists that were not in the submitted form.
         submitted_ids = {l.id for l in lists}
         for custom_list in self._existing_custom_lists(library, work):
             if custom_list.id not in submitted_ids:
                 custom_list.remove_entry(work)
-                for lane in Lane.affected_by_customlist(custom_list):
-                    affected_lanes.add(lane)
 
         # Add entries for any new lists.
         for list_response in lists:
@@ -771,16 +767,7 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
                     library=library,
                 )
                 custom_list.created = utc_now()
-            entry, was_new = custom_list.add_entry(work, featured=True)
-            if was_new:
-                for lane in Lane.affected_by_customlist(custom_list):
-                    affected_lanes.add(lane)
-
-        # If any list changes affected lanes, update their sizes.
-        # NOTE: This may not make a difference until the
-        # works are actually re-indexed.
-        for lane in affected_lanes:
-            lane.update_size(self._db, search_engine=self.search_engine)
+            custom_list.add_entry(work, featured=True)
 
         return Response(str(_("Success")), 200)
 

@@ -1,11 +1,6 @@
 import pytest
 
 from palace.manager.core.classifier import Classifier
-from palace.manager.core.entrypoint import (
-    AudiobooksEntryPoint,
-    EbooksEntryPoint,
-    EverythingEntryPoint,
-)
 from palace.manager.feed.facets.feed import FeaturedFacets
 from palace.manager.feed.facets.search import SearchFacets
 from palace.manager.feed.worklist.base import WorkList
@@ -19,7 +14,6 @@ from palace.manager.sqlalchemy.model.lane import (
 )
 from palace.manager.sqlalchemy.util import tuple_to_numericrange
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.library import LibraryFixture
 from tests.fixtures.search import EndToEndSearchFixture
 
 
@@ -59,44 +53,6 @@ class TestLane:
         lane = db.lane()
         lane.audiences = Classifier.AUDIENCE_ADULT
         assert [Classifier.AUDIENCE_ADULT] == lane.audiences
-
-    def test_update_size(
-        self, db: DatabaseTransactionFixture, library_fixture: LibraryFixture
-    ):
-        class Mock:
-            # Mock the ExternalSearchIndex.count_works() method to
-            # return specific values without consulting an actual
-            # search index.
-            def count_works(self, filter):
-                values_by_medium = {
-                    None: 102,
-                    Edition.AUDIO_MEDIUM: 3,
-                    Edition.BOOK_MEDIUM: 99,
-                }
-                if filter.media:
-                    [medium] = filter.media
-                else:
-                    medium = None
-                return values_by_medium[medium]
-
-        search_engine = Mock()
-
-        # Make a lane with some incorrect values that will be fixed by
-        # update_size().
-        fiction = db.lane(display_name="Fiction", fiction=True)
-        fiction.size = 44
-        fiction.size_by_entrypoint = {"Nonexistent entrypoint": 33}
-        fiction.update_size(db.session, search_engine=search_engine)
-
-        # The lane size is also calculated individually for every
-        # enabled entry point. EverythingEntryPoint is used for the
-        # total size of the lane.
-        assert {
-            AudiobooksEntryPoint.URI: 3,
-            EbooksEntryPoint.URI: 99,
-            EverythingEntryPoint.URI: 102,
-        } == fiction.size_by_entrypoint
-        assert 102 == fiction.size
 
     def test_visibility(self, db: DatabaseTransactionFixture):
         parent = db.lane()

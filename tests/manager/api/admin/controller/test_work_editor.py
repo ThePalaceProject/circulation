@@ -1103,7 +1103,6 @@ class TestWorkController:
         # Create a Lane that depends on this CustomList for its membership.
         lane = db.lane()
         lane.customlists.append(custom_list)
-        lane.size = 300
 
         # Add the list to the work.
         with work_fixture.request_context_with_library_and_admin("/", method="POST"):

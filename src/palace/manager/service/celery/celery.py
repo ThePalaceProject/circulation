@@ -58,7 +58,6 @@ def beat_schedule() -> dict[str, Any]:
         bibliotheca,
         boundless,
         custom_lists,
-        lanes,
         license_expiration,
         marc,
         notifications,
@@ -84,13 +83,6 @@ def beat_schedule() -> dict[str, Any]:
                 minute="5",
                 hour="0,1,7-23",
             ),  # Every hour except 2–6 AM (matches the legacy cron schedule)
-        },
-        "update_independent_lane_sizes": {
-            "task": lanes.update_independent_lane_sizes.name,
-            "schedule": crontab(
-                minute="0",
-                hour="*/6",
-            ),  # Every 6 hours; genre/language lanes change only with collection imports
         },
         "full_search_reindex": {
             "task": search.search_reindex.name,

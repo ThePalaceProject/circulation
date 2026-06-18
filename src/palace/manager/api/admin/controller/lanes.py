@@ -48,7 +48,6 @@ class LanesController(CirculationManagerController, AdminPermissionsControllerMi
                         "id": lane.id,
                         "display_name": lane.display_name,
                         "visible": lane.visible,
-                        "count": lane.size,
                         "sublanes": lanes_for_parent(lane),
                         "custom_list_ids": [list.id for list in lane.customlists],
                         "inherit_parent_restrictions": lane.inherit_parent_restrictions,
@@ -154,10 +153,6 @@ class LanesController(CirculationManagerController, AdminPermissionsControllerMi
             for list in lane.customlists:
                 if list.id not in custom_list_ids:
                     lane.customlists.remove(list)
-            if isinstance(self.search_engine, ProblemDetail):
-                self._db.rollback()
-                return self.search_engine
-            lane.update_size(self._db, search_engine=self.search_engine)
 
             if is_new:
                 return Response(str(lane.id), 201)

@@ -1,4 +1,4 @@
-"""Tests for the custom list and lane size Celery tasks."""
+"""Tests for the custom list Celery tasks."""
 
 from __future__ import annotations
 
@@ -15,7 +15,6 @@ from palace.manager.celery.tasks import custom_lists
 from palace.manager.celery.tasks.custom_lists import (
     _entry_update_lock,
     _sweep_lock,
-    custom_list_lane_ids_query,
 )
 from palace.manager.sqlalchemy.model.customlist import CustomList, CustomListEntry
 from tests.fixtures.celery import CeleryFixture
@@ -50,25 +49,25 @@ def _make_auto_updating_list(
 
 
 class TestUpdateCustomListEntriesSweep:
-    def test_no_auto_updating_lists_skips_directly_to_lane_sizes(
+    def test_no_auto_updating_lists_finalizes_directly(
         self,
         db: DatabaseTransactionFixture,
         redis_fixture: RedisFixture,
         celery_fixture: CeleryFixture,
     ):
-        """When there are no auto-updating lists, lane sizes are updated directly."""
+        """When there are no auto-updating lists, the sweep finalizes directly."""
         with (
             patch.object(
-                custom_lists, "update_custom_list_based_lane_sizes"
-            ) as mock_lane_sweep,
+                custom_lists, "finalize_custom_list_entries_sweep"
+            ) as mock_finalize,
             patch.object(custom_lists, "update_custom_list_entries") as mock_entries,
         ):
             custom_lists.update_custom_list_entries_sweep.delay().wait()
 
             mock_entries.si.assert_not_called()
-            mock_lane_sweep.delay.assert_called_once()
+            mock_finalize.delay.assert_called_once()
             # The sweep lock_value must be forwarded so finalize can release it.
-            _, kwargs = mock_lane_sweep.delay.call_args
+            _, kwargs = mock_finalize.delay.call_args
             assert kwargs.get("lock_value") is not None
 
     def test_fans_out_per_list_tasks(
@@ -87,8 +86,8 @@ class TestUpdateCustomListEntriesSweep:
         with (
             patch.object(custom_lists, "update_custom_list_entries") as mock_entries,
             patch.object(
-                custom_lists, "update_custom_list_based_lane_sizes"
-            ) as mock_lane_sweep,
+                custom_lists, "finalize_custom_list_entries_sweep"
+            ) as mock_finalize,
         ):
             # Use a mock chord so we can inspect what was assembled.
             with patch("palace.manager.celery.tasks.custom_lists.chord") as mock_chord:
@@ -103,21 +102,19 @@ class TestUpdateCustomListEntriesSweep:
             assert cl2.id in si_ids
             assert disabled_list.id not in si_ids
 
-    def test_sweep_lock_value_forwarded_to_lane_sweep(
+    def test_sweep_lock_value_forwarded_to_finalize(
         self,
         db: DatabaseTransactionFixture,
         redis_fixture: RedisFixture,
         celery_fixture: CeleryFixture,
     ):
-        """The sweep lock_value is forwarded to update_custom_list_based_lane_sizes so it
-        reaches finalize_lane_size_update and is released there."""
+        """The sweep lock_value is forwarded to finalize_custom_list_entries_sweep so
+        the lock is released there."""
         cl1 = _make_auto_updating_list(db)
 
         with (
             patch.object(custom_lists, "update_custom_list_entries"),
-            patch.object(
-                custom_lists, "update_custom_list_based_lane_sizes"
-            ) as mock_lane_sweep,
+            patch.object(custom_lists, "finalize_custom_list_entries_sweep"),
             patch("palace.manager.celery.tasks.custom_lists.chord") as mock_chord,
             patch("palace.manager.celery.tasks.custom_lists.group"),
         ):
@@ -140,14 +137,14 @@ class TestUpdateCustomListEntriesSweep:
 
         with (
             patch.object(
-                custom_lists, "update_custom_list_based_lane_sizes"
-            ) as mock_lane_sweep,
+                custom_lists, "finalize_custom_list_entries_sweep"
+            ) as mock_finalize,
             patch.object(custom_lists, "update_custom_list_entries") as mock_entries,
         ):
             custom_lists.update_custom_list_entries_sweep.delay().wait()
 
             mock_entries.si.assert_not_called()
-            mock_lane_sweep.delay.assert_not_called()
+            mock_finalize.delay.assert_not_called()
 
         sweep_lock.release()
 
@@ -502,171 +499,35 @@ class TestUpdateCustomListEntries:
 
 
 # ---------------------------------------------------------------------------
-# Stage 2 — Custom-list-based lane size sweep orchestrator
+# Stage 2 — Finalize
 # ---------------------------------------------------------------------------
 
 
-class TestUpdateCustomListBasedLaneSizes:
-    def test_no_lanes_calls_finalize_directly(
+class TestFinalizeCustomListEntriesSweep:
+    def test_releases_sweep_lock_when_lock_value_provided(
         self,
         db: DatabaseTransactionFixture,
         redis_fixture: RedisFixture,
         celery_fixture: CeleryFixture,
     ):
-        """When there are no lanes, finalize is called directly."""
-        with (
-            patch.object(custom_lists, "finalize_lane_size_update") as mock_finalize,
-            patch.object(custom_lists, "update_lane_size") as mock_lane_size,
-        ):
-            custom_lists.update_custom_list_based_lane_sizes.delay().wait()
-            mock_lane_size.si.assert_not_called()
-            mock_finalize.delay.assert_called_once()
-
-    def test_lock_value_forwarded_to_finalize(
-        self,
-        db: DatabaseTransactionFixture,
-        redis_fixture: RedisFixture,
-        celery_fixture: CeleryFixture,
-    ):
-        """lock_value is threaded through to finalize_lane_size_update."""
+        """finalize_custom_list_entries_sweep releases the sweep lock."""
         lock_value = str(uuid4())
+        sweep_lock = _sweep_lock(redis_fixture.client, lock_value)
+        sweep_lock.acquire()
+        assert sweep_lock.locked()
 
-        with (
-            patch.object(custom_lists, "finalize_lane_size_update") as mock_finalize,
-            patch.object(custom_lists, "update_lane_size"),
-        ):
-            custom_lists.update_custom_list_based_lane_sizes.delay(
-                lock_value=lock_value
-            ).wait()
+        custom_lists.finalize_custom_list_entries_sweep.delay(
+            lock_value=lock_value
+        ).wait()
 
-        _, kwargs = mock_finalize.delay.call_args
-        assert kwargs.get("lock_value") == lock_value
+        assert not sweep_lock.locked()
 
-    def test_fans_out_only_custom_list_lanes(
+    def test_no_lock_released_when_standalone(
         self,
         db: DatabaseTransactionFixture,
         redis_fixture: RedisFixture,
         celery_fixture: CeleryFixture,
     ):
-        """Only lanes associated with custom lists are swept; independent lanes are excluded."""
-        library = db.default_library()
-        # Pattern A: lane with a direct custom list association
-        custom_list_lane = db.lane(library=library)
-        custom_list, _ = db.customlist(num_entries=0)
-        custom_list_lane.customlists.append(custom_list)
-        # Independent lane: no custom list association
-        independent_lane = db.lane(library=library)
-        db.session.flush()
-
-        with (
-            patch.object(custom_lists, "update_lane_size") as mock_lane_size,
-            patch.object(custom_lists, "finalize_lane_size_update"),
-            patch("palace.manager.celery.tasks.custom_lists.chord"),
-            patch("palace.manager.celery.tasks.custom_lists.group"),
-        ):
-            custom_lists.update_custom_list_based_lane_sizes.delay().wait()
-
-        si_ids = {c.args[0] for c in mock_lane_size.si.call_args_list}
-        assert custom_list_lane.id in si_ids
-        assert independent_lane.id not in si_ids
-
-    def test_no_custom_list_lanes_calls_finalize_directly(
-        self,
-        db: DatabaseTransactionFixture,
-        redis_fixture: RedisFixture,
-        celery_fixture: CeleryFixture,
-    ):
-        """When lanes exist but none are custom-list lanes, finalize is called directly."""
-        library = db.default_library()
-        db.lane(library=library)  # independent lane, no custom list
-        db.session.flush()
-
-        with (
-            patch.object(custom_lists, "finalize_lane_size_update") as mock_finalize,
-            patch.object(custom_lists, "update_lane_size") as mock_lane_size,
-        ):
-            custom_lists.update_custom_list_based_lane_sizes.delay().wait()
-
-        mock_lane_size.si.assert_not_called()
-        mock_finalize.delay.assert_called_once()
-
-
-# ---------------------------------------------------------------------------
-# Helper query: custom_list_lane_ids_query
-# ---------------------------------------------------------------------------
-
-
-class TestCustomListLaneIdsQuery:
-    """Tests for the custom_list_lane_ids_query helper."""
-
-    def test_independent_lane_excluded(
-        self,
-        db: DatabaseTransactionFixture,
-    ):
-        """A plain lane with no custom list association is not returned."""
-        lane = db.lane(library=db.default_library())
-        db.session.flush()
-        result = set(db.session.scalars(custom_list_lane_ids_query()))
-        assert lane.id not in result
-
-    def test_pattern_a_direct_association(
-        self,
-        db: DatabaseTransactionFixture,
-    ):
-        """Pattern A: a lane with a direct entry in lanes_customlists is returned."""
-        lane = db.lane(library=db.default_library())
-        custom_list, _ = db.customlist(num_entries=0)
-        lane.customlists.append(custom_list)
-        db.session.flush()
-        result = set(db.session.scalars(custom_list_lane_ids_query()))
-        assert lane.id in result
-
-    def test_pattern_b_list_datasource(
-        self,
-        db: DatabaseTransactionFixture,
-    ):
-        """Pattern B: a lane with _list_datasource_id set is returned."""
-        lane = db.lane(library=db.default_library())
-        custom_list, _ = db.customlist(num_entries=0)
-        # Use the custom list's own datasource as the lane's list datasource
-        lane._list_datasource_id = custom_list.data_source_id
-        db.session.flush()
-        result = set(db.session.scalars(custom_list_lane_ids_query()))
-        assert lane.id in result
-
-    def test_pattern_c_child_inherits_from_custom_list_parent(
-        self,
-        db: DatabaseTransactionFixture,
-    ):
-        """Pattern C: a child with inherit_parent_restrictions=True whose parent has a
-        custom list association is returned."""
-        library = db.default_library()
-        parent_lane = db.lane(library=library)
-        child_lane = db.lane(library=library)
-        child_lane.parent_id = parent_lane.id
-        child_lane.inherit_parent_restrictions = True
-        custom_list, _ = db.customlist(num_entries=0)
-        parent_lane.customlists.append(custom_list)
-        db.session.flush()
-        result = set(db.session.scalars(custom_list_lane_ids_query()))
-        # Parent matches Pattern A; child matches Pattern C.
-        assert parent_lane.id in result
-        assert child_lane.id in result
-
-    def test_pattern_c_excluded_when_no_inherit(
-        self,
-        db: DatabaseTransactionFixture,
-    ):
-        """Pattern C: a child with inherit_parent_restrictions=False is NOT returned,
-        even if its parent has a custom list association."""
-        library = db.default_library()
-        parent_lane = db.lane(library=library)
-        child_lane = db.lane(library=library)
-        child_lane.parent_id = parent_lane.id
-        child_lane.inherit_parent_restrictions = False
-        custom_list, _ = db.customlist(num_entries=0)
-        parent_lane.customlists.append(custom_list)
-        db.session.flush()
-        result = set(db.session.scalars(custom_list_lane_ids_query()))
-        assert parent_lane.id in result
-        assert child_lane.id not in result
+        """Without a lock_value the task is a no-op (no lock to release)."""
+        # Should not raise.
+        custom_lists.finalize_custom_list_entries_sweep.delay().wait()
