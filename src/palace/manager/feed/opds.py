@@ -84,8 +84,9 @@ class BaseOPDSFeed(FeedInterface, LoggerMixin):
         serializer = get_serializer(mime_types)
         response_kwargs["content_type"] = serializer.entry_content_type()
         if isinstance(entry, OPDSMessage):
-            # An OPDSMessage represents an error condition, so its own status
-            # code always wins over any status supplied by the caller.
+            # An OPDSMessage carries its own status code reflecting the real
+            # outcome for the work (e.g. 403 when unfulfillable), so it always
+            # wins over any status supplied by the caller.
             response_kwargs["status"] = entry.status_code
             return OPDSEntryResponse(
                 response=serializer.to_string(serializer.serialize_opds_message(entry)),
