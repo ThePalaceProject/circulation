@@ -407,6 +407,28 @@ class TestBibliothecaAPI:
         with pytest.raises(RemoteInitiatedServerError) as excinfo:
             [x for x in bibliotheca_fixture.api.marc_request(start, end, 10, 20)]
 
+    @pytest.mark.parametrize(
+        "content",
+        [
+            pytest.param(b"", id="empty"),
+            pytest.param(b"   \n  ", id="whitespace"),
+        ],
+    )
+    def test_marc_request_empty_response(
+        self,
+        content: bytes,
+        bibliotheca_fixture: BibliothecaAPITestFixture,
+    ):
+        # Bibliotheca sometimes returns an empty 200 response for a window
+        # with no purchase records. This must yield no records rather than
+        # raising the SAXException("no element found") that pymarc would
+        # otherwise raise on an empty document.
+        start = datetime_utc(2012, 1, 2, 3, 4, 5)
+        end = datetime_utc(2014, 5, 6, 7, 8, 9)
+        bibliotheca_fixture.api.queue_response(200, content=content)
+        records = [x for x in bibliotheca_fixture.api.marc_request(start, end, 10, 20)]
+        assert records == []
+
     def test_sync_patron_activity(self, bibliotheca_fixture: BibliothecaAPITestFixture):
         db = bibliotheca_fixture.db
         patron = db.patron()
