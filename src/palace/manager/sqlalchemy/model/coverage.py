@@ -652,3 +652,35 @@ Index(
     CoverageRecord.operation,
     CoverageRecord.identifier_id,
 )
+
+
+class EquivalencyCoverageRecord(Base, BaseCoverageRecord):
+    """Dormant model retained only so the ``equivalentscoveragerecords`` table
+    stays in the schema for one more release.
+
+    The equivalent-identifiers refresh no longer reads or writes this table — it
+    was replaced by the Redis dirty-set queue and the ``equivalent_identifiers_refresh``
+    Celery task. But per our online-migration convention the table cannot be dropped
+    in the same release that stops using it: during a rolling deploy, N-1 app servers
+    still run the old listener that writes here, so dropping the table now would make
+    them error. The table and this model will be removed in a follow-up PR that ships
+    after this release. See https://github.com/ThePalaceProject/circulation/pull/3459.
+    """
+
+    __tablename__ = "equivalentscoveragerecords"
+
+    id: Mapped[int] = Column(Integer, primary_key=True)
+
+    equivalency_id: Mapped[int] = Column(
+        Integer,
+        ForeignKey("equivalents.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+
+    operation = Column(String(255), index=True, default=None)
+    timestamp = Column(DateTime(timezone=True), index=True)
+    status = Column(BaseCoverageRecord.status_enum, index=True)
+    exception = Column(Unicode)
+
+    __table_args__ = (UniqueConstraint(equivalency_id, operation),)
