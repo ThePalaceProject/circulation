@@ -1,23 +1,17 @@
 """
-Celery tasks for maintaining custom list entries and custom-list lane sizes.
+Celery tasks for maintaining custom list entries.
 
-Pipeline (orchestrated via chords):
+Pipeline (orchestrated via a chord):
 
-1. ``update_custom_list_entries_sweep``    — queries all auto-updating lists,
-   fans them out into parallel ``update_custom_list_entries`` tasks, and wires
-   ``update_custom_list_based_lane_sizes`` as the chord callback.
-2. ``update_custom_list_entries``          — per-list: populates entries via
-   OpenSearch and reconciles the cached ``size``.  Uses ``task.replace()`` to
-   spread pagination over multiple short task invocations.
-3. ``update_custom_list_based_lane_sizes`` — queries only lanes whose sizes
-   depend on custom list content (see :func:`custom_list_lane_ids_query`) and
-   fans them out into a chord of ``update_lane_size`` tasks with
-   ``finalize_lane_size_update`` as the callback.
-
-The generic lane-size primitives (``update_lane_size``,
-``finalize_lane_size_update``) and the independent-lane sweep
-(``update_independent_lane_sizes``, which recounts lanes *not* tied to any
-custom list) live in :mod:`palace.manager.celery.tasks.lanes`.
+1. ``update_custom_list_entries_sweep``    — beat-scheduled orchestrator: queries all
+   auto-updating custom lists, fans them out into parallel
+   ``update_custom_list_entries`` tasks, and releases the sweep lock via
+   ``finalize_custom_list_entries_sweep`` once they have all completed.
+2. ``update_custom_list_entries``          — per-list: populates entries via OpenSearch
+   and reconciles the list's cached ``size``.  Uses ``task.replace()`` to spread
+   pagination over multiple short task invocations.
+3. ``finalize_custom_list_entries_sweep``  — chord callback: releases the sweep-level
+   Redis lock after every per-list task has finished.
 """
 
 from __future__ import annotations
@@ -29,16 +23,11 @@ from uuid import uuid4
 
 from celery import chord, group, shared_task
 from opensearchpy import RequestError
-from sqlalchemy import and_, exists, or_, select
-from sqlalchemy.orm import Session, aliased
-from sqlalchemy.sql import Select
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from palace.manager.celery.importer import workflow_lock_guard
 from palace.manager.celery.task import Task
-from palace.manager.celery.tasks.lanes import (
-    finalize_lane_size_update,
-    update_lane_size,
-)
 from palace.manager.celery.utils import ModelNotFoundError, load_from_id, signature_with
 from palace.manager.core.query.customlist import CustomListQueries
 from palace.manager.search.external_search import ExternalSearchIndex
@@ -46,7 +35,6 @@ from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.lock import RedisLock
 from palace.manager.service.redis.redis import Redis
 from palace.manager.sqlalchemy.model.customlist import CustomList, CustomListEntry
-from palace.manager.sqlalchemy.model.lane import Lane, lanes_customlists
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -105,78 +93,23 @@ def _sweep_lock(redis_client: Redis, lock_value: str) -> RedisLock:
 
 
 # ---------------------------------------------------------------------------
-# Lane query helpers
-# ---------------------------------------------------------------------------
-
-
-def custom_list_lane_ids_query() -> Select:
-    """Return a SELECT of lane IDs whose sizes depend on custom list content.
-
-    A lane depends on custom list content if any of the following hold:
-
-    - **Pattern A** — it has at least one direct association via the
-      ``lanes_customlists`` junction table.
-    - **Pattern B** — its ``_list_datasource_id`` is set (the lane shows all
-      custom lists from a given DataSource, e.g. Best Sellers lanes).
-    - **Pattern C** (inherited) — its parent lane satisfies Pattern A or B
-      *and* the lane has ``inherit_parent_restrictions = True``.
-
-    Pattern C uses a one-level parent join.  Lanes that inherit custom-list
-    restrictions two or more levels up will be updated by
-    ``update_independent_lane_sizes`` instead of the custom-list sweep;
-    this is a deliberate conservative trade-off to avoid a recursive CTE.
-
-    :return: A SELECT suitable for ``session.scalars(...)`` or
-        ``Lane.id.in_(...)`` / ``Lane.id.not_in(...)``.
-    """
-    ParentLane = aliased(Lane, name="parent_lane")
-
-    # Pattern A: direct association via junction table
-    direct_assoc = exists().where(lanes_customlists.c.lane_id == Lane.id)
-
-    # Pattern B: datasource-based (shows all lists from a DataSource)
-    via_datasource = Lane._list_datasource_id.isnot(None)
-
-    # For Pattern C: same checks applied to the parent lane
-    parent_direct_assoc = exists().where(lanes_customlists.c.lane_id == ParentLane.id)
-    parent_via_datasource = ParentLane._list_datasource_id.isnot(None)
-
-    # Pattern C: lane inherits restrictions from a parent that satisfies A or B
-    inherits_from_customlist_parent = (
-        exists()
-        .select_from(ParentLane)
-        .where(
-            and_(
-                ParentLane.id == Lane.parent_id,
-                Lane.inherit_parent_restrictions.is_(True),
-                or_(parent_direct_assoc, parent_via_datasource),
-            )
-        )
-    )
-
-    return select(Lane.id).where(
-        or_(direct_assoc, via_datasource, inherits_from_customlist_parent)
-    )
-
-
-# ---------------------------------------------------------------------------
 # Stage 0 — Sweep orchestrator
 # ---------------------------------------------------------------------------
 
 
 @shared_task(queue=QueueNames.default, bind=True)
 def update_custom_list_entries_sweep(task: Task) -> None:
-    """Orchestrate the full custom list maintenance pipeline.
+    """Orchestrate the custom list entry-update pipeline.
 
-    Queries all auto-updating custom lists, fans them out into parallel
-    ``update_custom_list_entries`` tasks, and uses ``update_custom_list_based_lane_sizes``
-    as the chord callback so that lane sizes are recalculated only after all
-    list entries have been settled.
+    Queries all auto-updating custom lists and fans them out into parallel
+    ``update_custom_list_entries`` tasks, with ``finalize_custom_list_entries_sweep``
+    as the chord callback so the sweep lock is released only after every per-list
+    task has finished.
 
     A sweep-level Redis lock prevents a second beat-triggered run from
     overlapping with a sweep already in progress.  The lock is acquired here
-    and released by ``finalize_lane_size_update`` at the end of the chord
-    pipeline — so it genuinely covers the full entries → lane-sizes sequence.
+    and released by ``finalize_custom_list_entries_sweep`` at the end of the
+    chord — so it genuinely covers the full fan-out.
     """
     redis = task.services.redis.client()
     lock_value = str(uuid4())
@@ -188,9 +121,9 @@ def update_custom_list_entries_sweep(task: Task) -> None:
         return
 
     # The sweep lock is intentionally NOT released here.  It is passed through
-    # the pipeline and released by finalize_lane_size_update once all lane
-    # sizes have been updated.  The 2-hour TTL acts as a safety net in case the
-    # orchestrator or any downstream task crashes before reaching finalize.
+    # the chord and released by finalize_custom_list_entries_sweep once all
+    # per-list tasks have finished.  The 2-hour TTL acts as a safety net in case
+    # the orchestrator or any downstream task crashes before reaching finalize.
 
     with task.session() as session:
         list_ids: list[int] = list(
@@ -202,13 +135,13 @@ def update_custom_list_entries_sweep(task: Task) -> None:
     task.log.info(f"Sweeping {len(list_ids)} auto-updating custom list(s).")
 
     if not list_ids:
-        # No auto-updating lists; skip straight to lane size updates.
-        update_custom_list_based_lane_sizes.delay(lock_value=lock_value)
+        # No auto-updating lists; release the sweep lock immediately.
+        finalize_custom_list_entries_sweep.delay(lock_value=lock_value)
         return
 
     chord(
         group([update_custom_list_entries.si(list_id) for list_id in list_ids]),
-        update_custom_list_based_lane_sizes.si(lock_value=lock_value),
+        finalize_custom_list_entries_sweep.si(lock_value=lock_value),
     ).delay()
 
 
@@ -443,39 +376,30 @@ def update_custom_list_entries(
 
 
 # ---------------------------------------------------------------------------
-# Stage 2 — Lane size sweep orchestrator
+# Stage 2 — Finalize
 # ---------------------------------------------------------------------------
 
 
 @shared_task(queue=QueueNames.default, bind=True)
-def update_custom_list_based_lane_sizes(
+def finalize_custom_list_entries_sweep(
     task: Task, lock_value: str | None = None
 ) -> None:
-    """Fan out lane size updates for lanes associated with custom lists.
+    """Release the sweep-level Redis lock at the tail of the entries sweep.
 
-    Queries lane IDs whose sizes depend on custom list content (via
-    :func:`custom_list_lane_ids_query`) and creates a chord of
-    ``update_lane_size`` tasks with ``finalize_lane_size_update`` as the
-    callback.
-
-    This task is the chord callback from ``update_custom_list_entries_sweep``.
-    Lanes that do *not* depend on custom list content are updated separately by
-    ``update_independent_lane_sizes`` on its own beat schedule.
+    Chord callback from ``update_custom_list_entries_sweep``.  It exists solely
+    to release the sweep lock after every per-list ``update_custom_list_entries``
+    task has finished, so the lock truly covers the full fan-out.
 
     :param lock_value: Sweep-lock random value from
-        ``update_custom_list_entries_sweep``.  Passed through to
-        ``finalize_lane_size_update`` so the lock can be released there.
+        ``update_custom_list_entries_sweep``.  When provided, releases the lock.
     """
-    with task.session() as session:
-        lane_ids: list[int] = list(session.scalars(custom_list_lane_ids_query()))
-
-    task.log.info(f"Sweeping sizes for {len(lane_ids)} custom-list lane(s).")
-
-    if not lane_ids:
-        finalize_lane_size_update.delay(lock_value=lock_value)
+    if lock_value is None:
         return
 
-    chord(
-        group([update_lane_size.si(lane_id) for lane_id in lane_ids]),
-        finalize_lane_size_update.si(lock_value=lock_value),
-    ).delay()
+    redis = task.services.redis.client()
+    released = _sweep_lock(redis, lock_value).release()
+    if not released:
+        task.log.warning(
+            "Could not release the custom-list sweep lock — it may have already "
+            "expired or been released by another process."
+        )

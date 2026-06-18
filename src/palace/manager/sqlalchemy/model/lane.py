@@ -24,8 +24,6 @@ from sqlalchemy.orm.session import Session
 from sqlalchemy.sql import select
 
 from palace.manager.core.classifier import Classifier
-from palace.manager.core.entrypoint import EntryPoint, EverythingEntryPoint
-from palace.manager.feed.facets.constants import FacetConstants
 from palace.manager.feed.worklist.base import WorkList
 from palace.manager.feed.worklist.database import DatabaseBackedWorkList
 from palace.manager.feed.worklist.hierarchy import HierarchyWorkList
@@ -113,12 +111,11 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
 
     priority: Mapped[int] = Column(Integer, index=True, nullable=False, default=0)
 
-    # How many titles are in this lane? This is periodically
-    # calculated and cached.
+    # Deprecated: these cached size estimates are no longer populated or read.
+    # The code that maintained them (update_size and the lane-size Celery tasks)
+    # has been removed; the columns remain mapped only so the model continues to
+    # match the database schema, and will be dropped in a follow-up migration.
     size: Mapped[int] = Column(Integer, nullable=False, default=0)
-
-    # How many titles are in this lane when viewed through a specific
-    # entry point? This is periodically calculated and cached.
     size_by_entrypoint = Column(JSON, nullable=True)
 
     # A lane may have one parent lane and many sublanes.
@@ -432,29 +429,6 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
             return True
         return False
 
-    def update_size(self, _db, search_engine: ExternalSearchIndex):
-        """Update the stored estimate of the number of Works in this Lane."""
-        # Local import to avoid circular dependency between lane.py and feed/facets
-        from palace.manager.feed.facets.database import DatabaseBackedFacets
-
-        library = self.get_library(_db)
-
-        # Do the estimate for every known entry point.
-        by_entrypoint = dict()
-        for entrypoint in EntryPoint.ENTRY_POINTS:
-            facets = DatabaseBackedFacets(
-                library,
-                FacetConstants.AVAILABLE_ALL,
-                order=FacetConstants.ORDER_WORK_ID,
-                distributor=FacetConstants.DISTRIBUTOR_ALL,
-                collection_name=FacetConstants.COLLECTION_NAME_ALL,
-                entrypoint=entrypoint,
-            )
-            filter = self.filter(_db, facets)
-            by_entrypoint[entrypoint.URI] = search_engine.count_works(filter)
-        self.size_by_entrypoint = by_entrypoint
-        self.size = by_entrypoint[EverythingEntryPoint.URI]
-
     @property
     def genre_ids(self):
         """Find the database ID of every Genre such that a Work classified in
@@ -625,23 +599,6 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
             audiences=audiences,
         )
         return wl
-
-    def _size_for_facets(self, facets):
-        """How big is this lane under the given `Facets` object?
-
-        :param facets: A Facets object.
-        :return: An int.
-        """
-        # Default to the total size of the lane.
-        size = self.size
-
-        entrypoint_name = EverythingEntryPoint.URI
-        if facets and facets.entrypoint:
-            entrypoint_name = facets.entrypoint.URI
-
-        if self.size_by_entrypoint and entrypoint_name in self.size_by_entrypoint:
-            size = self.size_by_entrypoint[entrypoint_name]
-        return size
 
     @inject
     def groups(
