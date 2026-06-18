@@ -157,10 +157,6 @@ class MockBasic(
     def description(cls) -> str:
         return "A mock authentication provider"
 
-    @property
-    def login_button_image(self) -> str | None:
-        return "login.png"
-
     def remote_authenticate(self, username, password):
         return RemoteAuthResult(patron_data=self.patrondata)
 
@@ -2904,42 +2900,29 @@ class TestBasicAuthenticationProvider:
 
         db = MagicMock(spec=Session)
 
-        # Mock url_for so that the document can be generated.
-        with patch("palace.manager.api.authentication.basic.url_for") as url_for_patch:
-            url_for_patch.return_value = "http://localhost/"
-            doc = provider.authentication_flow_document(db).serialize()
-            assert doc["description"] == provider.label()
-            assert doc["type"] == provider.flow_type
+        doc = provider.authentication_flow_document(db).serialize()
+        assert doc["description"] == provider.label()
+        assert doc["type"] == provider.flow_type
 
-            labels = doc["labels"]
-            assert labels["login"] == provider.identifier_label
-            assert labels["password"] == provider.password_label
+        labels = doc["labels"]
+        assert labels["login"] == provider.identifier_label
+        assert labels["password"] == provider.password_label
 
-            inputs = doc["inputs"]
-            assert inputs["login"]["keyboard"] == provider.identifier_keyboard.value
-            assert inputs["password"]["keyboard"] == provider.password_keyboard.value
+        inputs = doc["inputs"]
+        assert inputs["login"]["keyboard"] == provider.identifier_keyboard.value
+        assert inputs["password"]["keyboard"] == provider.password_keyboard.value
 
-            assert (
-                inputs["login"]["barcode_format"]
-                == provider.identifier_barcode_format.value
-            )
+        assert (
+            inputs["login"]["barcode_format"]
+            == provider.identifier_barcode_format.value
+        )
 
-            assert (
-                inputs["login"]["maximum_length"] == provider.identifier_maximum_length
-            )
-            assert (
-                inputs["password"]["maximum_length"] == provider.password_maximum_length
-            )
+        assert inputs["login"]["maximum_length"] == provider.identifier_maximum_length
+        assert inputs["password"]["maximum_length"] == provider.password_maximum_length
 
-            [logo_link] = doc["links"]
-            assert "logo" == logo_link["rel"]
-            assert "http://localhost/" == logo_link["href"]
-            url_for_patch.assert_called_once()
-            assert "filename" in url_for_patch.call_args.kwargs
-            assert (
-                url_for_patch.call_args.kwargs["filename"]
-                == provider.login_button_image
-            )
+        # Basic auth providers no longer supply a custom login button image, so
+        # the flow document has no links.
+        assert "links" not in doc
 
     def test_scrub_credential(self, mock_basic: MockBasicFixture):
         # Verify that the scrub_credential helper method strips extra whitespace

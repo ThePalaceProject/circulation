@@ -9,7 +9,6 @@ from functools import partial
 from re import Pattern
 from typing import Annotated, Any, cast
 
-from flask import url_for
 from pydantic import PositiveInt, field_validator, model_validator
 from pydantic_core.core_schema import ValidationInfo
 from sqlalchemy.orm import Session
@@ -23,7 +22,6 @@ from palace.opds.authentication.palace import (
     AuthenticationInput,
     AuthenticationInputs,
 )
-from palace.opds.rwpm import Link
 from palace.util.log import elapsed_time_logging
 
 from palace.manager.api.admin.problem_details import (
@@ -876,20 +874,6 @@ class BasicAuthenticationProvider[
             maximum_length=self.password_maximum_length,
         )
 
-        links: list[Link] = []
-        if self.login_button_image:
-            # TODO: I'm not sure if logo is appropriate for this, since it's a button
-            # with the logo on it rather than a plain logo. Perhaps we should use plain
-            # logos instead.
-            links.append(
-                Link(
-                    rel="logo",
-                    href=url_for(
-                        "static_image", filename=self.login_button_image, _external=True
-                    ),
-                )
-            )
-
         return PalaceAuthentication(
             type=self.flow_type,
             description=str(self.label()),
@@ -898,17 +882,7 @@ class BasicAuthenticationProvider[
                 password=self.password_label,
             ),
             inputs=AuthenticationInputs(login=login_input, password=password_input),
-            links=links,
         )
-
-    @property
-    def login_button_image(self) -> str | None:
-        # An AuthenticationProvider may define a custom button image for
-        # clients to display when letting a user choose between different
-        # AuthenticationProviders. Image files MUST be stored in the
-        # `resources/images` directory - the value here should be the
-        # file name.
-        return None
 
     @property
     def identifies_individuals(self):

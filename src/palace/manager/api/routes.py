@@ -713,8 +713,3 @@ def application_version():
 @app.route("/healthcheck.html")
 def health_check():
     return Response("", 200)
-
-
-@app.route("/images/<filename>")
-def static_image(filename):
-    return app.manager.static_files.image(filename)
