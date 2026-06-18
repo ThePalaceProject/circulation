@@ -5,13 +5,18 @@ from collections.abc import Callable
 from unittest.mock import patch
 
 import pytest
+from redis import RedisError
 
 from palace.util.datetime_helpers import utc_now
+from palace.util.log import LogLevel
 
 from palace.manager.core.config import Configuration
+from palace.manager.service.redis.models.dirty_identifiers import DirtyIdentifierIds
 from palace.manager.sqlalchemy.listeners import site_configuration_has_changed
 from palace.manager.sqlalchemy.model.coverage import Timestamp
+from palace.manager.sqlalchemy.model.identifier import Equivalency
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.redis import RedisFixture
 from tests.fixtures.search import WorkQueueIndexingFixture
 
 
@@ -165,3 +170,117 @@ class TestListeners:
         # Unsuppress the work for the library
         work.suppressed_for.remove(library)
         assert work_queue_indexing.is_queued(work, clear=True)
+
+
+class TestEquivalencyDirtyListeners:
+    def test_create_marks_identifiers_dirty(
+        self, db: DatabaseTransactionFixture, redis_fixture: RedisFixture
+    ) -> None:
+        a = db.identifier()
+        b = db.identifier()
+
+        dirty = DirtyIdentifierIds(redis_fixture.client)
+        dirty.pop(1000)  # clear anything left from setup
+
+        db.session.add(Equivalency(input_id=a.id, output_id=b.id, strength=1.0))
+        db.session.commit()
+
+        # Both linked identifiers are marked dirty on create.
+        assert dirty.pop(1000) == {a.id, b.id}
+
+    def test_create_via_relationship_marks_identifiers_dirty(
+        self, db: DatabaseTransactionFixture, redis_fixture: RedisFixture
+    ) -> None:
+        """The production import path (Identifier.equivalent_to) builds the
+        Equivalency by setting the input/output *relationships*, not the FK
+        columns. SQLAlchemy doesn't copy a relationship into its FK column
+        until the flush's dependency-resolution step, which runs after the
+        before_flush listener fires — so target.input_id/output_id are still
+        None when the listener reads them. The listener must resolve the IDs
+        from the relationship objects so real IDs (not the string "None") are
+        pushed to Redis.
+        """
+        a = db.identifier()
+        b = db.identifier()
+
+        dirty = DirtyIdentifierIds(redis_fixture.client)
+        dirty.pop(1000)  # clear anything left from setup
+
+        a.equivalent_to(None, b, 1.0)
+        db.session.commit()
+
+        marked = dirty.pop(1000)
+        assert marked == {a.id, b.id}
+        # The string "None" must never end up in the set.
+        assert "None" not in {str(v) for v in marked}
+
+    def test_delete_marks_chain_dirty(
+        self, db: DatabaseTransactionFixture, redis_fixture: RedisFixture
+    ) -> None:
+        a = db.identifier()
+        b = db.identifier()
+        equivalency = Equivalency(input_id=a.id, output_id=b.id, strength=1.0)
+        db.session.add(equivalency)
+        db.session.commit()
+
+        dirty = DirtyIdentifierIds(redis_fixture.client)
+        dirty.pop(1000)  # clear the IDs pushed by the create listener
+
+        db.session.delete(equivalency)
+        db.session.commit()
+
+        # The deleted identifiers (and their cached chain parents) are marked dirty.
+        assert {a.id, b.id}.issubset(dirty.pop(1000))
+
+    def test_redis_failure_is_non_fatal(
+        self,
+        db: DatabaseTransactionFixture,
+        redis_fixture: RedisFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A Redis outage while marking identifiers dirty must not abort the flush;
+        the missed IDs are recovered by the next full refresh."""
+        a = db.identifier()
+        b = db.identifier()
+        caplog.set_level(LogLevel.warning)
+
+        with patch(
+            "palace.manager.sqlalchemy.listeners.DirtyIdentifierIds"
+        ) as mock_dirty_cls:
+            mock_dirty_cls.return_value.add.side_effect = RedisError("redis down")
+
+            equivalency = Equivalency(input_id=a.id, output_id=b.id, strength=1.0)
+            db.session.add(equivalency)
+            db.session.commit()  # must not raise despite Redis being down
+
+        # The equivalency was still persisted.
+        assert db.session.get(Equivalency, equivalency.id) is not None
+        assert "Failed to mark dirty identifiers on equivalency create" in caplog.text
+
+    def test_delete_redis_failure_is_non_fatal(
+        self,
+        db: DatabaseTransactionFixture,
+        redis_fixture: RedisFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A Redis outage during the delete listener must not abort the flush;
+        the delete path is more complex (it does a DB query first) but the
+        non-fatal contract must hold for it too."""
+        a = db.identifier()
+        b = db.identifier()
+        equivalency = Equivalency(input_id=a.id, output_id=b.id, strength=1.0)
+        db.session.add(equivalency)
+        db.session.commit()
+        caplog.set_level(LogLevel.warning)
+
+        with patch(
+            "palace.manager.sqlalchemy.listeners.DirtyIdentifierIds"
+        ) as mock_dirty_cls:
+            mock_dirty_cls.return_value.add.side_effect = RedisError("redis down")
+
+            db.session.delete(equivalency)
+            db.session.commit()  # must not raise despite Redis being down
+
+        # The equivalency was still deleted.
+        assert db.session.get(Equivalency, equivalency.id) is None
+        assert "Failed to mark dirty identifiers on equivalency delete" in caplog.text

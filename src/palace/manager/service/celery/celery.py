@@ -57,6 +57,7 @@ def beat_schedule() -> dict[str, Any]:
     from palace.manager.celery.tasks import (
         bibliotheca,
         boundless,
+        equivalents,
         license_expiration,
         marc,
         notifications,
@@ -307,6 +308,19 @@ def beat_schedule() -> dict[str, Any]:
         "bibliotheca_circulation_update_all_collections": {
             "task": bibliotheca.circulation_update_all_collections.name,
             "schedule": crontab(minute="0", hour="5"),  # Once a day at 5:00 AM
+        },
+        "equivalent_identifiers_refresh": {
+            "task": equivalents.equivalent_identifiers_refresh.name,
+            "schedule": crontab(
+                minute="5,35"
+            ),  # Twice an hour at :05 and :35; no-op when queue is empty
+        },
+        "equivalent_identifiers_full_refresh": {
+            "task": equivalents.equivalent_identifiers_refresh.name,
+            "schedule": crontab(
+                hour="3", minute="30", day_of_week="0"
+            ),  # Weekly full refresh every Sunday at 3:30 AM
+            "kwargs": {"full_refresh": True},
         },
     }
 

@@ -1,17 +1,19 @@
 from __future__ import annotations
 
 import datetime
+import logging
 from threading import RLock
 from typing import Any
 
-from sqlalchemy import event, text
+from sqlalchemy import event, select, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Mapper, Session
 
 from palace.util.datetime_helpers import utc_now
 
 from palace.manager.core.config import Configuration
-from palace.manager.core.query.coverage import EquivalencyCoverageQueries
+from palace.manager.service.container import container_instance
+from palace.manager.service.redis.models.dirty_identifiers import DirtyIdentifierIds
 from palace.manager.sqlalchemy.before_flush_decorator import Listener, ListenerState
 from palace.manager.sqlalchemy.model.base import Base
 from palace.manager.sqlalchemy.model.identifier import (
@@ -30,6 +32,8 @@ from palace.manager.sqlalchemy.model.work import (
     Work,
     add_work_to_customlists_for_collection,
 )
+
+log = logging.getLogger(__name__)
 
 site_configuration_has_changed_lock = RLock()
 
@@ -179,16 +183,93 @@ def last_update_time_change(target, value, oldvalue, initator):
     target.external_index_needs_updating()
 
 
+# These two listeners fire once per Equivalency row. Batching them into a single
+# per-flush pass (e.g. a one_shot listener scanning session.new/session.deleted)
+# was considered but isn't worth the indirection:
+#   - Create: the only bulk path, BibliographicData._update_equivalent_identifiers,
+#     adds just a handful of equivalencies per apply(), and each apply() is its own
+#     transaction — a few sub-millisecond SADDs per flush.
+#   - Delete: Equivalency rows are never deleted in bulk via the ORM; they go away
+#     through FK ON DELETE CASCADE when an Identifier is deleted, which happens in
+#     the DB and bypasses before_flush listeners entirely.
+def _equivalency_identifier_ids(target: Equivalency) -> tuple[int, int]:
+    """Resolve the input/output identifier IDs of an Equivalency.
+
+    When an Equivalency is built by setting the ``input``/``output``
+    relationships (the production path, ``Identifier.equivalent_to``) rather
+    than the ``input_id``/``output_id`` FK columns, SQLAlchemy does not copy
+    the relationship into its FK column until the flush's dependency-resolution
+    step — which runs *after* the ``before_flush`` listener fires. At listener
+    time ``target.input_id``/``output_id`` are therefore still ``None`` even
+    though both identifiers are persistent with valid PKs.
+
+    Prefer the FK column when it is already populated (e.g. constructed with
+    ``input_id=...`` directly, which avoids a relationship lazy-load); otherwise
+    fall back to the related object's ``id``.
+    """
+    input_id = target.input_id if target.input_id is not None else target.input.id
+    output_id = target.output_id if target.output_id is not None else target.output.id
+    return input_id, output_id
+
+
 @Listener.before_flush(Equivalency, ListenerState.deleted)
 def equivalency_coverage_reset_on_equivalency_delete(
     session: Session, target: Equivalency
 ) -> None:
-    """On equivalency delete reset the coverage records of ANY ids touching
-    the deleted identifiers
+    """On equivalency delete, mark all identifier chains touching the deleted
+    identifiers as dirty so they will be recomputed by the next Celery task run.
+
+    Redis unavailability is non-fatal — any missed dirty IDs will be recovered
+    by the next scheduled full-refresh run.
     """
-    EquivalencyCoverageQueries.add_coverage_for_identifiers_chain(
-        [target.input, target.output], _db=session
+    input_id, output_id = _equivalency_identifier_ids(target)
+    # The chain-member lookup is part of the flush; keep it outside the try so a
+    # DB error propagates rather than being swallowed as a "Redis" failure below.
+    parent_ids = (
+        session.execute(
+            select(RecursiveEquivalencyCache.parent_identifier_id).where(
+                RecursiveEquivalencyCache.identifier_id.in_([input_id, output_id])
+            )
+        )
+        .scalars()
+        .all()
     )
+    # Marking dirty IDs is a best-effort side effect: any Redis problem (the
+    # service being down, or even unconfigured) must never break the equivalency
+    # change itself. The weekly full refresh recovers any IDs missed here.
+    try:
+        DirtyIdentifierIds(container_instance().redis().client()).add(
+            input_id, output_id, *parent_ids
+        )
+    except Exception as e:
+        log.warning(
+            f"Failed to mark dirty identifiers on equivalency delete: {e}",
+            exc_info=True,
+        )
+
+
+@Listener.before_flush(Equivalency, ListenerState.new)
+def equivalency_coverage_reset_on_equivalency_create(
+    session: Session, target: Equivalency
+) -> None:
+    """On equivalency create, mark the two linked identifiers as dirty so their
+    chains will be recomputed by the next Celery task run.
+
+    Redis unavailability is non-fatal — any missed dirty IDs will be recovered
+    by the next scheduled full-refresh run.
+    """
+    input_id, output_id = _equivalency_identifier_ids(target)
+    # Best-effort side effect — see the delete listener above; a Redis problem
+    # must never break the equivalency creation.
+    try:
+        DirtyIdentifierIds(container_instance().redis().client()).add(
+            input_id, output_id
+        )
+    except Exception as e:
+        log.warning(
+            f"Failed to mark dirty identifiers on equivalency create: {e}",
+            exc_info=True,
+        )
 
 
 @Listener.before_flush(Identifier, ListenerState.new)
