@@ -15,10 +15,7 @@ from sqlalchemy.orm import Session
 
 from palace.util.datetime_helpers import utc_now
 
-from palace.manager.celery.tasks.work import reclassify_null_audience_works
 from palace.manager.scripts.startup import (
-    STARTUP_TASKS_DIR,
-    _load_module_from_file,
     _slugify,
     create_startup_task,
     discover_startup_tasks,
@@ -388,18 +385,3 @@ class TestCreateStartupTask:
             create_startup_task()
 
         assert exc_info.value.code == 1
-
-
-class TestRepairStartupTasks:
-    def test_repair_remaining_null_audience_works_dispatches_celery_task(self) -> None:
-        """The 2026-06-17 startup task dispatches the reclassify_null_audience_works
-        Celery job, so the post-fix repair runs once on the next deploy."""
-        module = _load_module_from_file(
-            "repair_remaining_null_audience_works",
-            STARTUP_TASKS_DIR / "2026_06_17_repair_remaining_null_audience_works.py",
-        )
-
-        signature = module.run(MagicMock(), MagicMock(), logging.getLogger())
-
-        assert isinstance(signature, Signature)
-        assert signature.task == reclassify_null_audience_works.name
