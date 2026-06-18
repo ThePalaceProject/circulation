@@ -143,12 +143,11 @@ class LoanController(CirculationManagerController):
         # If we have a loan, serve a feed that tells the patron how to fulfill the loan. If a hold,
         # serve a feed that talks about the hold. We also need to drill in the Accept header, so that
         # it eventually gets sent to core.feed.opds.BaseOPDSFeed.entry_as_response
-        response_kwargs = {
-            "status": 201 if is_new else 200,
-            "mime_types": flask.request.accept_mimetypes,
-        }
         return OPDSAcquisitionFeed.single_entry_loans_feed(
-            self.circulation, loan_or_hold, **response_kwargs  # type: ignore[arg-type]
+            self.circulation,
+            loan_or_hold,
+            status=201 if is_new else 200,
+            mime_types=flask.request.accept_mimetypes,
         )
 
     def _borrow(

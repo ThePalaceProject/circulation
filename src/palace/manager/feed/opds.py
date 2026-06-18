@@ -17,7 +17,11 @@ from palace.manager.feed.serializer.opds import (
 )
 from palace.manager.feed.serializer.opds2 import OPDS2Serializer
 from palace.manager.feed.types import FeedData, LinkKwargs, WorkEntry
-from palace.manager.util.flask_util import OPDSEntryResponse, OPDSFeedResponse
+from palace.manager.util.flask_util import (
+    OPDSEntryResponse,
+    OPDSFeedResponse,
+    ResponseKwargs,
+)
 from palace.manager.util.opds_writer import OPDSMessage
 
 
@@ -58,15 +62,18 @@ class BaseOPDSFeed(FeedInterface, LoggerMixin):
     def as_response(
         self,
         mime_types: MIMEAccept | None = None,
-        **kwargs: Any,
+        **kwargs: Unpack[ResponseKwargs],
     ) -> OPDSFeedResponse:
         """Serialize the feed using the serializer protocol"""
         serializer = get_serializer(mime_types)
+        # The serializer dictates the content type, so set it directly rather
+        # than passing it as a second explicit argument alongside ``**kwargs``
+        # (which would be a duplicate keyword once ``kwargs`` is typed).
+        kwargs["content_type"] = serializer.content_type()
         return OPDSFeedResponse(
             serializer.serialize_feed(
                 self._feed, precomposed_entries=self._precomposed_entries
             ),
-            content_type=serializer.content_type(),
             **kwargs,
         )
 
@@ -75,20 +82,21 @@ class BaseOPDSFeed(FeedInterface, LoggerMixin):
         cls,
         entry: WorkEntry | OPDSMessage,
         mime_types: MIMEAccept | None = None,
-        **response_kwargs: Any,
+        **response_kwargs: Unpack[ResponseKwargs],
     ) -> OPDSEntryResponse:
         serializer = get_serializer(mime_types)
+        # The serializer dictates the content type, so set it directly rather
+        # than passing it as a second explicit argument alongside the forwarded
+        # ``**response_kwargs`` (which would be a duplicate keyword).
+        response_kwargs["content_type"] = serializer.entry_content_type()
         if isinstance(entry, OPDSMessage):
-            # An OPDSMessage represents an error condition, so its own
-            # status code takes precedence over any status supplied by the
-            # caller (e.g. the 200/201 used for a successful borrow). Drop a
-            # caller-supplied status to avoid passing ``status`` twice to
-            # OPDSEntryResponse.
-            response_kwargs.pop("status", None)
+            # An OPDSMessage represents an error condition, so its own status
+            # code always wins over any status supplied by the caller (e.g. the
+            # 200/201 used for a successful borrow). Setting it into the kwargs
+            # dict overrides the caller value without passing ``status`` twice.
+            response_kwargs["status"] = entry.status_code
             return OPDSEntryResponse(
                 response=serializer.to_string(serializer.serialize_opds_message(entry)),
-                status=entry.status_code,
-                content_type=serializer.entry_content_type(),
                 **response_kwargs,
             )
 
@@ -100,7 +108,6 @@ class BaseOPDSFeed(FeedInterface, LoggerMixin):
             response=serializer.to_string(
                 serializer.serialize_work_entry(entry.computed)
             ),
-            content_type=serializer.entry_content_type(),
             **response_kwargs,
         )
 
