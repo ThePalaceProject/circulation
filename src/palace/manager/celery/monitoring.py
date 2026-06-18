@@ -106,6 +106,15 @@ class Cloudwatch(Polaroid):
 
     clear_after = True  # clear after flush (incl, state.event_count).
 
+    # The camera opens its own redis-py connection to the broker Redis, separate
+    # from the connections kombu manages for publish/consume. Unlike kombu's
+    # consume connection -- which uses blocking BRPOP and so must not carry a
+    # socket_timeout -- the camera only issues instant reads (LINDEX/LLEN), so it
+    # can safely fail fast on a dead socket rather than hang. These mirror the
+    # application Redis client's socket timeouts (see service/redis).
+    SOCKET_TIMEOUT = 15.0
+    SOCKET_CONNECT_TIMEOUT = 5.0
+
     def __init__(
         self,
         *args: Any,
@@ -126,19 +135,34 @@ class Cloudwatch(Polaroid):
         self.cloudwatch_client = (
             boto3.client("cloudwatch", region_name=region) if not dryrun else None
         )
-        self.manager_name = self.app.conf.get("broker_transport_options", {}).get(
-            "global_keyprefix"
+        broker_transport_options = self.app.conf.get("broker_transport_options", {})
+        self.manager_name = broker_transport_options.get("global_keyprefix")
+        self.redis_client = self.get_redis_client(
+            broker_url,
+            self.manager_name,
+            broker_transport_options.get("health_check_interval", 0),
         )
-        self.redis_client = self.get_redis_client(broker_url, self.manager_name)
         self.namespace = self.app.conf.get("cloudwatch_statistics_namespace")
         self.upload_size = self.app.conf.get("cloudwatch_statistics_upload_size")
         self.queues = {queue.name for queue in self.app.conf.get("task_queues")}
 
     @classmethod
     def get_redis_client(
-        cls, broker_url: str, global_keyprefix: str | None
+        cls,
+        broker_url: str,
+        global_keyprefix: str | None,
+        health_check_interval: int,
     ) -> _PrefixedRedis:
-        connection_pool = ConnectionPool.from_url(broker_url)
+        # health_check_interval is threaded through from the broker's
+        # PALACE_CELERY_BROKER_TRANSPORT_OPTIONS_HEALTH_CHECK_INTERVAL so this
+        # idle monitoring connection is PING-checked and re-established after a
+        # Redis restart, the same way the other connections now are.
+        connection_pool = ConnectionPool.from_url(
+            broker_url,
+            socket_timeout=cls.SOCKET_TIMEOUT,
+            socket_connect_timeout=cls.SOCKET_CONNECT_TIMEOUT,
+            health_check_interval=health_check_interval,
+        )
         return _PrefixedRedis(
             connection_pool=connection_pool, global_keyprefix=global_keyprefix
         )
