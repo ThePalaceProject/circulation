@@ -6,8 +6,6 @@ from threading import RLock
 from typing import Any
 
 from sqlalchemy import event, select, text
-
-log = logging.getLogger(__name__)
 from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Mapper, Session
 
@@ -34,6 +32,8 @@ from palace.manager.sqlalchemy.model.work import (
     Work,
     add_work_to_customlists_for_collection,
 )
+
+log = logging.getLogger(__name__)
 
 site_configuration_has_changed_lock = RLock()
 

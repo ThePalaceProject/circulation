@@ -63,6 +63,11 @@ class TestDirtyIdentifierIds:
         db.session.add(Equivalency(input_id=id2.id, output_id=id3.id, strength=1.0))
         db.session.flush()
 
+        # Creating the equivalencies above fires the create listener, which
+        # pushes id1/id2/id3 into this same dirty set. Clear it so we measure
+        # only what add_all_from_db newly adds.
+        dirty.pop(1000)
+
         count = dirty.add_all_from_db(db.session, chunk_size=2)
 
         # id1, id2, id3 should be pushed; id4 should not.

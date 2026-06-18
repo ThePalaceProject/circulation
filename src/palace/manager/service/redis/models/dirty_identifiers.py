@@ -58,7 +58,10 @@ class DirtyIdentifierIds:
         IDs are streamed from the DB with ``yield_per`` and sent to Redis in chunks
         of *chunk_size* (one ``SADD`` per chunk) to avoid a single large network call.
 
-        :return: Total number of identifier IDs pushed.
+        :return: Number of identifier IDs newly added to the set. IDs already
+            present (e.g. pushed by the create/delete listeners since the last
+            run) are not counted, so this may be lower than the number of
+            distinct IDs in the equivalents table.
         """
         union_q = union(
             select(Equivalency.input_id.label("identifier_id")).where(
