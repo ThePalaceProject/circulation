@@ -14,7 +14,7 @@ from sqlalchemy import (
     UniqueConstraint,
     or_,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, INT4RANGE, JSON
+from sqlalchemy.dialects.postgresql import ARRAY, INT4RANGE
 from sqlalchemy.ext.associationproxy import association_proxy
 from sqlalchemy.orm import (
     Mapped,
@@ -110,13 +110,6 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
     )
 
     priority: Mapped[int] = Column(Integer, index=True, nullable=False, default=0)
-
-    # Deprecated: these cached size estimates are no longer populated or read.
-    # The code that maintained them (update_size and the lane-size Celery tasks)
-    # has been removed; the columns remain mapped only so the model continues to
-    # match the database schema, and will be dropped in a follow-up migration.
-    size: Mapped[int] = Column(Integer, nullable=False, default=0)
-    size_by_entrypoint = Column(JSON, nullable=True)
 
     # A lane may have one parent lane and many sublanes.
     sublanes: Mapped[list[Lane]] = relationship(
