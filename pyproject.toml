@@ -383,7 +383,7 @@ filterwarnings = [
 markers = [
     "db: mark test as using the database (applied automatically to tests using the db fixture)",
     "minio: mark test as requiring minio",
-    "opensearch: mark test as requiring opensearch",
+    "opensearch: mark test as requiring opensearch (applied automatically to tests using the search fixtures)",
 ]
 timeout = "600"
 timeout_method = "thread"
