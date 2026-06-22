@@ -1,0 +1,8 @@
+# OpenSearch 3.5 -- the migration target (AWS OpenSearch Service does not yet
+# support 3.7). Temporary: used only by the opensearch-version CI job while
+# production migrates; once production is on 3.5 this becomes the default (fold
+# into Dockerfile.os.ci). Pinned to a specific patch: OpenSearch publishes no
+# floating :3.5 minor tag and :3 would drift to 3.6/3.7. analysis-icu is required
+# by the search schema (see src/palace/manager/search/v5.py).
+FROM opensearchproject/opensearch:3.5.0
+RUN /usr/share/opensearch/bin/opensearch-plugin install --batch analysis-icu

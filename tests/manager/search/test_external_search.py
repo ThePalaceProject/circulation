@@ -521,14 +521,19 @@ class TestExternalSearchWithWorks:
         # Search in publisher name.
         expect(data.moby_dick, "gutenberg")
 
-        # Title > subtitle > word found in summary > publisher
-        order = [
-            data.title_match,
-            data.subtitle_match,
-            data.summary_match,
-            data.publisher_match,
-        ]
-        expect(order, "match")
+        # Matches in the title and subtitle (short, high-weight fields) reliably
+        # rank ahead of matches in the summary and publisher fields, in that
+        # order, and all four field matches are returned. We deliberately do not
+        # assert the relative order of the summary-match vs the publisher-match:
+        # it is a near-tie whose ordering depends on Lucene's BM25 field-length
+        # normalization, which changed in OpenSearch 3.x (Lucene 10) and flips
+        # those two relative to 1.3/2.19.
+        match_hits = [hit.work_id for hit in query("match")]
+        assert match_hits[:2] == [data.title_match.id, data.subtitle_match.id]
+        assert set(match_hits[2:]) == {
+            data.summary_match.id,
+            data.publisher_match.id,
+        }
 
         # A search for a partial title match + a partial author match
         # considers only books that match both fields.
