@@ -175,12 +175,15 @@ CREATE USER palace with password 'test';
 grant all privileges on database circ to palace;
 ```
 
-### Redis
+### Valkey
 
-Redis is used as the broker for Celery and the caching layer. You can run Redis with docker using the following command:
+[Valkey](https://valkey.io/) is used as the broker for Celery and the caching layer. We run and test
+against Valkey, but Redis works as well — Valkey is a protocol- and command-compatible fork of Redis, so
+the same `redis://` connection URLs point at either. You can run Valkey with docker using the following
+command:
 
 ```sh
-docker run -d --name redis -p 6379:6379 redis/redis-stack-server
+docker run -d --name valkey -p 6379:6379 valkey/valkey:8.1.8
 ```
 
 ### Environment variables

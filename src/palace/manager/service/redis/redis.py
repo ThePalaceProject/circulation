@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from functools import cached_property
 from typing import TYPE_CHECKING, Any
 
 import redis
@@ -151,17 +150,6 @@ class Redis(RedisClient, RedisPrefixCheckMixin):
             shard_hint,
             key_generator=self.get_key,
         )
-
-    @cached_property
-    def elasticache(self) -> bool:
-        """
-        Check if this Redis instances is actually connected to AWS ElastiCache rather than Redis.
-
-        AWS ElastiCache is supposed to be API compatible with Redis, but there are some differences
-        that can cause issues. This property can be used to detect if we are connected to ElastiCache
-        and handle those differences.
-        """
-        return self.info().get("os") == "Amazon ElastiCache"
 
 
 class Pipeline(RedisPipeline, RedisPrefixCheckMixin):
