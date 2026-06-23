@@ -183,7 +183,7 @@ the same `redis://` connection URLs point at either. You can run Valkey with doc
 command:
 
 ```sh
-docker run -d --name valkey -p 6379:6379 valkey/valkey:8.1.8
+docker run -d --name valkey -p 6379:6379 valkey/valkey:9.0
 ```
 
 ### Environment variables
