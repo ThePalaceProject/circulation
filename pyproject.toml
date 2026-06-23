@@ -49,7 +49,7 @@ dependencies = [
     "certifi",
     "click>=8.4.1,<9",
     "croniter>=6.0.0,<7",
-    "dependency-injector>=4.41,<5",
+    "dependency-injector>=4.49.1,<5",
     "expiringdict==1.2.2",
     "feedparser==6.0.12",
     "firebase-admin>=7.4.0,<8",
