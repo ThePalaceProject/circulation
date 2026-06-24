@@ -351,7 +351,6 @@ class TestBibliothecaCirculationUpdaterProcessIdentifiers:
 
         # The change was applied synchronously, not dispatched to a worker.
         mock_bib.apply.assert_called_once()
-        assert mock_bib.apply.call_args.kwargs["create_coverage_record"] is False
         mock_apply.delay.assert_not_called()
 
     def test_unchanged_title_is_not_applied(

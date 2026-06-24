@@ -360,7 +360,16 @@ class Timestamp(Base):
 
 
 class CoverageRecord(Base, BaseCoverageRecord):
-    """A record of a Identifier being used as input into some process."""
+    """A record of a Identifier being used as input into some process.
+
+    Dormant model retained only so the ``coveragerecords`` table stays in the
+    schema for one more release. The CoverageProvider machinery that read and
+    wrote these records has been retired; nothing in the current code reads or
+    writes this table. Per our online-migration convention the table cannot be
+    dropped in the same release that stops using it (N-1 app servers still write
+    here during a rolling deploy), so this model and the table will be removed in
+    a follow-up PR that ships after this release.
+    """
 
     __tablename__ = "coveragerecords"
 
