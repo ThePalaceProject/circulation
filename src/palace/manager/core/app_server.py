@@ -140,7 +140,9 @@ def _parse_cache_control(cache_control_header: str | None) -> dict[str, int | No
 
 def cache_control_headers[**P](
     default_max_age: int | None = None,
-) -> Callable[[Callable[P, Response]], Callable[P, Response]]:
+) -> Callable[
+    [Callable[P, Response | ProblemDetail]], Callable[P, Response | ProblemDetail]
+]:
     """
     Decorator that manages Cache-Control headers on Flask responses based on request and configuration.
 
@@ -156,11 +158,21 @@ def cache_control_headers[**P](
             to set on responses that don't already have Cache-Control headers
     """
 
-    def decorator(f: Callable[P, Response]) -> Callable[P, Response]:
+    def decorator(
+        f: Callable[P, Response | ProblemDetail],
+    ) -> Callable[P, Response | ProblemDetail]:
         @wraps(f)
-        def decorated(*args: P.args, **kwargs: P.kwargs) -> Response:
+        def decorated(*args: P.args, **kwargs: P.kwargs) -> Response | ProblemDetail:
             """Set cache control headers on the response."""
             response = f(*args, **kwargs)
+
+            # The wrapped function may return a ProblemDetail rather than a
+            # Response (e.g. when a lane identifier doesn't resolve). It has no
+            # headers to set, so return it unchanged and let the outer
+            # returns_problem_detail decorator convert it into a Response. An
+            # error response should not be given Cache-Control headers anyway.
+            if isinstance(response, ProblemDetail):
+                return response
 
             # Check if the incoming request has a Cache-Control header
             directives = _parse_cache_control(

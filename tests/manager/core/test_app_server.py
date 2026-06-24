@@ -814,3 +814,21 @@ class TestCacheControlHeaders:
             "Cache-Control" in response.headers
             and response.headers["Cache-Control"] == "max-age=100"
         )
+
+    def test_cache_control_headers_problem_detail(
+        self, flask_app_fixture: FlaskAppFixture
+    ) -> None:
+        # When the wrapped function returns a ProblemDetail (e.g. an
+        # unresolvable lane identifier) rather than a Response, the decorator
+        # returns it unchanged instead of trying to set headers on it. This
+        # leaves the conversion to a Response to the returns_problem_detail
+        # decorator.
+        problem_detail = INVALID_INPUT.detailed("nope")
+        request_func = MagicMock(return_value=problem_detail)
+
+        decorated = cache_control_headers(default_max_age=10)(request_func)
+        with flask_app_fixture.test_request_context(
+            headers={"Cache-Control": "max-age=100"}
+        ):
+            response = decorated()
+        assert response is problem_detail
