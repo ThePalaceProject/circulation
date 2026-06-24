@@ -1,7 +1,7 @@
 #!/bin/bash
 # Stores Circulation Manager environment variables in the virtualenv environment.
-# Local environment variables are not passed into cron, so variables set at
-# runtime need to be stored.
+# Subprocesses (Celery workers, CLI scripts) don't inherit the container's
+# runtime environment, so variables set at runtime need to be stored.
 
 set -e
 
@@ -11,8 +11,8 @@ SIMPLIFIED_ENVIRONMENT=/var/www/circulation/environment.sh
 touch $SIMPLIFIED_ENVIRONMENT
 
 # Move all of the environment variables with Library Simplified prefixes
-# into an environment file. This will allow the environment to be loaded when
-# cron tasks are run, since crontab doesn't load them automatically.
+# into an environment file. The virtualenv's activate script sources this file,
+# so the environment is loaded whenever a Celery worker or CLI script runs.
 # The values of the variables are escaped as needed for the shell.
 for var in $(printenv | grep -e SIMPLIFIED -e LIBSIMPLE -e PALACE | sed -e 's/^\([^=]*\)=.*$/\1/g'); do {
   printf "export ${var}=%q\n" "$(printenv "${var}")"

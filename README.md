@@ -504,7 +504,7 @@ A collection can be associated with any number of libraries.
 At this point, we have a library named _Hazelnut Peak_ configured to use the _Palace Bookshelf_ collection we created.
 It's now necessary to tell the application to start importing books from the OPDS feed. When the application is
 running inside a Docker image, the image is typically configured to execute various import operations on a regular
-schedule using `cron`. Because we're running the application from the command-line for development purposes, we
+schedule using `celery`. Because we're running the application from the command-line for development purposes, we
 need to execute these operations ourselves manually. In this particular case, we need to execute the `opds_import_monitor`:
 
 ```sh
@@ -600,11 +600,9 @@ The Palace Manager has a number of background jobs that are scheduled to run at 
 includes all import and reaper jobs, as well as other necessary background tasks such as maintaining
 the search index and feed caches.
 
-Jobs are scheduled via a combination of `cron` and `celery`. All new jobs should use `celery` for scheduling,
-and existing jobs are being migrated to `celery` as they are updated.
-
-The `cron` jobs are defined in the `docker/services/simplified_crontab` file. The `celery` jobs are defined
-in the `src/palace/manager/celery/tasks/` module.
+Jobs are scheduled via `celery`. The `celery` jobs are defined in the `src/palace/manager/celery/tasks/`
+module, and their schedules are configured in the Celery beat schedule
+(`src/palace/manager/service/celery/celery.py`).
 
 ## Startup Tasks
 
