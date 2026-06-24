@@ -24,7 +24,6 @@ from palace.manager.sqlalchemy.constants import LinkRelations
 from palace.manager.sqlalchemy.model.classification import Classification
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.contributor import Contributor
-from palace.manager.sqlalchemy.model.coverage import CoverageRecord
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
@@ -784,8 +783,6 @@ class BibliographicData(BaseMutableData):
         edition: Edition,
         collection: Collection | None,
         replace: ReplacementPolicy | None = None,
-        *,
-        create_coverage_record: bool = True,
     ) -> tuple[Edition, bool]:
         """Apply full bibliographic metadata (identifier + edition) and calculate work presentation.
 
@@ -801,8 +798,6 @@ class BibliographicData(BaseMutableData):
         :param edition: The Edition object to update with bibliographic data.
         :param collection: Optional Collection for applying circulation data.
         :param replace: Policy controlling which fields to replace. Defaults to ReplacementPolicy().
-        :param create_coverage_record: If True, creates/updates a CoverageRecord for this edition.
-            Will be removed once coverage records are fully deprecated.
         :return: Tuple of (updated_edition, requires_presentation_update) where the boolean indicates
             whether the edition or its work requires presentation recalculation due to changes in
             core fields (title, contributors, images, descriptions, etc.).
@@ -867,18 +862,6 @@ class BibliographicData(BaseMutableData):
         # Apply circulation data
         if self.circulation:
             self.circulation.apply(db, collection, replace)
-
-        # Update the coverage record for this edition and data
-        # source. We omit the collection information, even if we know
-        # which collection this is, because we only changed bibliographic data.
-        # TODO: Remove this once we have done away with coverage records
-        if create_coverage_record:
-            CoverageRecord.add_for(
-                edition,
-                data_source,
-                timestamp=self.as_of_timestamp,
-                collection=None,
-            )
 
         # Calculate work presentation directly if needed
         if work_requires_full_recalculation or work_requires_new_presentation_edition:
