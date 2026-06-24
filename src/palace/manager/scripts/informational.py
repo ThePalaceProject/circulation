@@ -22,8 +22,6 @@ from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.search.filter import Filter
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.collection import Collection
-from palace.manager.sqlalchemy.model.coverage import CoverageRecord
-from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
@@ -366,12 +364,6 @@ class Explain(IdentifierInputScript):
             self.explain_identifier(
                 output, False, seen, equivalency.strength, level + 1
             )
-        if primary:
-            crs = identifier.coverage_records
-            if crs:
-                self.write("  %d coverage records:" % len(crs))
-                for cr in sorted(crs, key=lambda x: x.timestamp or datetime.min):
-                    self.explain_coverage_record(cr)
 
     def explain_license_pool(self, pool: LicensePool) -> None:
         self.write("Licensepool info:")
@@ -434,46 +426,6 @@ class Explain(IdentifierInputScript):
             else:
                 collection = "!collection"
             self.write(f"  ACTIVE: {pool.identifier!r} {collection}")
-
-    def explain_coverage_record(self, cr: CoverageRecord) -> None:
-        if cr.timestamp is None:
-            return
-        status_value = str(cr.status) if cr.status is not None else None
-        operation_value = str(cr.operation) if cr.operation is not None else None
-        self._explain_coverage_record(
-            cr.timestamp, cr.data_source, operation_value, status_value, cr.exception
-        )
-
-    def _explain_coverage_record(
-        self,
-        timestamp: datetime,
-        data_source: DataSource | None,
-        operation: str | None,
-        status: str | None,
-        exception: str | None,
-    ) -> None:
-        timestamp_string = timestamp.strftime(self.TIME_FORMAT)
-        if data_source:
-            data_source_value = data_source.name + " | "
-        else:
-            data_source_value = ""
-        if operation:
-            operation_value = operation + " | "
-        else:
-            operation_value = ""
-        if exception:
-            exception_value = " | " + exception
-        else:
-            exception_value = ""
-        self.write(
-            "   {} | {}{}{}{}".format(
-                timestamp_string,
-                data_source_value,
-                operation_value,
-                status,
-                exception_value,
-            )
-        )
 
 
 class WhereAreMyBooksScript(CollectionInputScript):
