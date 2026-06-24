@@ -15,11 +15,11 @@ x-cm-variables: &cm
     PALACE_SECRET_KEY: "SECRET_KEY_USED_FOR_ADMIN_UI_COOKIES"
     PALACE_PATRON_WEB_HOSTNAMES: "*"
     PALACE_BASE_URL: "http://localhost:6500"
-    PALACE_CELERY_BROKER_URL: "redis://redis:6379/0"
-    PALACE_CELERY_RESULT_BACKEND: "redis://redis:6379/2"
+    PALACE_CELERY_BROKER_URL: "redis://valkey:6379/0"
+    PALACE_CELERY_RESULT_BACKEND: "redis://valkey:6379/2"
     PALACE_CELERY_BROKER_TRANSPORT_OPTIONS_GLOBAL_KEYPREFIX: "test"
     PALACE_CELERY_CLOUDWATCH_STATISTICS_DRYRUN: "true"
-    PALACE_REDIS_URL: "redis://redis:6379/1"
+    PALACE_REDIS_URL: "redis://valkey:6379/1"
     PALACE_GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO_JSON: "${PALACE_GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO_JSON-}"
 
     # Set up the environment variables used for testing as well
@@ -28,7 +28,7 @@ x-cm-variables: &cm
     PALACE_TEST_MINIO_URL: "http://minio:9000"
     PALACE_TEST_MINIO_USER: "palace"
     PALACE_TEST_MINIO_PASSWORD: "test123456789"
-    PALACE_TEST_REDIS_URL: "redis://redis:6379/3"
+    PALACE_TEST_REDIS_URL: "redis://valkey:6379/3"
 
   depends_on:
     pg:
@@ -37,7 +37,7 @@ x-cm-variables: &cm
       condition: service_healthy
     os:
       condition: service_healthy
-    redis:
+    valkey:
       condition: service_healthy
 
 x-cm-build: &cm-build
@@ -115,10 +115,10 @@ services:
       timeout: 10s
       retries: 5
 
-  redis:
-    image: "redis/redis-stack-server:7.4.0-v0"
+  valkey:
+    image: "valkey/valkey:9.0"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "valkey-cli", "ping"]
       interval: 30s
       timeout: 20s
       retries: 3
