@@ -361,9 +361,10 @@ module = [
 ]
 
 [tool.pytest.ini_options]
+# Coverage is opt-in (pass --cov --cov-report=xml). It roughly doubles the
+# test runtime, so CI measures it only on the Python 3.14 job (the one version
+# where coverage.py uses the fast sys.monitoring core and can measure branches).
 addopts = [
-    "--cov",
-    "--cov-report=xml",
     "--dist=worksteal",
     "--numprocesses=auto",
     "--strict-markers",

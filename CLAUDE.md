@@ -104,13 +104,13 @@ Palace Manager follows a service-oriented architecture with:
 
 ```bash
 # Run all tests
-tox -e py312-docker -- --no-cov
+tox -e py312-docker
 
 # Run specific test file
-tox -e py312-docker -- --no-cov path/to/test_file.py
-
-# Run with coverage (default)
 tox -e py312-docker -- path/to/test_file.py
+
+# Run with coverage (opt-in; CI collects coverage only on the 3.14 job)
+tox -e py312-docker -- --cov --cov-report=xml path/to/test_file.py
 ```
 
 ### Type Checking
