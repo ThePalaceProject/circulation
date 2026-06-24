@@ -16,8 +16,6 @@ from palace.manager.scripts.informational import (
     WhereAreMyBooksScript,
 )
 from palace.manager.search.external_search import ExternalSearchIndex
-from palace.manager.sqlalchemy.model.coverage import CoverageRecord
-from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.licensing import LicensePoolStatus
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.search import EndToEndSearchFixture
@@ -495,8 +493,6 @@ class TestExplain:
         [pool] = work.license_pools
         edition = work.presentation_edition
         identifier = pool.identifier
-        source = DataSource.lookup(db.session, DataSource.OCLC_LINKED_DATA)
-        CoverageRecord.add_for(identifier, source, "an operation")
         input = StringIO()
         io_output = StringIO()
         args = ["--identifier-type", "Database ID", str(identifier.id)]
@@ -512,10 +508,6 @@ class TestExplain:
         assert "Science Fiction" in output
         for contributor in edition.contributors:
             assert contributor.sort_name in output
-
-        # CoverageRecords associated with the primary identifier were
-        # printed out.
-        assert "OCLC Linked Data | an operation | success" in output
 
         # There is an active LicensePool that is fulfillable and has
         # copies owned.

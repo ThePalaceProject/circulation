@@ -714,41 +714,6 @@ class TestBibliographicData:
         assert edition_new.published == edition_old.published
         assert edition_new.issued == edition_old.issued
 
-    def test_apply_creates_coverage_records(self, db: DatabaseTransactionFixture):
-        edition, pool = db.edition(with_license_pool=True)
-
-        bibliographic = BibliographicData(
-            data_source_name=DataSource.OVERDRIVE, title=db.fresh_str()
-        )
-
-        edition, changed = bibliographic.apply(db.session, edition, pool.collection)
-
-        # One success was recorded.
-        records = (
-            db.session.query(CoverageRecord)
-            .filter(CoverageRecord.identifier_id == edition.primary_identifier.id)
-            .filter(CoverageRecord.operation == None)
-        )
-        assert 1 == records.count()
-        assert CoverageRecord.SUCCESS == records.all()[0].status
-
-        # Apply BibliographicData from a different source.
-        bibliographic = BibliographicData(
-            data_source_name=DataSource.GUTENBERG, title=db.fresh_str()
-        )
-
-        edition, changed = bibliographic.apply(db.session, edition, pool.collection)
-
-        # Another success record was created.
-        records = (
-            db.session.query(CoverageRecord)
-            .filter(CoverageRecord.identifier_id == edition.primary_identifier.id)
-            .filter(CoverageRecord.operation == None)
-        )
-        assert 2 == records.count()
-        for record in records.all():
-            assert CoverageRecord.SUCCESS == record.status
-
     def test_apply_does_not_create_coverage_records(
         self, db: DatabaseTransactionFixture
     ):
@@ -758,9 +723,7 @@ class TestBibliographicData:
             data_source_name=DataSource.OVERDRIVE, title=db.fresh_str()
         )
 
-        bibliographic.apply(
-            db.session, edition, pool.collection, create_coverage_record=False
-        )
+        bibliographic.apply(db.session, edition, pool.collection)
 
         # No coverage records were created.
         records = db.session.scalars(select(CoverageRecord)).all()
