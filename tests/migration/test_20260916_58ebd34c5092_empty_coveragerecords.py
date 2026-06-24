@@ -67,20 +67,30 @@ def test_empties_coveragerecords(
     assert _coveragerecord_count(alembic_engine) == 1
 
 
-def test_upgrade_does_not_leak_lock_timeout(alembic_engine: Engine) -> None:
+def test_upgrade_does_not_leak_lock_timeout(
+    alembic_runner: MigrationContext,
+    alembic_engine: Engine,
+) -> None:
     """upgrade() leaves lock_timeout exactly as it found it.
 
     The TRUNCATE runs under a short ``lock_timeout``, set with ``SET LOCAL``,
     which lasts to the end of the *transaction* rather than the end of this
     revision. ``alembic/env.py`` runs every pending revision inside a single
     ``context.begin_transaction()``, so without an explicit reset the timeout
-    would silently apply to every later revision in the same upgrade.
+    would silently apply to every later revision in the same upgrade. That is
+    not hypothetical after this release: a database older than this revision
+    upgrades through it and the following drop in one transaction.
 
     Driving the migration through ``alembic_runner`` could not catch that: it
     commits between revisions, which discards the setting regardless of what
     the migration did. So run ``upgrade()`` against a transaction we hold open
     ourselves, which is the situation env.py actually creates.
     """
+    # The next revision drops coveragerecords, so it is absent from the schema
+    # built from the current models. Step back to this revision, whose
+    # downgrade recreates it, to give the TRUNCATE something to act on.
+    alembic_runner.migrate_down_to(REVISION)
+
     revision = _load_revision()
 
     with alembic_engine.begin() as connection:
