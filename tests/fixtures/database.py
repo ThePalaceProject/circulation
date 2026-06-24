@@ -86,7 +86,6 @@ from palace.manager.sqlalchemy.model.classification import (
 )
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.contributor import Contributor
-from palace.manager.sqlalchemy.model.coverage import CoverageRecord
 from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.sqlalchemy.model.customlist import CustomList
 from palace.manager.sqlalchemy.model.datasource import DataSource
@@ -1080,34 +1079,6 @@ class DatabaseTransactionFixture:
         return get_one_or_create(
             self.session, Subject, type=type, identifier=identifier
         )[0]
-
-    def coverage_record(
-        self,
-        edition,
-        coverage_source,
-        operation=None,
-        status=CoverageRecord.SUCCESS,
-        collection=None,
-        exception=None,
-    ) -> CoverageRecord:
-        if isinstance(edition, Identifier):
-            identifier = edition
-        else:
-            identifier = edition.primary_identifier
-        record, ignore = get_one_or_create(
-            self.session,
-            CoverageRecord,
-            identifier=identifier,
-            data_source=coverage_source,
-            operation=operation,
-            collection=collection,
-            create_method_kwargs=dict(
-                timestamp=utc_now(),
-                status=status,
-                exception=exception,
-            ),
-        )
-        return record
 
     def identifier(self, identifier_type=Identifier.GUTENBERG_ID, foreign_id=None):
         if foreign_id:

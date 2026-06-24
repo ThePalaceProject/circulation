@@ -17,7 +17,6 @@ if TYPE_CHECKING:
     # This is needed during type checking so we have the
     # types of related models.
     from palace.manager.sqlalchemy.model.classification import Classification
-    from palace.manager.sqlalchemy.model.coverage import CoverageRecord
     from palace.manager.sqlalchemy.model.credential import Credential
     from palace.manager.sqlalchemy.model.customlist import CustomList
     from palace.manager.sqlalchemy.model.edition import Edition
@@ -52,11 +51,6 @@ class DataSource(Base, HasSessionCache, DataSourceConstants):
     # One DataSource can generate many Editions.
     editions: Mapped[list[Edition]] = relationship(
         "Edition", back_populates="data_source", uselist=True
-    )
-
-    # One DataSource can generate many CoverageRecords.
-    coverage_records: Mapped[list[CoverageRecord]] = relationship(
-        "CoverageRecord", back_populates="data_source"
     )
 
     # One DataSource can generate many IDEquivalencies.

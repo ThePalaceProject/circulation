@@ -41,7 +41,6 @@ from palace.manager.data_layer.policy.presentation import (
 from palace.manager.sqlalchemy.constants import IdentifierConstants, LinkRelations
 from palace.manager.sqlalchemy.model.base import Base
 from palace.manager.sqlalchemy.model.classification import Classification, Subject
-from palace.manager.sqlalchemy.model.coverage import CoverageRecord
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.licensing import (
     LicensePool,
@@ -258,11 +257,6 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
         back_populates="output",
         cascade="all, delete-orphan",
         uselist=True,
-    )
-
-    # One Identifier may have many associated CoverageRecords.
-    coverage_records: Mapped[list[CoverageRecord]] = relationship(
-        "CoverageRecord", back_populates="identifier"
     )
 
     def __repr__(self) -> str:
