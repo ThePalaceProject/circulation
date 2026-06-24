@@ -277,10 +277,6 @@ class CustomListsController(
             self.search_engine.add_documents(documents)
             self.search_engine.search_service().refresh()
 
-            # If this list was used to populate any lanes, those lanes need to have their counts updated.
-            for lane in Lane.affected_by_customlist(list):
-                lane.update_size(self._db, search_engine=self.search_engine)
-
         new_collections = []
         for collection_id in collections:
             collection = get_one(self._db, Collection, id=collection_id)
@@ -373,26 +369,16 @@ class CustomListsController(
             if len(list.shared_locally_with_libraries) > 0:
                 return CANNOT_DELETE_SHARED_LIST
 
-            # Build the list of affected lanes before modifying the
-            # CustomList.
-            affected_lanes = Lane.affected_by_customlist(list)
-            surviving_lanes = []
-            for lane in affected_lanes:
+            # Delete any lanes based solely on this custom list (which is about
+            # to be deleted).  Lanes that draw on other lists or a datasource
+            # survive untouched.
+            for lane in Lane.affected_by_customlist(list):
                 if lane.list_datasource == None and len(lane.customlist_ids) == 1:
-                    # This Lane is based solely upon this custom list,
-                    # which is about to be deleted. Delete the Lane
-                    # itself.
                     self._db.delete(lane)
-                else:
-                    surviving_lanes.append(lane)
             for entry in list.entries:
                 self._db.delete(entry)
             self._db.delete(list)
             self._db.flush()
-            # Update the size for any lanes affected by this
-            # CustomList which _weren't_ deleted.
-            for lane in surviving_lanes:
-                lane.update_size(self._db, search_engine=self.search_engine)
             return Response(str(_("Deleted")), 200)
 
         return None

@@ -10,9 +10,7 @@ from palace.manager.core.classifier import Classifier
 from palace.manager.core.config import ConfigurationAttributeValue
 from palace.manager.core.entrypoint import (
     AudiobooksEntryPoint,
-    EbooksEntryPoint,
     EntryPoint,
-    EverythingEntryPoint,
 )
 from palace.manager.feed.facets.database import DatabaseBackedFacets
 from palace.manager.feed.facets.feed import Facets, FeaturedFacets
@@ -1807,46 +1805,3 @@ class TestWorkListGroups:
         ] == results
         # And that's how we got a sequence of 2-tuples mapping out a
         # grouped OPDS feed.
-
-    def test__size_for_facets(
-        self,
-        db: DatabaseTransactionFixture,
-        random_seed_fixture: RandomSeedFixture,
-    ):
-        lane = db.lane()
-        m = lane._size_for_facets
-
-        ebooks, audio, everything, nothing = (
-            FeaturedFacets(minimum_featured_quality=0.5, entrypoint=x)
-            for x in (
-                EbooksEntryPoint,
-                AudiobooksEntryPoint,
-                EverythingEntryPoint,
-                None,
-            )
-        )
-
-        # When Lane.size_by_entrypoint is not set, Lane.size is used.
-        # This should only happen immediately after a site is upgraded.
-        lane.size = 100
-        for facets in (ebooks, audio):
-            assert 100 == lane._size_for_facets(facets)
-
-        # Once Lane.size_by_entrypoint is set, it's used when possible.
-        lane.size_by_entrypoint = {
-            EverythingEntryPoint.URI: 99,
-            EbooksEntryPoint.URI: 1,
-            AudiobooksEntryPoint.URI: 2,
-        }
-        assert 99 == m(None)
-        assert 99 == m(nothing)
-        assert 99 == m(everything)
-        assert 1 == m(ebooks)
-        assert 2 == m(audio)
-
-        # If size_by_entrypoint contains no estimate for a given
-        # EntryPoint URI, the overall lane size is used. This can
-        # happen between the time an EntryPoint is enabled and the
-        # lane size refresh script is run.
-        del lane.size_by_entrypoint[AudiobooksEntryPoint.URI]
-        assert 100 == m(audio)

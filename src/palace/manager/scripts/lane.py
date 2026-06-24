@@ -9,69 +9,9 @@ from typing import Any, TextIO
 from sqlalchemy.orm import Session
 
 from palace.manager.api.lanes import create_default_lanes
-from palace.manager.feed.worklist.base import WorkList
 from palace.manager.scripts.input import LibraryInputScript
-from palace.manager.search.external_search import ExternalSearchIndex
-from palace.manager.sqlalchemy.listeners import site_configuration_has_changed
 from palace.manager.sqlalchemy.model.lane import Lane
 from palace.manager.sqlalchemy.model.library import Library
-
-
-class LaneSweeperScript(LibraryInputScript):
-    """Do something to each lane in a library."""
-
-    def process_library(self, library: Library) -> None:
-        top_level = WorkList.top_level_for_library(self._db, library)
-        queue: list[WorkList] = [top_level]
-        while queue:
-            new_queue: list[WorkList] = []
-            for l in queue:
-                if isinstance(l, Lane):
-                    l = self._db.merge(l)
-                if self.should_process_lane(l):
-                    self.process_lane(l)
-                    self._db.commit()
-                for sublane in l.children:
-                    new_queue.append(sublane)
-            queue = new_queue
-
-    def should_process_lane(self, lane: WorkList) -> bool:
-        return True
-
-    def process_lane(self, lane: WorkList) -> None:
-        pass
-
-
-class UpdateLaneSizeScript(LaneSweeperScript):
-    def __init__(self, _db: Session | None = None, *args: Any, **kwargs: Any) -> None:
-        super().__init__(_db, *args, **kwargs)
-        search = kwargs.get("search_index_client", None)
-        self._search: ExternalSearchIndex = search or self.services.search.index()
-
-    def should_process_lane(self, lane: WorkList) -> bool:
-        """We don't want to process generic WorkLists -- there's nowhere
-        to store the data.
-        """
-        return isinstance(lane, Lane)
-
-    def process_lane(self, lane: WorkList) -> None:
-        """Update the estimated size of a Lane."""
-        if not isinstance(lane, Lane):
-            return
-
-        # We supress the configuration changes updates, as each lane is updated
-        # and call the site_configuration_has_changed function once after this
-        # script has finished running.
-        #
-        # This is done because calling site_configuration_has_changed repeatedly
-        # was causing performance problems, when we have lots of lanes to update.
-        lane._suppress_before_flush_listeners = True
-        lane.update_size(self._db, search_engine=self._search)
-        self.log.info("%s: %d", lane.full_identifier, lane.size)
-
-    def do_run(self, *args: Any, **kwargs: Any) -> None:
-        super().do_run(*args, **kwargs)
-        site_configuration_has_changed(self._db)
 
 
 class DeleteInvisibleLanesScript(LibraryInputScript):

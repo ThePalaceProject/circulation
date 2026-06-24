@@ -1,0 +1,11 @@
+#!/usr/bin/env python
+"""
+Manually kick off the full custom-list entries sweep.
+
+Enqueues the update_custom_list_entries_sweep Celery task, which updates
+entries for every auto-updating custom list and then recalculates lane sizes
+once all updates are complete.
+"""
+from palace.manager.scripts.customlist import CustomListEntriesSweepScript
+
+CustomListEntriesSweepScript().run()

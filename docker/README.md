@@ -4,7 +4,7 @@
 
 You will need **a PostgreSQL instance URL** in the format
 `postgresql://[username]:[password]@[host]:[port]/[database_name]`. Check the `./docker-compose.yml` file for an example.
-With this URL, you can create containers for both the web application (`circ-webapp`) and for the background cron jobs
+With this URL, you can create containers for both the web application (`circ-webapp`) and for the background jobs
 that import and update books and otherwise keep the app running smoothly (`circ-scripts`). Either container can be used
 to initialize or migrate the database. Database initialization uses a PostgreSQL Advisory Lock to make sure that only
 one instance is updating the schema at a time. Database migration uses Alembic to update the schema to the latest
@@ -62,8 +62,8 @@ This image builds containers that will run a single script and stop. It's useful
 
 Unlike the `circ-scripts` image, which runs constantly and executes every possible maintenance script--whether or not
 your configuration requires it--`circ-exec` offers more nuanced control of your Library Simplified Circulation Manager
-jobs. The most accurate place to look for recommended jobs and their recommended frequencies is
-[the existing `circ-scripts` crontab](https://github.com/NYPL-Simplified/circulation/blob/main/docker/services/simplified_crontab).
+jobs. The most accurate place to look for the scheduled jobs and their frequencies is the Celery beat
+schedule (`src/palace/manager/service/celery/celery.py`).
 
 Because containers based on `circ-exec` are built, run their job, and are destroyed, it's important to configure an
 external log aggregator if you wish to capture logs from the job.
@@ -93,7 +93,7 @@ container.
 
 ### `TZ`
 
-*Optional. Applies to `circ-scripts` only.* The time zone that cron should use to run scheduled scripts--usually the
+*Optional. Applies to `circ-scripts` only.* The time zone used to run scheduled jobs--usually the
 time zone of the library or libraries on the circulation manager instance. This value should be selected according to
  [Debian-system time zone options](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones).
  This value allows scripts to be run at ideal times.

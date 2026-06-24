@@ -50,13 +50,10 @@ CMD ["/sbin/my_init", "--skip-runit", "--quiet", "--", \
 
 FROM common AS scripts
 
-# Set the local timezone and setup cron
+# Set the local timezone and create the cron log file
 ENV TZ=US/Eastern
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
     touch /var/log/cron.log
-
-# Copy cron config into container
-COPY docker/services/cron /etc/
 
 # Setup runit
 COPY docker/runit-scripts /etc/service/

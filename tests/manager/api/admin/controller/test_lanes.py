@@ -47,23 +47,19 @@ class TestLanesController:
             "English", library=library, languages=["eng"]
         )
         english.priority = 0
-        english.size = 44
         english_fiction = alm_fixture.ctrl.db.lane(
             "Fiction", library=library, parent=english, fiction=True
         )
         english_fiction.visible = False
-        english_fiction.size = 33
         english_sf = alm_fixture.ctrl.db.lane(
             "Science Fiction", library=library, parent=english_fiction
         )
         english_sf.add_genre("Science Fiction")
         english_sf.inherit_parent_restrictions = True
-        english_sf.size = 22
         spanish = alm_fixture.ctrl.db.lane(
             "Spanish", library=library, languages=["spa"]
         )
         spanish.priority = 1
-        spanish.size = 11
 
         w1 = alm_fixture.ctrl.db.work(
             with_license_pool=True,
@@ -82,7 +78,6 @@ class TestLanesController:
         lane_for_list = alm_fixture.ctrl.db.lane("List Lane", library=library)
         lane_for_list.customlists += [custom_list]
         lane_for_list.priority = 2
-        lane_for_list.size = 1
 
         with alm_fixture.request_context_with_library_and_admin("/", library=library):
             # The admin is not a librarian for this library.
@@ -102,7 +97,6 @@ class TestLanesController:
             assert english.id == english_info.get("id")
             assert english.display_name == english_info.get("display_name")
             assert english.visible == english_info.get("visible")
-            assert 44 == english_info.get("count")
             assert [] == english_info.get("custom_list_ids")
             assert True == english_info.get("inherit_parent_restrictions")
 
@@ -112,7 +106,6 @@ class TestLanesController:
             assert english_fiction.id == fiction_info.get("id")
             assert english_fiction.display_name == fiction_info.get("display_name")
             assert english_fiction.visible == fiction_info.get("visible")
-            assert 33 == fiction_info.get("count")
             assert [] == fiction_info.get("custom_list_ids")
             assert True == fiction_info.get("inherit_parent_restrictions")
 
@@ -122,21 +115,18 @@ class TestLanesController:
             assert english_sf.id == sf_info.get("id")
             assert english_sf.display_name == sf_info.get("display_name")
             assert english_sf.visible == sf_info.get("visible")
-            assert 22 == sf_info.get("count")
             assert [] == sf_info.get("custom_list_ids")
             assert True == sf_info.get("inherit_parent_restrictions")
 
             assert spanish.id == spanish_info.get("id")
             assert spanish.display_name == spanish_info.get("display_name")
             assert spanish.visible == spanish_info.get("visible")
-            assert 11 == spanish_info.get("count")
             assert [] == spanish_info.get("custom_list_ids")
             assert True == spanish_info.get("inherit_parent_restrictions")
 
             assert lane_for_list.id == list_info.get("id")
             assert lane_for_list.display_name == list_info.get("display_name")
             assert lane_for_list.visible == list_info.get("visible")
-            assert 1 == list_info.get("count")
             assert [custom_list.id] == list_info.get("custom_list_ids")
             assert True == list_info.get("inherit_parent_restrictions")
 
@@ -363,11 +353,6 @@ class TestLanesController:
 
         lane = alm_fixture.ctrl.db.lane("old name")
         lane.customlists += [list1]
-
-        # When we add a list to the lane, the controller will ask the
-        # search engine to update lane.size, and it will think there
-        # are two works in the lane.
-        assert 0 == lane.size
 
         # We create a lane with the same name in a different library, this should not cause
         # an error, as we only check for duplicate names within the same library.

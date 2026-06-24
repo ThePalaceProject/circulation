@@ -573,7 +573,6 @@ class TestCustomListsController:
         # Create a Lane that depends on this CustomList for its membership.
         lane = admin_librarian_fixture.ctrl.db.lane()
         lane.customlists.append(list)
-        lane.size = 350
 
         w1 = admin_librarian_fixture.ctrl.db.work(
             title="Alpha", with_license_pool=True, language="eng"
@@ -630,11 +629,6 @@ class TestCustomListsController:
         list.collections = [c1]
         new_collections = [c2]
 
-        # The lane size is set to a static value above. After this call it should
-        # be reset to a value that reflects the number of documents in the search_engine,
-        # regardless of filter, since that's what the mock search engine's count_works does.
-        assert lane.size == 350
-
         # Test fails without expiring the ORM cache
         admin_librarian_fixture.ctrl.db.session.expire_all()
 
@@ -670,8 +664,6 @@ class TestCustomListsController:
         assert "new name" == list.name
         assert {w2, w3} == {entry.work for entry in list.entries}
         assert new_collections == list.collections
-
-        assert lane.size == 2
 
         # Edit for auto update values
         update_query = {"query": {"key": "title", "value": "title"}}
@@ -809,7 +801,6 @@ class TestCustomListsController:
         )
         lane2.customlists.append(list)
         lane2.customlists.append(list2)
-        lane2.size = 100
 
         # This lane is based on _all_ lists from a given data source.
         # It will also not be deleted when the CustomList is deleted,
@@ -819,7 +810,6 @@ class TestCustomListsController:
             display_name="All library staff lists"
         )
         lane3.list_datasource = list.data_source
-        lane3.size = 150
 
         with admin_librarian_fixture.request_context_with_library_and_admin(
             "/", method="DELETE"
