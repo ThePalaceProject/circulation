@@ -69,9 +69,6 @@ from palace.manager.integration.license.overdrive.constants import (
     OVERDRIVE_STREAMING_FORMATS,
     OverdriveConstants,
 )
-from palace.manager.integration.license.overdrive.coverage import (
-    OverdriveBibliographicCoverageProvider,
-)
 from palace.manager.integration.license.overdrive.exception import (
     InvalidFieldOptionError,
     OverdriveModelError,
@@ -341,9 +338,6 @@ class OverdriveAPI(
         # instances (e.g. Flask workers) transparently re-fetch a rotated token
         # without a process restart. See the collection_token property.
         self._cached_collection_token: OverdriveToken | None = None
-        self.overdrive_bibliographic_coverage_provider = (
-            OverdriveBibliographicCoverageProvider(collection, api=self)
-        )
 
     @property
     def settings(self) -> OverdriveSettings:
@@ -1782,10 +1776,9 @@ class OverdriveAPI(
         )
         if is_new or not license_pool.work:
             # Either this is the first time we've seen this book or it doesn't
-            # have an associated work. Make sure its identifier has bibliographic coverage.
-            self.overdrive_bibliographic_coverage_provider.ensure_coverage(
-                license_pool.identifier, force=True
-            )
+            # have an associated work. Make sure its identifier has bibliographic
+            # coverage and a presentation-ready work.
+            self._ensure_bibliographic_coverage(license_pool)
 
         return self.update_licensepool_with_book_info(
             availability, resolved_book_id, license_pool, is_new
@@ -1805,6 +1798,48 @@ class OverdriveAPI(
             licensepool.identifier.type,
             licensepool.identifier.identifier,
         )
+
+    def _ensure_bibliographic_coverage(self, license_pool: LicensePool) -> None:
+        """Fetch Overdrive bibliographic metadata, apply it to the Edition, and
+        make the LicensePool's Work presentation-ready.
+
+        This replaces the former ``OverdriveBibliographicCoverageProvider``
+        path that ran inside :meth:`update_licensepool`. A bad or unrecognized
+        Overdrive ID simply leaves the pool without a Work, matching the prior
+        behavior (``update_licensepool`` ignored the coverage result).
+        """
+        identifier = license_pool.identifier
+        info = self.metadata_lookup(identifier)
+        if info.get("errorCode") in ("NotFound", "InvalidGuid"):
+            self.log.warning(
+                "Could not get Overdrive metadata for %s: %s",
+                identifier.identifier,
+                info.get("errorCode"),
+            )
+            return
+
+        bibliographic = OverdriveRepresentationExtractor.book_info_to_bibliographic(
+            info
+        )
+        if not bibliographic:
+            self.log.warning(
+                "Could not extract bibliographic data from Overdrive metadata for %s.",
+                identifier.identifier,
+            )
+            return
+
+        edition, _ = self._edition(license_pool)
+        bibliographic.apply(
+            self._db,
+            edition,
+            self.collection,
+            replace=ReplacementPolicy.from_license_source(),
+        )
+
+        if not license_pool.work or not license_pool.work.presentation_ready:
+            work, _ = license_pool.calculate_work()
+            if work:
+                work.set_presentation_ready()
 
     def update_licensepool_with_book_info(
         self,

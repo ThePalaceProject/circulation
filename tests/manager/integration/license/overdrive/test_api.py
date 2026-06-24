@@ -1736,10 +1736,10 @@ class TestOverdriveAPI:
         http.queue_response(200, content=bibliographic)
 
         # Now we're ready. When we call update_licensepool, the
-        # OverdriveAPI will retrieve the availability information,
-        # then the bibliographic information. It will then trigger the
-        # OverdriveBibliographicCoverageProvider, which will
-        # create an Edition and a presentation-ready Work.
+        # OverdriveAPI will retrieve the availability information, then
+        # the bibliographic information. It will then apply that
+        # bibliographic data to create an Edition and a
+        # presentation-ready Work.
         pool, was_new, changed = overdrive_api_fixture.api.update_licensepool(
             identifier.identifier
         )
@@ -1753,15 +1753,6 @@ class TestOverdriveAPI:
         assert pool.work.cover_thumbnail_url.startswith(
             "http://images.contentreserve.com/"
         )
-
-        # The book has been run through the bibliographic coverage
-        # provider.
-        coverage = [
-            x
-            for x in identifier.coverage_records
-            if x.operation is None and x.data_source.name == DataSource.OVERDRIVE
-        ]
-        assert len(coverage) == 1
 
         # Call update_licensepool on an identifier that is missing a work and make
         # sure that it provides bibliographic coverage in that case.
