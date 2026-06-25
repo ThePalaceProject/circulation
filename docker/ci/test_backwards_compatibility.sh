@@ -9,11 +9,8 @@
 # It works by:
 #  (1) Finding the previous release (the latest GitHub release) and its published
 #      circ-webapp image.
-#  (2) Confirming that image contains the external-schema test seam. The seam ships in a
-#      later release than this check itself, so until a release that has it becomes the
-#      previous release there is nothing to test and we skip.
-#  (3) Initializing a fresh database with the CURRENT image, which builds the new schema.
-#  (4) Running the previous release's database tests (pytest -m db) against that schema in
+#  (2) Initializing a fresh database with the CURRENT image, which builds the new schema.
+#  (3) Running the previous release's database tests (pytest -m db) against that schema in
 #      external-schema mode (PALACE_TEST_DATABASE_EXTERNAL_SCHEMA), so the older code
 #      exercises the new schema. If those tests fail, the migration is not backwards
 #      compatible.
@@ -71,22 +68,14 @@ fi
 
 trap cleanup EXIT
 
-# (2) Make sure the previous release actually includes the external-schema test seam. It
-# ships in a later release than this check, so older images do not support it yet and there
-# is nothing meaningful to test.
-compose_cmd pull --quiet webapp-prev || fail "Could not pull ${PREV_RELEASE_IMAGE}."
-if ! run_in_container webapp-prev "grep -q 'external_schema' tests/fixtures/database.py"; then
-  echo "Previous release image does not include the external-schema test seam; skipping."
-  exit 0
-fi
-
-# (3) Build the current schema by initializing a fresh database with the current image.
+# (2) Build the current schema by initializing a fresh database with the current image.
 compose_cmd up -d pg os minio redis || fail "Could not start service containers."
 run_in_container webapp "./bin/util/initialize_instance" \
   || fail "Failed to initialize the database with the current image."
 
-# (4) Run the previous release's database tests against the new schema. -n0 forces serial
+# (3) Run the previous release's database tests against the new schema. -n0 forces serial
 # execution, which external-schema mode requires (all tests share the one database).
+compose_cmd pull --quiet webapp-prev || fail "Could not pull ${PREV_RELEASE_IMAGE}."
 echo "Running the previous release's database tests against the current schema ..."
 if ! run_in_container webapp-prev \
   "uv sync --frozen --active && pytest --no-cov -n0 -m db --ignore=tests/migration tests"; then
