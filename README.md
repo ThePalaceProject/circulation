@@ -808,18 +808,23 @@ export PALACE_TEST_CELERY_WORKER_SHUTDOWN_TIMEOUT=""
 
 ### Coverage Reports
 
-Code coverage is automatically tracked with [`pytest-cov`](https://pypi.org/project/pytest-cov/) when tests are run.
-When the tests are run with GitHub Actions, the coverage report is automatically uploaded to
-[codecov](https://about.codecov.io/) and the results are added to the relevant pull request.
+Code coverage is tracked with [`pytest-cov`](https://pypi.org/project/pytest-cov/), but it is **opt-in**: tests run
+without coverage by default (which is faster), and coverage is only measured when you pass `--cov` to `pytest`. Add
+`--cov-report=xml` as well to produce the XML report that Codecov consumes.
 
-When running locally, the results from each individual run can be collected and combined into an HTML report using
-the `report` tox environment. This can be run on its own after running the tests, or as part of the tox environment
-selection.
+When the tests are run with GitHub Actions, coverage is collected on **only the Python 3.14 job** — the first version
+where [`coverage.py`](https://coverage.readthedocs.io/) uses the faster `sys.monitoring` core while still measuring
+branch coverage. That job uploads the report to [codecov](https://about.codecov.io/), and the results are added to the
+relevant pull request.
+
+When running locally, enable coverage with `--cov` and then collect the results from each individual run into a combined
+HTML report using the `report` tox environment. This can be run on its own after running the tests, or as part of the
+tox environment selection.
 
 ```shell
-# Run core and api tests under Python 3.12, using Docker
-# containers for dependencies, and generate code coverage report
-tox -e "py312-{core,api}-docker,report"
+# Run the tests under Python 3.12 with coverage enabled, using Docker
+# containers for dependencies, then combine the results into an HTML report
+tox -e "py312-docker,report" -- --cov tests
 ```
 
 ## Usage with Docker

@@ -20,6 +20,12 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.12", "3.13", "3.14"]
+        # Coverage is collected only on the Python 3.14 job. 3.14 is the first version
+        # where coverage.py uses the fast sys.monitoring core *and* can measure branch
+        # coverage, so it gives us branch coverage at the lowest overhead.
+        include:
+          - python-version: "3.14"
+            coverage: true
 
     steps:
       - uses: actions/checkout@v7
@@ -44,7 +50,7 @@ jobs:
         run: uv sync --frozen --only-group ci
 
       - name: Run Tests
-        run: tox
+        run: tox -- ${{ matrix.coverage && '--cov --cov-report=xml tests' || 'tests' }}
         env:
           # Workaround for tox-docker not supporting Docker 29+, which removed
           # the top-level NetworkSettings.Gateway key from the container API.
@@ -54,6 +60,7 @@ jobs:
           TOX_DOCKER_GATEWAY: "0.0.0.0"
 
       - name: Upload coverage to Codecov
+        if: matrix.coverage
         uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}

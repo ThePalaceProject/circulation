@@ -362,8 +362,6 @@ module = [
 
 [tool.pytest.ini_options]
 addopts = [
-    "--cov",
-    "--cov-report=xml",
     "--dist=worksteal",
     "--numprocesses=auto",
     "--strict-markers",

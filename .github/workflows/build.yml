@@ -366,7 +366,7 @@ jobs:
             cat src/palace/manager/_version.py &&
             source env/bin/activate &&
             uv sync --frozen --active &&
-            pytest --no-cov tests
+            pytest tests
           "
 
       - name: Stop container
