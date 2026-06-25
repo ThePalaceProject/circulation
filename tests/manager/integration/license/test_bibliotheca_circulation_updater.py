@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+from palace.manager.api.circulation.exceptions import RemoteInitiatedServerError
 from palace.manager.celery.tasks import apply
 from palace.manager.integration.license.bibliotheca import BibliothecaAPI
 from palace.manager.integration.license.bibliotheca_circulation_updater import (
@@ -220,6 +223,48 @@ class TestBibliothecaCirculationUpdaterUpdateBatch:
 
         assert pool.licenses_owned == 0
         assert pool.licenses_available == 0
+
+    def test_empty_api_response_does_not_zero_out_availability(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        """A transient empty response must not be mistaken for "all titles removed".
+
+        When Bibliotheca returns an empty body, ``bibliographic_lookup`` raises
+        ``RemoteInitiatedServerError`` rather than an empty list (see
+        ``BibliothecaAPI.bibliographic_lookup``).  The error must propagate so the
+        Celery task retries, and the batch's availability must be left untouched —
+        the opposite of the not-mentioned case, where a zero-count is applied.
+        """
+        updater, mock_api = _make_updater(db)
+        collection = mock_api.collection
+
+        ident = db.identifier(
+            identifier_type=Identifier.BIBLIOTHECA_ID, foreign_id="keepme"
+        )
+        pool, _ = LicensePool.for_foreign_id(
+            db.session,
+            mock_api.data_source,
+            Identifier.BIBLIOTHECA_ID,
+            ident.identifier,
+            collection=collection,
+        )
+        pool.licenses_owned = 5
+        pool.licenses_available = 3
+        db.session.flush()
+
+        with patch.object(
+            BibliothecaAPI,
+            "bibliographic_lookup",
+            side_effect=RemoteInitiatedServerError(
+                "empty body", BibliothecaAPI.SERVICE_NAME
+            ),
+        ):
+            with pytest.raises(RemoteInitiatedServerError):
+                updater.update_batch(0)
+
+        # Availability is untouched — the book was NOT removed from circulation.
+        assert pool.licenses_owned == 5
+        assert pool.licenses_available == 3
 
     def test_needs_apply_true_queues_bibliographic_apply(
         self, db: DatabaseTransactionFixture

@@ -269,6 +269,32 @@ class TestBibliothecaAPI:
             bibliotheca_fixture.api.bibliographic_lookup(identifier)
         assert "Got status code 500" in str(excinfo.value)
 
+    @pytest.mark.parametrize(
+        "content",
+        [
+            pytest.param(b"", id="empty"),
+            pytest.param(b"   \n  ", id="whitespace"),
+        ],
+    )
+    def test_bibliographic_lookup_empty_response_raises(
+        self,
+        content: bytes,
+        bibliotheca_fixture: BibliothecaAPITestFixture,
+    ):
+        # Bibliotheca occasionally returns an empty (or whitespace-only) HTTP
+        # 200 body. An empty document cannot be parsed as XML, and treating it
+        # as "no items returned" would make the circulation updater zero out
+        # every requested identifier. So bibliographic_lookup raises a transient
+        # RemoteInitiatedServerError instead of returning an empty list or
+        # letting lxml's "Document is empty" error propagate.
+        db = bibliotheca_fixture.db
+        bibliotheca_fixture.api.queue_response(200, content=content)
+        identifier = db.identifier()
+        with pytest.raises(RemoteInitiatedServerError) as excinfo:
+            bibliotheca_fixture.api.bibliographic_lookup(identifier)
+        assert "empty response body" in str(excinfo.value)
+        assert excinfo.value.service_name == bibliotheca_fixture.api.SERVICE_NAME
+
     def test_put_request(self, bibliotheca_fixture: BibliothecaAPITestFixture):
         # This is a basic test to make sure the method calls line up
         # right--there are more thorough tests in the circulation
