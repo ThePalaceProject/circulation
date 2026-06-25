@@ -76,12 +76,19 @@ def import_all_collections(task: Task) -> None:
     )
 
 
+# BibliothecaAPI.bibliographic_lookup, called per event by BibliothecaEventImporter,
+# raises RemoteInitiatedServerError when Bibliotheca returns an empty response body
+# (HTTP 200 with no XML document) -- a transient Bibliotheca-side condition. As with the
+# purchase-record and circulation-update tasks, it must be retried rather than surfacing
+# as an unhandled task exception. RemoteInitiatedServerError is a sibling of
+# RemoteIntegrationException (both derive from IntegrationException), not a subclass, so it
+# must be listed explicitly in both autoretry_for and throws.
 @shared_task(
     queue=QueueNames.default,
     bind=True,
     max_retries=4,
-    autoretry_for=(BadResponseException, RequestTimedOut),
-    throws=(RemoteIntegrationException,),
+    autoretry_for=(BadResponseException, RequestTimedOut, RemoteInitiatedServerError),
+    throws=(RemoteIntegrationException, RemoteInitiatedServerError),
     retry_backoff=60,
 )
 def import_collection(
@@ -382,12 +389,22 @@ def circulation_update_all_collections(task: Task) -> None:
     )
 
 
+# BibliothecaAPI.bibliographic_lookup raises RemoteInitiatedServerError when
+# Bibliotheca returns an empty response body (HTTP 200 with no XML document) --
+# a transient Bibliotheca-side condition, handled the same way marc_request
+# treats empty/malformed responses. It must be retried rather than allowed to
+# zero out the batch's availability (an empty body is not an authoritative
+# "these titles are gone") or to surface as an unhandled task exception.
+# RemoteInitiatedServerError is a sibling of RemoteIntegrationException (both
+# derive from IntegrationException), not a subclass, so it must be listed
+# explicitly in both autoretry_for and throws -- otherwise an exhausted retry
+# surfaces as an unhandled task exception.
 @shared_task(
     queue=QueueNames.default,
     bind=True,
     max_retries=4,
-    autoretry_for=(BadResponseException, RequestTimedOut),
-    throws=(RemoteIntegrationException,),
+    autoretry_for=(BadResponseException, RequestTimedOut, RemoteInitiatedServerError),
+    throws=(RemoteIntegrationException, RemoteInitiatedServerError),
     retry_backoff=60,
 )
 def circulation_update_collection(

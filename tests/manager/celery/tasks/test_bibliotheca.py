@@ -350,6 +350,62 @@ class TestBibliothecaImportCollection:
         )
         assert workflow_lock.locked()
 
+    def test_remote_initiated_server_error_retried_and_expected(
+        self,
+        bibliotheca_task_fixture: BibliothecaTaskFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+    ) -> None:
+        """bibliographic_lookup (called per event by the importer) raises
+        RemoteInitiatedServerError when Bibliotheca returns an empty response body —
+        a transient condition that must be retried, not surfaced as an unhandled task
+        exception.
+
+        RemoteInitiatedServerError is a sibling of RemoteIntegrationException (both
+        derive from IntegrationException), not a subclass, so it has to be listed
+        explicitly in autoretry_for and throws. This guards against either being dropped.
+        """
+        task = bibliotheca.import_collection
+        assert RemoteInitiatedServerError in task.autoretry_for
+        assert RemoteInitiatedServerError in task.throws
+
+        collection = bibliotheca_task_fixture.collection
+        bibliotheca_task_fixture.stamp_event_import(
+            finish=utc_now() - timedelta(minutes=10)
+        )
+
+        fake_event = (
+            "d5rf89",
+            "9781101190623",
+            None,
+            datetime(2016, 4, 28, 11, 4, 6, tzinfo=timezone.utc),
+            None,
+            CirculationEvent.DISTRIBUTOR_LICENSE_ADD,
+        )
+
+        with (
+            # Return a list (re-iterable across retries) of one event so the importer
+            # reaches _handle_event -> bibliographic_lookup, which raises.
+            patch.object(
+                BibliothecaAPI, "get_events_between", return_value=[fake_event]
+            ),
+            patch.object(
+                BibliothecaAPI,
+                "bibliographic_lookup",
+                side_effect=RemoteInitiatedServerError(
+                    "boom", BibliothecaAPI.SERVICE_NAME
+                ),
+            ) as mock_lookup,
+        ):
+            with celery_fixture.patch_retry_backoff():
+                bibliotheca.import_collection.delay(collection_id=collection.id).get(
+                    propagate=False
+                )
+
+            # Retried on every attempt (1 initial + max_retries=4) rather than
+            # failing immediately as an unhandled exception.
+            assert mock_lookup.call_count == 5
+
     def test_events_processed_end_to_end(
         self,
         bibliotheca_task_fixture: BibliothecaTaskFixture,
@@ -1458,6 +1514,45 @@ class TestCirculationUpdateCollection:
             redis_fixture.client, collection.id, random_value="any"
         )
         assert workflow_lock.locked()
+
+    def test_remote_initiated_server_error_retried_and_expected(
+        self,
+        bibliotheca_circulation_update_task_fixture: BibliothecaCirculationUpdateTaskFixture,
+        celery_fixture: CeleryFixture,
+        redis_fixture: RedisFixture,
+    ) -> None:
+        """bibliographic_lookup raises RemoteInitiatedServerError when Bibliotheca
+        returns an empty response body — a transient Bibliotheca-side condition. It
+        must be retried and declared expected rather than zeroing out the batch's
+        availability or surfacing as an unhandled task exception.
+
+        RemoteInitiatedServerError is a sibling of RemoteIntegrationException (both
+        derive from IntegrationException), not a subclass, so it has to be listed
+        explicitly in autoretry_for and throws. This guards against either being dropped.
+        """
+        task = bibliotheca.circulation_update_collection
+        assert RemoteInitiatedServerError in task.autoretry_for
+        assert RemoteInitiatedServerError in task.throws
+
+        collection = bibliotheca_circulation_update_task_fixture.collection
+
+        with patch(
+            "palace.manager.celery.tasks.bibliotheca.BibliothecaCirculationUpdater"
+        ) as mock_updater_cls:
+            mock_updater = mock_updater_cls.return_value
+            mock_updater.get_offset.return_value = 0
+            mock_updater.update_batch.side_effect = RemoteInitiatedServerError(
+                "boom", BibliothecaAPI.SERVICE_NAME
+            )
+
+            with celery_fixture.patch_retry_backoff():
+                bibliotheca.circulation_update_collection.delay(
+                    collection_id=collection.id
+                ).get(propagate=False)
+
+            # Retried on every attempt (1 initial + max_retries=4) rather than
+            # failing immediately as an unhandled exception.
+            assert mock_updater.update_batch.call_count == 5
 
     def test_circulation_update_lock_independent_from_event_import_and_purchase_record_locks(
         self,

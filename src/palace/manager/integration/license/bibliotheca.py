@@ -318,6 +318,10 @@ class BibliothecaAPI(
 
         :param identifiers: A list containing either Identifier
             objects or Bibliotheca identifier strings.
+        :raise RemoteInitiatedServerError: If Bibliotheca returns an empty
+            response body (HTTP 200 with no XML document). See the comment
+            below for why this is treated as a transient error rather than as
+            "no items found".
         """
         identifiers_list = (
             [identifiers]
@@ -331,6 +335,23 @@ class BibliothecaAPI(
             identifier_strings.append(i)
 
         data = self.bibliographic_lookup_request(identifier_strings)
+        if not data.strip():
+            # Bibliotheca occasionally returns an empty body (HTTP 200 with no
+            # XML document). An empty document cannot be parsed as XML (lxml
+            # raises "Document is empty" even in recovery mode). Unlike a
+            # well-formed document that simply omits some of the requested
+            # items, an empty body tells us nothing about which titles still
+            # exist, so we must not treat it as "no items returned": that would
+            # make BibliothecaCirculationUpdater._process_batch zero out the
+            # availability of every requested identifier as if it had been
+            # removed from circulation. Instead, raise a transient remote error
+            # -- mirroring how marc_request/ErrorParser treat empty or malformed
+            # Bibliotheca responses -- so the caller retries rather than
+            # corrupting availability data.
+            raise RemoteInitiatedServerError(
+                "Bibliotheca returned an empty response body for a bibliographic lookup.",
+                self.SERVICE_NAME,
+            )
         return [
             bibliographic for bibliographic in self.item_list_parser.process_all(data)
         ]
