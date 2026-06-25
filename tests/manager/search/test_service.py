@@ -134,19 +134,16 @@ class TestService:
         documents: list[SearchDocument] = [
             {
                 "_index": revision.name_for_index("base"),
-                "_type": "_doc",
                 "_id": 1,
                 "_source": {"x": 23, "y": 24},
             },
             {
                 "_index": revision.name_for_index("base"),
-                "_type": "_doc",
                 "_id": 2,
                 "_source": {"x": 25, "y": 26},
             },
             {
                 "_index": revision.name_for_index("base"),
-                "_type": "_doc",
                 "_id": 3,
                 "_source": {"x": 27, "y": 28},
             },

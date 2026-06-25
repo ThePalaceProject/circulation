@@ -67,3 +67,54 @@ jobs:
           files: ./coverage.xml
           name: test-${{ matrix.python-version }}
           verbose: true
+
+  # Temporary bandaid for the OpenSearch 1.x -> 2.19 -> 3.5 migration. The `test`
+  # job above still runs the full suite against OpenSearch 1.x (current prod);
+  # this job additionally runs just the OpenSearch-marked tests against the
+  # intermediate (2.19) and target (3.5) versions. These are separate, non-required
+  # status checks, so the existing required `Tests (Py X.Y)` checks and branch
+  # protection are untouched. Remove this whole job once production is on 3.5.
+  opensearch-version:
+    name: OpenSearch ${{ matrix.opensearch.version }} tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        opensearch:
+          - { version: "2.19", factor: "os219" }
+          - { version: "3.5", factor: "os35" }
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # See comment here: https://github.com/actions/runner-images/issues/1187#issuecomment-686735760
+      - name: Disable network offload
+        run: sudo ethtool -K eth0 tx off rx off
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+          activate-environment: true
+
+      - name: Install Tox
+        run: uv sync --frozen --only-group ci
+
+      - name: Run OpenSearch tests
+        run: tox -e py312-docker-${{ matrix.opensearch.factor }}
+        env:
+          # Workaround for tox-docker not supporting Docker 29+, which removed
+          # the top-level NetworkSettings.Gateway key from the container API.
+          # This can be removed once tox-docker merges the fix.
+          # Docker 29 rollout: https://github.com/actions/runner-images/issues/13474
+          # tox-docker fix: https://github.com/tox-dev/tox-docker/pull/196
+          TOX_DOCKER_GATEWAY: "0.0.0.0"

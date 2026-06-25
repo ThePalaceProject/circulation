@@ -1,0 +1,7 @@
+# OpenSearch 2.19 -- the required intermediate hop for the AWS upgrade path
+# (1.x -> 2.x -> 3.x). Temporary: used only by the opensearch-version CI job
+# while production migrates to 3.5; remove once production is on 3.5. Pinned to a
+# specific patch because OpenSearch publishes no floating :2.19 minor tag.
+# analysis-icu is required by the search schema (see src/palace/manager/search/v5.py).
+FROM opensearchproject/opensearch:2.19.5
+RUN /usr/share/opensearch/bin/opensearch-plugin install --batch analysis-icu
