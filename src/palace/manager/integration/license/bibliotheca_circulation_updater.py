@@ -20,7 +20,7 @@ from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 
-CIRCULATION_UPDATE_SERVICE_NAME = "Bibliotheca Circulation Sweep"
+CIRCULATION_UPDATE_SERVICE_NAME = "Bibliotheca Circulation Update"
 CIRCULATION_UPDATE_BATCH_SIZE = 25
 
 
