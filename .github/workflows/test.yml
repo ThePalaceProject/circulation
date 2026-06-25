@@ -20,13 +20,9 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.12", "3.13", "3.14"]
-        # Coverage is opt-in (disabled by default in pyproject.toml) and is
-        # collected only on the Python 3.14 job. 3.14 is the only version where
-        # coverage.py uses the fast sys.monitoring core *and* can measure branch
+        # Coverage is collected only on the Python 3.14 job. 3.14 is the first version 
+        # where coverage.py uses the fast sys.monitoring core *and* can measure branch
         # coverage, so it gives us branch coverage at the lowest overhead.
-        # We deliberately collect coverage from a single version: Codecov merges
-        # reports per line by most-covered state, so a line-only "hit" from a
-        # 3.12/3.13 upload would mask the branch partials reported by 3.14.
         include:
           - python-version: "3.14"
             coverage: true
@@ -54,8 +50,6 @@ jobs:
         run: uv sync --frozen --only-group ci
 
       - name: Run Tests
-        # Coverage is opt-in; only the 3.14 job enables it (see the matrix
-        # comment above). The others run the default, coverage-free invocation.
         run: tox -- ${{ matrix.coverage && '--cov --cov-report=xml tests' || 'tests' }}
         env:
           # Workaround for tox-docker not supporting Docker 29+, which removed
