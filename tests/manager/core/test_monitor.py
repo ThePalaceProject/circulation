@@ -5,6 +5,7 @@ import pytest
 from freezegun import freeze_time
 from sqlalchemy.exc import InvalidRequestError
 from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
+from tenacity import wait_none
 
 from palace.util.datetime_helpers import datetime_utc, utc_now
 
@@ -660,7 +661,19 @@ class TestSweepMonitor:
         self,
         db: DatabaseTransactionFixture,
         sweep_monitor_fixture: SweepMonitorFixture,
+        monkeypatch: pytest.MonkeyPatch,
     ):
+        # process_batch retries with a real exponential `time.sleep` backoff
+        # (1s + 2s + 4s). This test only asserts retry behaviour, not timing, so
+        # neutralize the wait to avoid ~7s of real sleeping. tenacity's @retry
+        # decorator attaches the controller as `.retry` at runtime, which mypy
+        # can't see on the wrapped function.
+        monkeypatch.setattr(
+            SweepMonitor.process_batch.retry,  # type: ignore[attr-defined]
+            "wait",
+            wait_none(),
+        )
+
         identifier = db.identifier()
 
         class FailOnFirstTwoCallsSucceedOnThird(MockSweepMonitor):

@@ -184,7 +184,6 @@ class TestOIDCUtilityState:
         data = {"library_short_name": "TESTLIB"}
 
         state = OIDCUtility.generate_state(data, TEST_SECRET_KEY)
-        time.sleep(1)
 
         decoded = OIDCUtility.validate_state(
             state, TEST_SECRET_KEY, max_age=custom_max_age
