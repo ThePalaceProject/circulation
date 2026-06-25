@@ -20,13 +20,6 @@ from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 
-# NOTE: This intentionally differs from the legacy ``BibliothecaCirculationSweep``
-# monitor's "Bibliotheca Circulation Sweep" service name. The ``timestamps`` unique
-# constraint is on ``(service, collection_id)`` only -- it does not include
-# ``service_type`` -- so reusing the old name would collide with the existing
-# ``service_type='monitor'`` row when this task stamps with ``service_type='task'``.
-# Renaming (as the event/purchase Celery migrations did) starts a fresh timestamp row
-# and orphans the now-unused legacy monitor row.
 CIRCULATION_UPDATE_SERVICE_NAME = "Bibliotheca Circulation Update"
 CIRCULATION_UPDATE_BATCH_SIZE = 25
 
