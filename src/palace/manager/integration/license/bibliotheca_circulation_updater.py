@@ -312,11 +312,29 @@ class BibliothecaCirculationUpdater(LoggerMixin):
         :attr:`~palace.manager.sqlalchemy.model.licensing.LicensePool.updated_at_data_hash`,
         which is not a reliable proxy for the current column values (see
         :meth:`_process_batch`).
+
+        A field the snapshot leaves unset (``None``) is treated as "no assertion" and
+        does not, on its own, count as a mismatch — mirroring
+        :meth:`~palace.manager.sqlalchemy.model.licensing.LicensePool.update_availability`,
+        which skips ``None`` values rather than writing them. (Bibliotheca always
+        populates every count and ``status``, so this only matters defensively.)
         """
         return (
-            circulation.licenses_owned == pool.licenses_owned
-            and circulation.licenses_available == pool.licenses_available
-            and circulation.licenses_reserved == pool.licenses_reserved
-            and circulation.patrons_in_hold_queue == pool.patrons_in_hold_queue
+            (
+                circulation.licenses_owned is None
+                or circulation.licenses_owned == pool.licenses_owned
+            )
+            and (
+                circulation.licenses_available is None
+                or circulation.licenses_available == pool.licenses_available
+            )
+            and (
+                circulation.licenses_reserved is None
+                or circulation.licenses_reserved == pool.licenses_reserved
+            )
+            and (
+                circulation.patrons_in_hold_queue is None
+                or circulation.patrons_in_hold_queue == pool.patrons_in_hold_queue
+            )
             and (circulation.status is None or circulation.status == pool.status)
         )

@@ -21,7 +21,7 @@ from palace.manager.sqlalchemy.constants import DataSourceConstants
 from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.sqlalchemy.model.licensing import LicensePool
+from palace.manager.sqlalchemy.model.licensing import LicensePool, LicensePoolStatus
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.mocks.bibliotheca import MockBibliothecaAPI
 
@@ -45,11 +45,19 @@ def _make_bib(
     reserved: int = 0,
     holds: int = 0,
     title: str = "Unchanging Title",
+    status: LicensePoolStatus | None = None,
 ) -> BibliographicData:
-    """Build a BibliographicData (with embedded circulation) for a Bibliotheca title."""
+    """Build a BibliographicData (with embedded circulation) for a Bibliotheca title.
+
+    ``status`` defaults to the production-shaped value (``ACTIVE`` when any copies are
+    owned, else ``EXHAUSTED``), matching ``ItemListParser._make_circulation_data`` so
+    the embedded circulation always carries a status the way real Bibliotheca data does.
+    """
     identifier_data = IdentifierData(
         type=Identifier.BIBLIOTHECA_ID, identifier=bibliotheca_id
     )
+    if status is None:
+        status = LicensePoolStatus.ACTIVE if owned > 0 else LicensePoolStatus.EXHAUSTED
     return BibliographicData(
         data_source_name=DataSourceConstants.BIBLIOTHECA,
         primary_identifier_data=identifier_data,
@@ -62,6 +70,7 @@ def _make_bib(
             licenses_available=available,
             licenses_reserved=reserved,
             patrons_in_hold_queue=holds,
+            status=status,
         ),
     )
 
@@ -391,27 +400,47 @@ class TestBibliothecaCirculationUpdaterUpdateBatch:
         mock_bib_apply.delay.assert_not_called()
         mock_circ_apply.delay.assert_not_called()
 
-    def test_availability_matches_pool_compares_live_columns(
+
+class TestBibliothecaCirculationUpdaterAvailabilityMatchesPool:
+    def test_compares_live_columns_and_status(
         self, db: DatabaseTransactionFixture
     ) -> None:
-        """_availability_matches_pool compares the snapshot against the pool columns."""
-        updater, _ = _make_updater(db)
-        pool = self._seed_imported_title(updater, db, 5, 3, title="Title A")
-        bibliotheca_id = pool.identifier.identifier
+        """_availability_matches_pool compares counts AND status against the live pool row."""
+        updater, mock_api = _make_updater(db)
+        ident = db.identifier(
+            identifier_type=Identifier.BIBLIOTHECA_ID, foreign_id="matcher"
+        )
+        pool, _ = LicensePool.for_foreign_id(
+            db.session,
+            mock_api.data_source,
+            Identifier.BIBLIOTHECA_ID,
+            ident.identifier,
+            collection=mock_api.collection,
+        )
+        pool.licenses_owned = 5
+        pool.licenses_available = 3
+        pool.licenses_reserved = 0
+        pool.patrons_in_hold_queue = 0
+        pool.status = LicensePoolStatus.ACTIVE
+        db.session.flush()
 
-        matching = _make_bib(bibliotheca_id, 5, 3).circulation
+        # All counts and status match the live row.
+        matching = _make_bib(ident.identifier, 5, 3).circulation
         assert matching is not None
         assert updater._availability_matches_pool(matching, pool) is True
 
-        for owned, available, reserved, holds in (
-            (4, 3, 0, 0),
-            (5, 2, 0, 0),
-            (5, 3, 1, 0),
-            (5, 3, 0, 1),
-        ):
-            differing = _make_bib(
-                bibliotheca_id, owned, available, reserved=reserved, holds=holds
-            ).circulation
+        # Each case differs from the pool in exactly one field -- including the
+        # status leg, which production Bibliotheca data always populates.
+        differing_circulations = [
+            _make_bib(ident.identifier, 4, 3).circulation,
+            _make_bib(ident.identifier, 5, 2).circulation,
+            _make_bib(ident.identifier, 5, 3, reserved=1).circulation,
+            _make_bib(ident.identifier, 5, 3, holds=1).circulation,
+            _make_bib(
+                ident.identifier, 5, 3, status=LicensePoolStatus.EXHAUSTED
+            ).circulation,
+        ]
+        for differing in differing_circulations:
             assert differing is not None
             assert updater._availability_matches_pool(differing, pool) is False
 
