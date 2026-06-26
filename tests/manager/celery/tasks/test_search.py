@@ -64,13 +64,20 @@ def test_get_work_search_documents(db: DatabaseTransactionFixture) -> None:
 
 
 @pytest.mark.parametrize("batch_size", [2, 3, 500])
+@patch("palace.manager.celery.tasks.search.random")
 def test_search_reindex(
+    mock_random: MagicMock,
     batch_size: int,
     db: DatabaseTransactionFixture,
     celery_fixture: CeleryFixture,
     search_reindex_task_lock_fixture: SearchReindexTaskLockFixture,
     end_to_end_search_fixture: EndToEndSearchFixture,
 ) -> None:
+    # When a batch fills up, search_reindex requeues itself with a random
+    # `countdown` cooldown that the real Celery worker honours as an actual wait.
+    # Mock it out so pagination is still exercised without the multi-second sleep.
+    mock_random.uniform.return_value = 0.0
+
     client = end_to_end_search_fixture.external_search.write_client
     index = end_to_end_search_fixture.external_search_index
 
