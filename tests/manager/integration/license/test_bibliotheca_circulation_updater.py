@@ -8,13 +8,18 @@ import pytest
 
 from palace.manager.api.circulation.exceptions import RemoteInitiatedServerError
 from palace.manager.celery.tasks import apply
+from palace.manager.data_layer.bibliographic import BibliographicData
+from palace.manager.data_layer.circulation import CirculationData
+from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.integration.license.bibliotheca import BibliothecaAPI
 from palace.manager.integration.license.bibliotheca_circulation_updater import (
     CIRCULATION_UPDATE_BATCH_SIZE,
     CIRCULATION_UPDATE_SERVICE_NAME,
     BibliothecaCirculationUpdater,
 )
+from palace.manager.sqlalchemy.constants import DataSourceConstants
 from palace.manager.sqlalchemy.model.coverage import Timestamp
+from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -299,10 +304,10 @@ class TestBibliothecaCirculationUpdaterUpdateBatch:
 
         mock_apply.delay.assert_called_once()
 
-    def test_needs_apply_false_does_not_queue_bibliographic_apply(
+    def test_no_changes_does_not_queue_bibliographic_apply(
         self, db: DatabaseTransactionFixture
     ) -> None:
-        """bibliographic_apply is not queued when needs_apply() returns False."""
+        """Nothing is queued when neither bibliographic nor circulation data changed."""
         updater, mock_api = _make_updater(db)
         collection = mock_api.collection
 
@@ -320,6 +325,7 @@ class TestBibliothecaCirculationUpdaterUpdateBatch:
 
         mock_bib = MagicMock()
         mock_bib.needs_apply.return_value = False
+        mock_bib.circulation.needs_apply.return_value = False
         mock_bib.primary_identifier_data.identifier = ident.identifier
 
         with (
@@ -331,6 +337,46 @@ class TestBibliothecaCirculationUpdaterUpdateBatch:
             updater.update_batch(0)
 
         mock_apply.delay.assert_not_called()
+
+    def test_circulation_change_queues_bibliographic_apply(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        """A circulation-only change is queued even when metadata is unchanged.
+
+        Regression test: ``BibliographicData.needs_apply()`` excludes circulation
+        from its hash, so an availability-only change leaves it ``False``.  The
+        sweep must still dispatch, keyed on ``CirculationData.needs_apply()``.
+        """
+        updater, mock_api = _make_updater(db)
+        collection = mock_api.collection
+
+        ident = db.identifier(
+            identifier_type=Identifier.BIBLIOTHECA_ID, foreign_id="circchanged"
+        )
+        LicensePool.for_foreign_id(
+            db.session,
+            mock_api.data_source,
+            Identifier.BIBLIOTHECA_ID,
+            ident.identifier,
+            collection=collection,
+        )
+        db.session.flush()
+
+        mock_bib = MagicMock()
+        mock_bib.needs_apply.return_value = False
+        mock_bib.circulation.needs_apply.return_value = True
+        mock_bib.primary_identifier_data.identifier = ident.identifier
+
+        with (
+            patch.object(
+                BibliothecaAPI, "bibliographic_lookup", return_value=[mock_bib]
+            ),
+            patch.object(apply, "bibliographic_apply") as mock_apply,
+        ):
+            updater.update_batch(0)
+
+        mock_apply.delay.assert_called_once()
+        mock_bib.circulation.needs_apply.assert_called_once_with(db.session, collection)
 
 
 class TestBibliothecaCirculationUpdaterProcessIdentifiers:
@@ -399,10 +445,11 @@ class TestBibliothecaCirculationUpdaterProcessIdentifiers:
         assert mock_bib.apply.call_args.kwargs["create_coverage_record"] is False
         mock_apply.delay.assert_not_called()
 
-    def test_unchanged_title_is_not_applied(
+    def test_unchanged_title_and_circulation_is_not_applied(
         self, db: DatabaseTransactionFixture
     ) -> None:
-        """needs_apply() is honored on the synchronous path: no apply, no queue."""
+        """On the synchronous path, nothing is applied when neither bibliographic
+        nor circulation data changed."""
         updater, mock_api = _make_updater(db)
         collection = mock_api.collection
 
@@ -420,6 +467,7 @@ class TestBibliothecaCirculationUpdaterProcessIdentifiers:
 
         mock_bib = MagicMock()
         mock_bib.needs_apply.return_value = False
+        mock_bib.circulation.needs_apply.return_value = False
         mock_bib.primary_identifier_data.identifier = ident.identifier
 
         with (
@@ -432,3 +480,66 @@ class TestBibliothecaCirculationUpdaterProcessIdentifiers:
 
         mock_bib.apply.assert_not_called()
         mock_apply.delay.assert_not_called()
+
+    def test_circulation_applied_when_metadata_unchanged(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        """Regression: availability updates land even when metadata is unchanged.
+
+        End-to-end proof that the sweep applies a circulation-only change. The
+        first lookup establishes the edition's bibliographic hash and the pool's
+        initial availability; the second carries identical metadata but fewer
+        available copies. Because ``BibliographicData``'s hash excludes
+        circulation, ``needs_apply()`` is ``False`` for the second lookup -- yet
+        the pool must still reflect the new availability.
+        """
+        updater, mock_api = _make_updater(db)
+        collection = mock_api.collection
+
+        edition, pool = db.edition(
+            identifier_type=Identifier.BIBLIOTHECA_ID,
+            data_source_name=DataSourceConstants.BIBLIOTHECA,
+            with_license_pool=True,
+            collection=collection,
+        )
+        bibliotheca_id = pool.identifier.identifier
+
+        def make_bib(owned: int, available: int) -> BibliographicData:
+            identifier_data = IdentifierData(
+                type=Identifier.BIBLIOTHECA_ID, identifier=bibliotheca_id
+            )
+            return BibliographicData(
+                data_source_name=DataSourceConstants.BIBLIOTHECA,
+                primary_identifier_data=identifier_data,
+                title="Unchanging Title",
+                medium=Edition.BOOK_MEDIUM,
+                circulation=CirculationData(
+                    data_source_name=DataSourceConstants.BIBLIOTHECA,
+                    primary_identifier_data=identifier_data,
+                    licenses_owned=owned,
+                    licenses_available=available,
+                    licenses_reserved=0,
+                    patrons_in_hold_queue=0,
+                ),
+            )
+
+        # First sweep: establishes the bibliographic hash and seeds availability.
+        with patch.object(
+            BibliothecaAPI, "bibliographic_lookup", return_value=[make_bib(5, 5)]
+        ):
+            updater.process_identifiers([pool.identifier])
+        assert pool.licenses_owned == 5
+        assert pool.licenses_available == 5
+
+        # Second sweep: identical metadata, so the bibliographic hash is unchanged...
+        second = make_bib(5, 0)
+        assert second.needs_apply(db.session) is False
+
+        # ...but the availability change must still be applied.
+        with patch.object(
+            BibliothecaAPI, "bibliographic_lookup", return_value=[second]
+        ):
+            updater.process_identifiers([pool.identifier])
+
+        assert pool.licenses_owned == 5
+        assert pool.licenses_available == 0

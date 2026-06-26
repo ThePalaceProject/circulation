@@ -212,7 +212,24 @@ class BibliothecaCirculationUpdater(LoggerMixin):
                     identifiers_by_bibliotheca_id[bibliotheca_id]
                 )
 
-            if bibliographic.needs_apply(self._session):
+            # Decide whether there is anything to apply. The circulation
+            # sweep exists to pick up *availability* changes, but
+            # BibliographicData.needs_apply() keys only on the bibliographic
+            # hash, which deliberately excludes circulation (see
+            # BibliographicData.fields_excluded_from_hash). Gating solely on it
+            # would silently drop availability-only updates for any title whose
+            # metadata is unchanged -- i.e. almost every title on almost every
+            # sweep. So we also consult CirculationData.needs_apply(), which
+            # checks the LicensePool hash (availability included). When either
+            # says yes we apply: for an unchanged-metadata title, apply() takes
+            # its circulation-only fallback and updates availability alone.
+            needs_apply = bibliographic.needs_apply(self._session) or (
+                bibliographic.circulation is not None
+                and bibliographic.circulation.needs_apply(
+                    self._session, self._collection
+                )
+            )
+            if needs_apply:
                 if synchronous:
                     # Apply in-band (mirrors the apply.bibliographic_apply task body)
                     # so the caller sees the updated availability in its own session.
