@@ -16,7 +16,7 @@ class TestRebuildSearchIndexScript:
         services_fixture: ServicesFixture,
     ):
         # If we are called with no arguments, we default to asynchronously rebuilding the search index.
-        RebuildSearchIndexScript(db.session).do_run()
+        RebuildSearchIndexScript(db.session, cmd_args=[]).do_run()
         mock_search_reindex.s.return_value.delay.assert_called_once_with()
         # But we don't delete the index before rebuilding.
         services_fixture.search_index.clear_search_documents.assert_not_called()

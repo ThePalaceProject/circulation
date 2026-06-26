@@ -20,7 +20,7 @@ class TestEquivalentIdentifiersRefreshScript:
         with patch(
             "palace.manager.scripts.equivalents.equivalent_identifiers_refresh"
         ) as task_mock:
-            EquivalentIdentifiersRefreshScript(db.session).do_run()
+            EquivalentIdentifiersRefreshScript(db.session).do_run(cmd_args=[])
             task_mock.delay.assert_called_once_with(full_refresh=False)
             assert "delta" in caplog.text
 

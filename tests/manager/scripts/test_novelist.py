@@ -44,7 +44,7 @@ class TestNovelistSnapshotScript:
             script = NovelistSnapshotScript(
                 db.session,
             )
-            script.do_run()
+            script.do_run(cmd_args=[])
             update.delay.assert_called_once_with(library_id=l1.id)
             assert (
                 f'Queued novelist_update task for library: name="{l1.name}", id={l1.id}'

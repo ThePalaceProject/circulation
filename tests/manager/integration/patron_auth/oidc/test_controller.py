@@ -971,6 +971,7 @@ class TestOIDCControllerLogout:
 
         Should redirect directly with logout_status=partial and log a warning.
         """
+        caplog.set_level(logging.INFO)
         controller = logout_controller
         patron = db.patron()
         patron.authorization_identifier = "user123@example.com"
