@@ -159,8 +159,9 @@ class BibliothecaCirculationUpdater(LoggerMixin):
 
         Used by :meth:`~palace.manager.integration.license.bibliotheca.BibliothecaAPI.update_availability`
         and :class:`~palace.manager.scripts.availability.AvailabilityRefreshScript` for
-        on-demand single-title refreshes.  Applies the same hash-based deduplication
-        as :meth:`update_batch` so unchanged titles produce no database writes.
+        on-demand single-title refreshes.  Applies the same bibliographic- and
+        circulation-hash deduplication as :meth:`update_batch`, so titles whose
+        metadata and availability are both unchanged produce no database writes.
 
         Unlike the sweep (:meth:`update_batch`), changes are applied **synchronously**
         in the caller's session rather than queued as ``bibliographic_apply`` tasks, so
@@ -179,12 +180,17 @@ class BibliothecaCirculationUpdater(LoggerMixin):
         """Look up availability from Bibliotheca, apply changes, and zero out removed titles.
 
         For each :class:`~palace.manager.data_layer.bibliographic.BibliographicData`
-        returned by the API, applies the change when
+        returned by the API, applies the change when either
         :meth:`~palace.manager.data_layer.bibliographic.BibliographicData.needs_apply`
-        returns ``True`` (hash-based deduplication).  When ``synchronous`` is ``False``
-        (the sweep) the apply is queued as a ``bibliographic_apply`` Celery task; when
-        ``True`` (on-demand refreshes) it is applied directly in this session so the
-        result is immediately visible to the caller.
+        or :meth:`~palace.manager.data_layer.circulation.CirculationData.needs_apply`
+        returns ``True`` (hash-based deduplication).  The circulation check is
+        required because the bibliographic hash excludes circulation, so an
+        availability-only change is invisible to ``BibliographicData.needs_apply``
+        alone — the omission that previously caused circulation updates to be
+        dropped.  When ``synchronous`` is ``False`` (the sweep) the apply is queued
+        as a ``bibliographic_apply`` Celery task; when ``True`` (on-demand refreshes)
+        it is applied directly in this session so the result is immediately visible
+        to the caller.
 
         For identifiers the API does not return (indicating removed or expired
         licenses), calls
@@ -212,7 +218,24 @@ class BibliothecaCirculationUpdater(LoggerMixin):
                     identifiers_by_bibliotheca_id[bibliotheca_id]
                 )
 
-            if bibliographic.needs_apply(self._session):
+            # Decide whether there is anything to apply. The circulation
+            # sweep exists to pick up *availability* changes, but
+            # BibliographicData.needs_apply() keys only on the bibliographic
+            # hash, which deliberately excludes circulation (see
+            # BibliographicData.fields_excluded_from_hash). Gating solely on it
+            # would silently drop availability-only updates for any title whose
+            # metadata is unchanged -- i.e. almost every title on almost every
+            # sweep. So we also consult CirculationData.needs_apply(), which
+            # checks the LicensePool hash (availability included). When either
+            # says yes we apply: for an unchanged-metadata title, apply() takes
+            # its circulation-only fallback and updates availability alone.
+            needs_apply = bibliographic.needs_apply(self._session) or (
+                bibliographic.circulation is not None
+                and bibliographic.circulation.needs_apply(
+                    self._session, self._collection
+                )
+            )
+            if needs_apply:
                 if synchronous:
                     # Apply in-band (mirrors the apply.bibliographic_apply task body)
                     # so the caller sees the updated availability in its own session.
