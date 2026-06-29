@@ -1,0 +1,19 @@
+# Compose overlay for the backwards-compatibility check; see test_backwards_compatibility.sh.
+#
+# The `webapp` service (from docker-compose.yml, the image built by the current commit) is
+# used to build the new schema. `webapp-prev` runs a previously released image and re-runs
+# its database tests against that schema in external-schema mode.
+services:
+  webapp-prev:
+    # Inherit the full test environment (database/search/storage/redis URLs, etc.) from the
+    # webapp service so the previous release's test suite can run, then point it at the
+    # previous release's published image and turn on external-schema mode.
+    extends:
+      file: docker-compose.yml
+      service: webapp
+    image: "${PREV_RELEASE_IMAGE}"
+    environment:
+      PALACE_TEST_DATABASE_EXTERNAL_SCHEMA: "true"
+      # External-schema mode uses the database as-is, so database creation must be disabled
+      # (they are required to agree; see DatabaseCreationFixture).
+      PALACE_TEST_DATABASE_CREATE_DATABASE: "false"
