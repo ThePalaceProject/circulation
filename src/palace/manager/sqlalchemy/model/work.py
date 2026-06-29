@@ -1692,8 +1692,15 @@ class Work(Base, LoggerMixin):
         result["work_id"] = getattr(doc, "id")
         result["summary"] = getattr(doc, "summary_text")
         result["suppressed_for"] = [int(l.id) for l in getattr(doc, "suppressed_for")]
+        # A work's fiction status is tri-state: True (fiction), False
+        # (nonfiction), or None (unknown/unclassified). Preserve that third
+        # state as None so an unclassified work is not silently indexed as
+        # nonfiction, which would make it match a nonfiction-only lane.
+        fiction_status = getattr(doc, "fiction")
         result["fiction"] = (
-            "fiction" if getattr(doc, "fiction") is True else "nonfiction"
+            None
+            if fiction_status is None
+            else ("fiction" if fiction_status else "nonfiction")
         )
         if result["audience"]:
             result["audience"] = result["audience"].replace(" ", "")
