@@ -1774,6 +1774,41 @@ class TestOverdriveAPI:
         assert was_new is False
         assert pool.work.presentation_ready is True
 
+    def test_ensure_bibliographic_coverage_apply_error(
+        self,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        db: DatabaseTransactionFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        # An exception raised while applying bibliographic data is caught and
+        # logged rather than propagating out of update_licensepool, mirroring
+        # the resilience of the retired BibliographicCoverageProvider.
+        api = overdrive_api_fixture.api
+        identifier = db.identifier(identifier_type=Identifier.OVERDRIVE_ID)
+        pool, _ = LicensePool.for_foreign_id(
+            db.session,
+            DataSource.OVERDRIVE,
+            Identifier.OVERDRIVE_ID,
+            identifier.identifier,
+            collection=overdrive_api_fixture.collection,
+        )
+
+        api.metadata_lookup = MagicMock(return_value={"id": identifier.identifier})
+        bibliographic = MagicMock()
+        bibliographic.apply.side_effect = ValueError("boom")
+
+        with patch.object(
+            OverdriveRepresentationExtractor,
+            "book_info_to_bibliographic",
+            return_value=bibliographic,
+        ):
+            # Should not raise.
+            api._ensure_bibliographic_coverage(pool)
+
+        bibliographic.apply.assert_called_once()
+        assert not pool.work
+        assert "Error applying Overdrive bibliographic data" in caplog.text
+
     def test_update_new_licensepool(
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
     ):

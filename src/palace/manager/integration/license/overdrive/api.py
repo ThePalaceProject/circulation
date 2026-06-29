@@ -1829,12 +1829,26 @@ class OverdriveAPI(
             return
 
         edition, _ = self._edition(license_pool)
-        bibliographic.apply(
-            self._db,
-            edition,
-            self.collection,
-            replace=ReplacementPolicy.from_license_source(),
-        )
+        try:
+            bibliographic.apply(
+                self._db,
+                edition,
+                self.collection,
+                replace=ReplacementPolicy.from_license_source(),
+            )
+        except Exception as e:
+            # Mirror the resilience of the former
+            # ``BibliographicCoverageProvider.set_bibliographic``: a database
+            # error or unexpected data shape during apply should not crash
+            # ``update_licensepool``. Log and leave the pool without updated
+            # coverage, matching the prior "silently continue" behavior.
+            self.log.warning(
+                "Error applying Overdrive bibliographic data to edition %s: %s",
+                edition.id,
+                e,
+                exc_info=e,
+            )
+            return
 
         if not license_pool.work or not license_pool.work.presentation_ready:
             work, _ = license_pool.calculate_work()
