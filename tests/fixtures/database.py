@@ -179,15 +179,16 @@ def function_test_id(worker_id: str) -> IdFixture:
 
 class DatabaseTestConfiguration(FixtureTestUrlConfiguration):
     url: PostgresDsn
+    # Create a separate database for each worker in a test run. When external schema is
+    # false, each worker's database is initialized from the database models; when external
+    # schema is true, each worker instead clones the configured database (used as a
+    # template) into its own database.
     create_database: bool = True
-    # When set, the schema is assumed to have been built externally (by the current code) in
-    # the configured database before the tests run. The fixtures then use that schema as-is
-    # rather than dropping and recreating it from the current models. With create_database
-    # enabled (the default), each worker clones the configured database as a template into
-    # its own per-worker database, so the suite can still run in parallel; with
-    # create_database disabled, the configured database is used directly and the suite must
-    # run serially. This is used by the backwards-compatibility CI check, which runs a
-    # previous release's test suite against a schema built by the current code.
+    # When set, the database schema is assumed to have been applied externally before the
+    # tests run, so the fixtures use the database as-is instead of dropping and recreating
+    # the schema from the current models. This is used by the backwards-compatibility CI
+    # check, which runs a previous release's test suite against a schema built by the
+    # current code.
     external_schema: bool = False
     model_config = SettingsConfigDict(env_prefix="PALACE_TEST_DATABASE_")
 
