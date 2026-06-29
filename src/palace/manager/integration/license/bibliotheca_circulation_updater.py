@@ -12,6 +12,7 @@ from palace.util.datetime_helpers import utc_now
 from palace.util.log import LoggerMixin
 
 from palace.manager.celery.tasks import apply
+from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.integration.license.bibliotheca import BibliothecaAPI
 from palace.manager.sqlalchemy.constants import DataSourceConstants
@@ -159,13 +160,15 @@ class BibliothecaCirculationUpdater(LoggerMixin):
 
         Used by :meth:`~palace.manager.integration.license.bibliotheca.BibliothecaAPI.update_availability`
         and :class:`~palace.manager.scripts.availability.AvailabilityRefreshScript` for
-        on-demand single-title refreshes.  Applies the same bibliographic- and
-        circulation-hash deduplication as :meth:`update_batch`, so titles whose
-        metadata and availability are both unchanged produce no database writes.
+        on-demand single-title refreshes.  Reconciles the same way as
+        :meth:`update_batch` — bibliographic metadata is hash-deduplicated and
+        availability is compared against the pool's live columns — so a title whose
+        metadata and availability are both unchanged produces no database writes.
 
         Unlike the sweep (:meth:`update_batch`), changes are applied **synchronously**
-        in the caller's session rather than queued as ``bibliographic_apply`` tasks, so
-        the updated availability is visible as soon as this method returns.  Callers such
+        in the caller's session rather than queued as ``bibliographic_apply`` /
+        ``circulation_apply`` tasks, so the updated availability is visible as soon as
+        this method returns.  Callers such
         as :meth:`~palace.manager.integration.license.bibliotheca.BibliothecaAPI.update_availability`
         rely on this — e.g. the circulation dispatcher reads ``LicensePool.licenses_available``
         immediately after requesting an availability refresh.
@@ -179,27 +182,41 @@ class BibliothecaCirculationUpdater(LoggerMixin):
     ) -> None:
         """Look up availability from Bibliotheca, apply changes, and zero out removed titles.
 
-        For each :class:`~palace.manager.data_layer.bibliographic.BibliographicData`
-        returned by the API, applies the change when either
-        :meth:`~palace.manager.data_layer.bibliographic.BibliographicData.needs_apply`
-        or :meth:`~palace.manager.data_layer.circulation.CirculationData.needs_apply`
-        returns ``True`` (hash-based deduplication).  The circulation check is
-        required because the bibliographic hash excludes circulation, so an
-        availability-only change is invisible to ``BibliographicData.needs_apply``
-        alone — the omission that previously caused circulation updates to be
-        dropped.  When ``synchronous`` is ``False`` (the sweep) the apply is queued
-        as a ``bibliographic_apply`` Celery task; when ``True`` (on-demand refreshes)
-        it is applied directly in this session so the result is immediately visible
-        to the caller.
+        Each returned record is reconciled along two independent tracks:
+
+        - **Bibliographic metadata** is deduplicated with
+          :meth:`~palace.manager.data_layer.bibliographic.BibliographicData.needs_apply`
+          (hash based).  This is reliable because an ``Edition``'s content is only
+          ever written through ``apply``, so its stored hash stays in sync with it.
+          Unchanged metadata is skipped.
+
+        - **Circulation/availability** is reconciled against the ``LicensePool``'s
+          *live* column values — not its
+          :attr:`~palace.manager.sqlalchemy.model.licensing.LicensePool.updated_at_data_hash`.
+          That hash is only maintained by
+          :meth:`~palace.manager.data_layer.circulation.CirculationData.apply`,
+          whereas ``licenses_*`` are also mutated out of band — by the event
+          importer and by loan/hold operations via
+          :meth:`~palace.manager.sqlalchemy.model.licensing.LicensePool.update_availability`
+          and :meth:`~palace.manager.sqlalchemy.model.licensing.LicensePool.update_availability_from_delta`,
+          neither of which touches the hash.  A matching hash therefore does **not**
+          mean the columns are correct, and gating the sweep on it makes it skip the
+          very drift it exists to reconcile.  So we compare the snapshot to the
+          actual columns and, when they differ, apply with
+          ``even_if_not_apparently_updated=True`` to bypass the stale hash;
+          ``update_availability`` still writes and logs only genuine differences.
+
+        When ``synchronous`` is ``False`` (the sweep) applies are queued as
+        ``bibliographic_apply`` / ``circulation_apply`` Celery tasks; when ``True``
+        (on-demand refreshes) they are applied directly in this session so the
+        result is immediately visible to the caller.
 
         For identifiers the API does not return (indicating removed or expired
-        licenses), calls
-        :meth:`~palace.manager.sqlalchemy.model.licensing.LicensePool.update_availability`
-        with all-zero counts.
+        licenses), zeroes out the ``LicensePool``'s availability.
 
         :param identifiers: Identifiers to process.
         :param synchronous: When ``True``, apply changes in-band instead of queuing
-            asynchronous ``bibliographic_apply`` tasks.
+            asynchronous Celery tasks.
         """
         identifiers_by_bibliotheca_id: dict[str, Identifier] = {
             i.identifier: i for i in identifiers
@@ -213,34 +230,23 @@ class BibliothecaCirculationUpdater(LoggerMixin):
                 if bibliographic.primary_identifier_data
                 else None
             )
-            if bibliotheca_id and bibliotheca_id in identifiers_by_bibliotheca_id:
-                identifiers_not_mentioned.discard(
-                    identifiers_by_bibliotheca_id[bibliotheca_id]
-                )
-
-            # Decide whether there is anything to apply. The circulation
-            # sweep exists to pick up *availability* changes, but
-            # BibliographicData.needs_apply() keys only on the bibliographic
-            # hash, which deliberately excludes circulation (see
-            # BibliographicData.fields_excluded_from_hash). Gating solely on it
-            # would silently drop availability-only updates for any title whose
-            # metadata is unchanged -- i.e. almost every title on almost every
-            # sweep. So we also consult CirculationData.needs_apply(), which
-            # checks the LicensePool hash (availability included). When either
-            # says yes we apply: for an unchanged-metadata title, apply() takes
-            # its circulation-only fallback and updates availability alone.
-            needs_apply = bibliographic.needs_apply(self._session) or (
-                bibliographic.circulation is not None
-                and bibliographic.circulation.needs_apply(
-                    self._session, self._collection
-                )
+            identifier = (
+                identifiers_by_bibliotheca_id.get(bibliotheca_id)
+                if bibliotheca_id
+                else None
             )
-            if needs_apply:
+            if identifier is not None:
+                identifiers_not_mentioned.discard(identifier)
+
+            # Track 1 -- bibliographic metadata. Hash-based dedup is reliable
+            # here (an Edition is only ever written through apply()). Circulation
+            # is stripped off and handled separately below so that an unchanged
+            # title does not force a metadata re-apply every sweep.
+            if bibliographic.needs_apply(self._session):
+                metadata = bibliographic.model_copy(update={"circulation": None})
                 if synchronous:
-                    # Apply in-band (mirrors the apply.bibliographic_apply task body)
-                    # so the caller sees the updated availability in its own session.
-                    edition, _ = bibliographic.edition(self._session)
-                    bibliographic.apply(
+                    edition, _ = metadata.edition(self._session)
+                    metadata.apply(
                         self._session,
                         edition,
                         self._collection,
@@ -249,22 +255,87 @@ class BibliothecaCirculationUpdater(LoggerMixin):
                     )
                 else:
                     apply.bibliographic_apply.delay(
-                        bibliographic,
+                        metadata,
                         collection_id=self._collection.id,
                         replace=ReplacementPolicy.from_license_source(),
                     )
 
+            # Track 2 -- circulation/availability. Reconcile against the pool's
+            # LIVE columns rather than its updated_at_data_hash (see this method's
+            # docstring): the hash drifts from the columns because the event
+            # importer and loan/hold operations mutate licenses_* without updating
+            # it. When the snapshot differs from the columns we force the apply
+            # past the (possibly stale) hash with even_if_not_apparently_updated.
+            circulation = bibliographic.circulation
+            if identifier is not None and circulation is not None:
+                pool = self._license_pool_for(identifier)
+                if pool is None or not self._availability_matches_pool(
+                    circulation, pool
+                ):
+                    replace = ReplacementPolicy.from_license_source(
+                        even_if_not_apparently_updated=True
+                    )
+                    if synchronous:
+                        circulation.apply(self._session, self._collection, replace)
+                    else:
+                        apply.circulation_apply.delay(
+                            circulation,
+                            collection_id=self._collection.id,
+                            replace=replace,
+                        )
+
         now = utc_now()
         for identifier in identifiers_not_mentioned:
-            pools = [
-                lp
-                for lp in identifier.licensed_through
-                if lp.data_source.name == DataSourceConstants.BIBLIOTHECA
-                and lp.collection == self._collection
-            ]
-            if not pools:
+            pool = self._license_pool_for(identifier)
+            if pool is None:
                 continue
-            [pool] = pools
             if pool.licenses_owned > 0:
                 self.log.warning("Removing %s from circulation.", identifier.identifier)
             pool.update_availability(0, 0, 0, 0, as_of=now)
+
+    def _license_pool_for(self, identifier: Identifier) -> LicensePool | None:
+        """Return this collection's Bibliotheca ``LicensePool`` for ``identifier``, if any."""
+        pools = [
+            lp
+            for lp in identifier.licensed_through
+            if lp.data_source.name == DataSourceConstants.BIBLIOTHECA
+            and lp.collection == self._collection
+        ]
+        return pools[0] if pools else None
+
+    @staticmethod
+    def _availability_matches_pool(
+        circulation: CirculationData, pool: LicensePool
+    ) -> bool:
+        """Whether ``circulation`` already matches the pool's live availability columns.
+
+        Compared against the actual ``licenses_*`` / ``status`` columns rather than
+        :attr:`~palace.manager.sqlalchemy.model.licensing.LicensePool.updated_at_data_hash`,
+        which is not a reliable proxy for the current column values (see
+        :meth:`_process_batch`).
+
+        A field the snapshot leaves unset (``None``) is treated as "no assertion" and
+        does not, on its own, count as a mismatch — mirroring
+        :meth:`~palace.manager.sqlalchemy.model.licensing.LicensePool.update_availability`,
+        which skips ``None`` values rather than writing them. (Bibliotheca always
+        populates every count and ``status``, so this only matters defensively.)
+        """
+        return (
+            (
+                circulation.licenses_owned is None
+                or circulation.licenses_owned == pool.licenses_owned
+            )
+            and (
+                circulation.licenses_available is None
+                or circulation.licenses_available == pool.licenses_available
+            )
+            and (
+                circulation.licenses_reserved is None
+                or circulation.licenses_reserved == pool.licenses_reserved
+            )
+            and (
+                circulation.patrons_in_hold_queue is None
+                or circulation.patrons_in_hold_queue == pool.patrons_in_hold_queue
+            )
+            and (circulation.status is None or circulation.status == pool.status)
+        )
