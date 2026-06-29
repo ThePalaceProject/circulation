@@ -778,11 +778,13 @@ to create and drop databases, the tests will fail. You can disable this behavior
 `PALACE_TEST_DATABASE_CREATE_DATABASE` environment variable to `false`.
 
 Setting `PALACE_TEST_DATABASE_EXTERNAL_SCHEMA` to `true` tells the tests that the schema has already
-been applied to the provided database, so the fixtures use it as-is, without dropping and recreating the
-schema from the current models. Because the database is used as-is, you must also set
-`PALACE_TEST_DATABASE_CREATE_DATABASE` to `false` — the two settings must agree, or the tests will raise
-an error — which also means the tests must be run serially. This is used by the backwards-compatibility
-CI check, which runs a previous release's tests against a schema built by the current code.
+been applied to the provided database (by the current code), so the fixtures use that schema as-is,
+without dropping and recreating it from the current models. With database creation left enabled (the
+default), each worker clones the provided database as a template into its own per-worker database, so
+the suite can still run in parallel. If you additionally set `PALACE_TEST_DATABASE_CREATE_DATABASE` to
+`false`, the provided database is used directly, which requires the tests to be run serially. This is
+used by the backwards-compatibility CI check, which runs a previous release's tests against a schema
+built by the current code.
 
 ### Override `pytest` Arguments
 
