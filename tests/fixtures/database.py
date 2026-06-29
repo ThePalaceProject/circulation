@@ -179,12 +179,16 @@ def function_test_id(worker_id: str) -> IdFixture:
 
 class DatabaseTestConfiguration(FixtureTestUrlConfiguration):
     url: PostgresDsn
+    # Create a separate database for each worker in a test run. When external schema is
+    # false, each worker's database is initialized from the database models; when external
+    # schema is true, each worker instead clones the configured database (used as a
+    # template) into its own database.
     create_database: bool = True
-    # When set, the database schema is assumed to have been applied
-    # externally before the tests run, so the fixtures use the database as-is instead of
-    # dropping and recreating the schema from the current models. This is used by the
-    # backwards-compatibility CI check, which runs a previous release's test suite against a
-    # schema built by the current code.
+    # When set, the database schema is assumed to have been applied externally before the
+    # tests run, so the fixtures use the database as-is instead of dropping and recreating
+    # the schema from the current models. This is used by the backwards-compatibility CI
+    # check, which runs a previous release's test suite against a schema built by the
+    # current code.
     external_schema: bool = False
     model_config = SettingsConfigDict(env_prefix="PALACE_TEST_DATABASE_")
 
@@ -207,20 +211,27 @@ class DatabaseCreationFixture:
         config = DatabaseTestConfiguration.from_env()
         self.external_schema = config.external_schema
         self.create_database = config.create_database
-        # External-schema mode uses the provided database and its schema as-is, so it is
-        # incompatible with creating a fresh database. Require the two settings to agree
-        # explicitly rather than silently overriding create_database.
-        if self.external_schema and self.create_database:
-            raise BasePalaceException(
-                "External schema mode (PALACE_TEST_DATABASE_EXTERNAL_SCHEMA) cannot create a "
-                "database. Set PALACE_TEST_DATABASE_CREATE_DATABASE=false to use the database as-is."
-            )
+        # When database creation is disabled the configured database is used directly, so
+        # every worker would share it -- that only works serially. (External-schema mode with
+        # database creation enabled avoids this by cloning the configured database into a
+        # per-worker database; see _create_db.)
         if not self.create_database and self.test_id.parallel:
             raise BasePalaceException(
                 "Database creation is disabled, but tests are running in parallel mode. "
                 "This is not supported. Please enable database creation or run tests in serial mode."
             )
         self._config_url = make_url(config.url)
+        # In external-schema mode each worker clones the configured database as a template
+        # (see _create_db), so the URL must name a database to clone from.
+        if (
+            self.external_schema
+            and self.create_database
+            and self._config_url.database is None
+        ):
+            raise BasePalaceException(
+                "External schema mode requires the configured database URL to name a "
+                "database to use as the clone template."
+            )
 
     @cached_property
     def database_name(self) -> str:
@@ -251,13 +262,17 @@ class DatabaseCreationFixture:
     def _db_connection(self) -> Generator[Connection]:
         """
         Databases need to be created and dropped outside a transaction. This method
-        provides a connection to database URL provided in the configuration that is not
-        wrapped in a transaction.
+        provides a connection to the server's maintenance database that is not wrapped in a
+        transaction.
+
+        We connect to the maintenance database (``postgres``) rather than the configured
+        database because ``CREATE DATABASE ... TEMPLATE`` requires that nothing is connected
+        to the template, and CREATE/DROP DATABASE are cluster-level commands that work from
+        any database.
         """
 
-        engine = create_engine(
-            self._config_url, isolation_level="AUTOCOMMIT", future=True
-        )
+        admin_url = self._config_url.set(database="postgres")
+        engine = create_engine(admin_url, isolation_level="AUTOCOMMIT", future=True)
         connection = engine.connect()
         try:
             yield connection
@@ -271,7 +286,19 @@ class DatabaseCreationFixture:
 
         with self._db_connection() as connection, connection.begin():
             user = self._config_url.username
-            connection.execute(text(f"CREATE DATABASE {self.database_name}"))
+            if self.external_schema:
+                # Clone the externally-built schema (and seed data) into this worker's
+                # database, using the configured database as a template. This lets the tests
+                # run against the schema the current code produced while still giving each
+                # worker its own isolated database, so the suite can run in parallel.
+                connection.execute(
+                    text(
+                        f"CREATE DATABASE {self.database_name} "
+                        f"TEMPLATE {self._config_url.database}"
+                    )
+                )
+            else:
+                connection.execute(text(f"CREATE DATABASE {self.database_name}"))
             connection.execute(
                 text(f"GRANT ALL PRIVILEGES ON DATABASE {self.database_name} TO {user}")
             )
