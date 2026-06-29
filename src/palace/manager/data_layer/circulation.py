@@ -11,6 +11,7 @@ from palace.manager.data_layer.license import LicenseData
 from palace.manager.data_layer.link import LinkData
 from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.sqlalchemy.model.collection import Collection
+from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
     LicensePool,
@@ -402,3 +403,76 @@ class CirculationData(BaseMutableData):
         """
         pool, _ = self.license_pool(session, collection, autocreate=False)
         return self.should_apply_to(pool)
+
+    def fields_excluded_from_hash(self) -> set[str]:
+        """Exclude the volatile availability counts from the dedup hash.
+
+        ``licenses_owned``/``licenses_available``/``licenses_reserved`` and
+        ``patrons_in_hold_queue`` are mutated **out of band** — by the event
+        importer, loan/hold operations, and the circulation dispatcher via
+        :meth:`~palace.manager.sqlalchemy.model.licensing.LicensePool.update_availability`
+        (and ``update_availability_from_delta`` / ``update_availability_from_licenses``)
+        — which never restamp ``updated_at_data_hash``.  The hash therefore cannot
+        track them, so they are excluded from it and compared against the pool's live
+        columns in :meth:`should_apply_to` instead.  Every other field is only ever
+        written by :meth:`apply`, so the hash stays a reliable change-signal for it.
+        """
+        return super().fields_excluded_from_hash() | {
+            "licenses_owned",
+            "licenses_available",
+            "licenses_reserved",
+            "patrons_in_hold_queue",
+        }
+
+    def should_apply_to(self, db_object: Edition | LicensePool | None = None) -> bool:
+        """Decide whether this circulation data should be applied to the pool.
+
+        Mirrors the base hash/timestamp logic, but additionally compares the volatile
+        availability counts against the pool's **live** columns — because those columns
+        drift from the hash (see :meth:`fields_excluded_from_hash`).  Apply when the
+        stable-field hash differs **or** the counts no longer match the columns.
+
+        Because both :meth:`needs_apply` (the importers' gate) and :meth:`apply`'s own
+        internal check go through this method, a dispatched ``circulation_apply`` is
+        never re-blocked, and an async apply that arrives after the columns already
+        match simply no-ops — no ``even_if_not_apparently_updated`` needed.
+        """
+        if not isinstance(db_object, LicensePool):
+            # No stored pool to compare against (None, or not a pool) -> apply.
+            return True
+        pool = db_object
+        if pool.updated_at is None or pool.updated_at_data_hash is None:
+            # Never applied before -> apply.
+            return True
+        if self.as_of_timestamp < pool.updated_at:
+            # Incoming data is older than what is stored; don't overwrite newer state.
+            return False
+        return (
+            self.calculate_hash() != pool.updated_at_data_hash
+            or not self._availability_matches(pool)
+        )
+
+    def _availability_matches(self, pool: LicensePool) -> bool:
+        """Whether this snapshot's availability already matches the pool's live columns.
+
+        Compares the volatile count fields (the ones excluded from the dedup hash)
+        against the actual columns.  A field left unset (``None``) is treated as "no
+        assertion" and never forces an apply, mirroring
+        :meth:`~palace.manager.sqlalchemy.model.licensing.LicensePool.update_availability`,
+        which skips ``None`` values rather than writing them.
+        """
+        return (
+            (self.licenses_owned is None or self.licenses_owned == pool.licenses_owned)
+            and (
+                self.licenses_available is None
+                or self.licenses_available == pool.licenses_available
+            )
+            and (
+                self.licenses_reserved is None
+                or self.licenses_reserved == pool.licenses_reserved
+            )
+            and (
+                self.patrons_in_hold_queue is None
+                or self.patrons_in_hold_queue == pool.patrons_in_hold_queue
+            )
+        )
