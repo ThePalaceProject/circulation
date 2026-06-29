@@ -220,6 +220,17 @@ class DatabaseCreationFixture:
                 "This is not supported. Please enable database creation or run tests in serial mode."
             )
         self._config_url = make_url(config.url)
+        # In external-schema mode each worker clones the configured database as a template
+        # (see _create_db), so the URL must name a database to clone from.
+        if (
+            self.external_schema
+            and self.create_database
+            and self._config_url.database is None
+        ):
+            raise BasePalaceException(
+                "External schema mode requires the configured database URL to name a "
+                "database to use as the clone template."
+            )
 
     @cached_property
     def database_name(self) -> str:
