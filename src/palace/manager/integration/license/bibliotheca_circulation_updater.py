@@ -166,8 +166,9 @@ class BibliothecaCirculationUpdater(LoggerMixin):
         metadata and availability are both unchanged produces no database writes.
 
         Unlike the sweep (:meth:`update_batch`), changes are applied **synchronously**
-        in the caller's session rather than queued as ``bibliographic_apply`` tasks, so
-        the updated availability is visible as soon as this method returns.  Callers such
+        in the caller's session rather than queued as ``bibliographic_apply`` /
+        ``circulation_apply`` tasks, so the updated availability is visible as soon as
+        this method returns.  Callers such
         as :meth:`~palace.manager.integration.license.bibliotheca.BibliothecaAPI.update_availability`
         rely on this — e.g. the circulation dispatcher reads ``LicensePool.licenses_available``
         immediately after requesting an availability refresh.
