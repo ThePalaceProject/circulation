@@ -14,6 +14,7 @@ services:
     image: "${PREV_RELEASE_IMAGE}"
     environment:
       PALACE_TEST_DATABASE_EXTERNAL_SCHEMA: "true"
-      # External-schema mode uses the database as-is, so database creation must be disabled
-      # (they are required to agree; see DatabaseCreationFixture).
-      PALACE_TEST_DATABASE_CREATE_DATABASE: "false"
+      # External-schema mode with database creation enabled clones the externally-built
+      # schema into a per-worker database, so the previous release's suite can run in
+      # parallel (-n auto); see DatabaseCreationFixture.
+      PALACE_TEST_DATABASE_CREATE_DATABASE: "true"

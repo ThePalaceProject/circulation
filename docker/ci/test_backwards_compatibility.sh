@@ -73,12 +73,13 @@ compose_cmd up -d pg os minio redis || fail "Could not start service containers.
 run_in_container webapp "./bin/util/initialize_instance" \
   || fail "Failed to initialize the database with the current image."
 
-# (3) Run the previous release's database tests against the new schema. -n0 forces serial
-# execution, which external-schema mode requires (all tests share the one database).
+# (3) Run the previous release's database tests against the new schema. In external-schema
+# mode each xdist worker clones the freshly-built schema into its own database, so the suite
+# runs in parallel (-n auto).
 compose_cmd pull --quiet webapp-prev || fail "Could not pull ${PREV_RELEASE_IMAGE}."
 echo "Running the previous release's database tests against the current schema ..."
 if ! run_in_container webapp-prev \
-  "uv sync --frozen --active && pytest --no-cov -n0 -m db --ignore=tests/migration tests"; then
+  "uv sync --frozen --active && pytest --no-cov -n auto -m db --ignore=tests/migration tests"; then
   fail "Previous release tests failed against the current schema: the migration is not backwards compatible."
 fi
 
