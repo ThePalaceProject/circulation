@@ -330,7 +330,10 @@ class LicensePool(Base):
     created_at = Column(DateTime(timezone=True), default=None)
     updated_at = Column(DateTime(timezone=True), default=None)
 
-    # Hash of the CirculationData last used to create/update this LicensePool.
+    # Hash of the stable CirculationData fields last used to create/update this
+    # LicensePool. The volatile availability counts are deliberately excluded (they
+    # are mutated out of band and would drift from the hash); see
+    # CirculationData.fields_excluded_from_hash for the exact set and the reasoning.
     updated_at_data_hash = Column(String, default=None)
 
     # A LicensePool that seemingly looks fine may be manually suppressed

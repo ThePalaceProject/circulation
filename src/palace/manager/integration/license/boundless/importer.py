@@ -113,6 +113,7 @@ class BoundlessImporter(LoggerMixin):
         self,
         active_title_ids: list[str],
         apply_bibliographic: ApplyBibliographicCallable,
+        apply_circulation: ApplyCirculationCallable,
     ) -> None:
         policy = ReplacementPolicy(
             identifiers=False,
@@ -123,6 +124,7 @@ class BoundlessImporter(LoggerMixin):
         )
 
         bibliographic_updated = 0
+        circulation_updated = 0
         no_changes = 0
 
         for chunk in chunks(
@@ -137,6 +139,16 @@ class BoundlessImporter(LoggerMixin):
                         bibliographic, collection_id=self._collection.id, replace=policy
                     )
                     bibliographic_updated += 1
+                elif circulation.needs_apply(self._db, self._collection):
+                    # The bibliographic metadata is unchanged, but the
+                    # availability has changed. BibliographicData.needs_apply()
+                    # cannot detect this because its hash deliberately excludes
+                    # circulation, so apply the circulation update on its own.
+                    # Otherwise availability-only changes -- the common case for
+                    # an already-imported title, and exactly what put this title
+                    # in the modified-since feed -- would be silently dropped.
+                    apply_circulation(circulation, collection_id=self._collection.id)
+                    circulation_updated += 1
                 else:
                     no_changes += 1
 
@@ -144,6 +156,7 @@ class BoundlessImporter(LoggerMixin):
             self.log.info(
                 f"Processed {len(active_title_ids)} active titles: "
                 f"{bibliographic_updated} bibliographic updates, "
+                f"{circulation_updated} circulation-only updates, "
                 f"{no_changes} unchanged."
             )
 
@@ -166,7 +179,9 @@ class BoundlessImporter(LoggerMixin):
         :param apply_bibliographic: Callable to queue bibliographic data for processing.
             Called for each active title that has changed or when import_all is True.
         :param apply_circulation: Callable to queue circulation data for processing.
-            Called for inactive titles to mark them as unavailable.
+            Called for inactive titles to mark them as unavailable, and for active
+            titles whose availability changed but whose bibliographic metadata did
+            not (so the availability update is not dropped).
         :param page: The page number to fetch from the API (1-indexed).
         :param modified_since: Only fetch titles modified after this datetime.
         :return: FeedImportResult containing pagination info, counts of titles processed,
@@ -185,7 +200,9 @@ class BoundlessImporter(LoggerMixin):
         active_title_ids = [
             title.title_id for title in title_response.titles if title.active is True
         ]
-        self._import_active_titles(active_title_ids, apply_bibliographic)
+        self._import_active_titles(
+            active_title_ids, apply_bibliographic, apply_circulation
+        )
 
         inactive_title_ids = [
             title.title_id for title in title_response.titles if title.active is False

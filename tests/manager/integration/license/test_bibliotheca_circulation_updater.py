@@ -330,10 +330,10 @@ class TestBibliothecaCirculationUpdaterUpdateBatch:
             updater.process_identifiers([pool.identifier])
         return pool
 
-    def test_metadata_change_queues_bibliographic_apply_only(
+    def test_metadata_change_queues_bibliographic_apply(
         self, db: DatabaseTransactionFixture
     ) -> None:
-        """A metadata-only change queues bibliographic_apply (circulation stripped)."""
+        """A metadata change queues bibliographic_apply (carrying its circulation)."""
         updater, _ = _make_updater(db)
         pool = self._seed_imported_title(updater, db, 5, 5, title="Title A")
         bibliotheca_id = pool.identifier.identifier
@@ -349,17 +349,17 @@ class TestBibliothecaCirculationUpdaterUpdateBatch:
         ):
             updater.update_batch(0)
 
+        # Metadata changed -> bibliographic_apply; its embedded circulation rides
+        # along (reconciled by CirculationData.apply), so no separate circ apply.
         mock_bib_apply.delay.assert_called_once()
-        # Circulation is handled on its own track, so it is stripped from the
-        # bibliographic payload to avoid a redundant (hash-gated) apply.
         dispatched = mock_bib_apply.delay.call_args.args[0]
-        assert dispatched.circulation is None
+        assert dispatched.circulation is not None
         mock_circ_apply.delay.assert_not_called()
 
     def test_availability_change_queues_circulation_apply_only(
         self, db: DatabaseTransactionFixture
     ) -> None:
-        """An availability change queues circulation_apply with a force-apply policy."""
+        """An availability-only change queues circulation_apply, not bibliographic_apply."""
         updater, _ = _make_updater(db)
         pool = self._seed_imported_title(updater, db, 5, 5, title="Title A")
         bibliotheca_id = pool.identifier.identifier
@@ -379,9 +379,6 @@ class TestBibliothecaCirculationUpdaterUpdateBatch:
         mock_circ_apply.delay.assert_called_once()
         dispatched_circ = mock_circ_apply.delay.call_args.args[0]
         assert dispatched_circ.licenses_available == 2
-        # The apply is forced so the (possibly stale) pool hash cannot block it.
-        replace = mock_circ_apply.delay.call_args.kwargs["replace"]
-        assert replace.even_if_not_apparently_updated is True
 
     def test_no_change_queues_nothing(self, db: DatabaseTransactionFixture) -> None:
         """Nothing is queued when both metadata and availability match the pool."""
@@ -399,50 +396,6 @@ class TestBibliothecaCirculationUpdaterUpdateBatch:
 
         mock_bib_apply.delay.assert_not_called()
         mock_circ_apply.delay.assert_not_called()
-
-
-class TestBibliothecaCirculationUpdaterAvailabilityMatchesPool:
-    def test_compares_live_columns_and_status(
-        self, db: DatabaseTransactionFixture
-    ) -> None:
-        """_availability_matches_pool compares counts AND status against the live pool row."""
-        updater, mock_api = _make_updater(db)
-        ident = db.identifier(
-            identifier_type=Identifier.BIBLIOTHECA_ID, foreign_id="matcher"
-        )
-        pool, _ = LicensePool.for_foreign_id(
-            db.session,
-            mock_api.data_source,
-            Identifier.BIBLIOTHECA_ID,
-            ident.identifier,
-            collection=mock_api.collection,
-        )
-        pool.licenses_owned = 5
-        pool.licenses_available = 3
-        pool.licenses_reserved = 0
-        pool.patrons_in_hold_queue = 0
-        pool.status = LicensePoolStatus.ACTIVE
-        db.session.flush()
-
-        # All counts and status match the live row.
-        matching = _make_bib(ident.identifier, 5, 3).circulation
-        assert matching is not None
-        assert updater._availability_matches_pool(matching, pool) is True
-
-        # Each case differs from the pool in exactly one field -- including the
-        # status leg, which production Bibliotheca data always populates.
-        differing_circulations = [
-            _make_bib(ident.identifier, 4, 3).circulation,
-            _make_bib(ident.identifier, 5, 2).circulation,
-            _make_bib(ident.identifier, 5, 3, reserved=1).circulation,
-            _make_bib(ident.identifier, 5, 3, holds=1).circulation,
-            _make_bib(
-                ident.identifier, 5, 3, status=LicensePoolStatus.EXHAUSTED
-            ).circulation,
-        ]
-        for differing in differing_circulations:
-            assert differing is not None
-            assert updater._availability_matches_pool(differing, pool) is False
 
 
 class TestBibliothecaCirculationUpdaterProcessIdentifiers:
@@ -542,14 +495,17 @@ class TestBibliothecaCirculationUpdaterProcessIdentifiers:
         pool.update_availability(5, 2, 0, 0)
         db.session.flush()
         assert pool.licenses_available == 2
-        assert pool.updated_at_data_hash == stale_hash  # hash is now stale
+        # The hash is unchanged -- it only ever covered the stable fields, never the
+        # counts -- so it still matches the (5, 5) snapshot.
+        assert pool.updated_at_data_hash == stale_hash
 
-        # Bibliotheca's authoritative snapshot is (5, 5) again. Its circulation
-        # hash equals the stored (stale) hash, so the old hash-based check would
-        # NOT fire -- assert that precondition explicitly.
+        # Bibliotheca's authoritative snapshot is (5, 5) again: the stable-field hash
+        # matches, but the live columns have drifted to (5, 2), so the column-aware
+        # needs_apply correctly reports there is something to reconcile (a pure
+        # hash check -- the old behaviour -- would have skipped).
         reconcile = _make_bib(bibliotheca_id, 5, 5)
         assert reconcile.circulation is not None
-        assert reconcile.circulation.needs_apply(db.session, collection) is False
+        assert reconcile.circulation.needs_apply(db.session, collection) is True
 
         with patch.object(
             BibliothecaAPI, "bibliographic_lookup", return_value=[reconcile]

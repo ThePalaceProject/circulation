@@ -996,6 +996,122 @@ class TestCirculationData:
         pool.updated_at_data_hash = "stale-hash"
         assert circulation.needs_apply(db.session, collection) is True
 
+    def test_calculate_hash_excludes_availability_counts(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        """The volatile availability counts are excluded from the dedup hash.
+
+        They drift out of band (``update_availability`` from the event importer,
+        loans/holds, the dispatcher) without restamping the hash, so they are compared
+        against the live columns in ``should_apply_to`` instead. Only the stable fields
+        contribute to the hash.
+        """
+        identifier = IdentifierData(type="test identifier", identifier="hash")
+
+        def circ(
+            owned: int,
+            available: int,
+            *,
+            reserved: int = 0,
+            holds: int = 0,
+            status: LicensePoolStatus | None = None,
+        ) -> CirculationData:
+            return CirculationData(
+                data_source_name="Test data source",
+                primary_identifier_data=identifier,
+                licenses_owned=owned,
+                licenses_available=available,
+                licenses_reserved=reserved,
+                patrons_in_hold_queue=holds,
+                status=status,
+            )
+
+        # Different counts, identical stable fields -> identical hash.
+        assert (
+            circ(5, 5).calculate_hash()
+            == circ(1, 0, reserved=2, holds=3).calculate_hash()
+        )
+        # A change to a stable field (status) DOES change the hash.
+        assert (
+            circ(5, 5, status=LicensePoolStatus.EXHAUSTED).calculate_hash()
+            != circ(5, 5).calculate_hash()
+        )
+
+    def test_needs_apply_compares_live_columns(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        """Availability is reconciled against the pool's live columns, not the hash.
+
+        Because the counts are excluded from the hash, ``needs_apply`` must detect a
+        count difference even when the stable-field hash matches -- the drift bug the
+        Bibliotheca band-aids fixed locally, now fixed for every distributor here.
+        """
+        collection = db.collection()
+        identifier = IdentifierData(type="test identifier", identifier="drift")
+        one_day_ago = utc_now() - datetime.timedelta(days=1)
+
+        def circ(owned: int, available: int) -> CirculationData:
+            return CirculationData(
+                data_source_name="Test data source",
+                primary_identifier_data=identifier,
+                licenses_owned=owned,
+                licenses_available=available,
+                licenses_reserved=0,
+                patrons_in_hold_queue=0,
+            )
+
+        # Seed the pool to the "(5, 5) already applied" state.
+        pool, _ = circ(5, 5).license_pool(db.session, collection, autocreate=True)
+        pool.licenses_owned = 5
+        pool.licenses_available = 5
+        pool.licenses_reserved = 0
+        pool.patrons_in_hold_queue = 0
+        pool.updated_at = one_day_ago
+        pool.updated_at_data_hash = circ(5, 5).calculate_hash()
+
+        # Snapshot matches both the hash and the columns -> nothing to do.
+        assert circ(5, 5).needs_apply(db.session, collection) is False
+
+        # The columns drift out of band (e.g. the event importer) -- no hash restamp.
+        pool.licenses_available = 2
+
+        # The authoritative snapshot still reports (5, 5): the stable-field hash still
+        # matches, but the live columns no longer do -> apply.
+        assert circ(5, 5).needs_apply(db.session, collection) is True
+
+        # A snapshot that matches the (drifted) live columns needs no apply.
+        assert circ(5, 2).needs_apply(db.session, collection) is False
+
+    def test_needs_apply_skips_older_snapshot_even_when_counts_differ(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        """An older snapshot is not applied even when its counts differ from the columns.
+
+        Preserves the base staleness rule so newer (e.g. loan-driven) column state is
+        not overwritten by stale data.
+        """
+        collection = db.collection()
+        identifier = IdentifierData(type="test identifier", identifier="stale")
+        today = utc_now()
+        two_days_ago = today - datetime.timedelta(days=2)
+
+        circulation = CirculationData(
+            data_source_name="Test data source",
+            primary_identifier_data=identifier,
+            licenses_owned=5,
+            licenses_available=5,
+            licenses_reserved=0,
+            patrons_in_hold_queue=0,
+            updated_at=two_days_ago,  # the snapshot is old
+        )
+        pool, _ = circulation.license_pool(db.session, collection, autocreate=True)
+        pool.licenses_available = 0  # live columns differ from the snapshot
+        pool.updated_at = today  # the pool is newer than the snapshot
+        pool.updated_at_data_hash = circulation.calculate_hash()
+
+        # as_of (two_days_ago) < pool.updated_at (today) -> skip despite the difference.
+        assert circulation.needs_apply(db.session, collection) is False
+
     @pytest.mark.parametrize(
         "initial_type,new_type,expected_type",
         [
