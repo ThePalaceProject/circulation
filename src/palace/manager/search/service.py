@@ -363,7 +363,10 @@ class SearchServiceOpensearch1(SearchService, LoggerMixin):
         if not self._write_client.indices.exists(index=name):
             return False
         self.log.info(f"removing index {name}")
-        self._write_client.indices.delete(index=name)
+        # ignore=[404] covers the small window where the index is dropped between
+        # the exists() check and here, so a concurrent delete is a no-op rather
+        # than a NotFoundError.
+        self._write_client.indices.delete(index=name, ignore=[404])
         return True
 
 
