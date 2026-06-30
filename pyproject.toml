@@ -66,7 +66,7 @@ dependencies = [
     "itsdangerous>=2.1.2,<3",
     "joserfc>=1.7.1,<2",
     "jsonschema>=4.22.0,<5",
-    "jwcrypto>=1.4.2,<2",
+    "jwcrypto>=1.5.8,<2",
     "levenshtein>=0.27,<0.28",
     "lxml[html-clean]==6.1.1",
     "nameparser>=1.2.1,<2",  # nameparser is for author name manipulations
