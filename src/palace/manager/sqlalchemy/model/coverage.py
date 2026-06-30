@@ -1,4 +1,4 @@
-# BaseCoverageRecord, Timestamp
+# Timestamp
 from __future__ import annotations
 
 import datetime
@@ -27,23 +27,6 @@ from palace.manager.util.sentinel import SentinelType
 
 if TYPE_CHECKING:
     from palace.manager.sqlalchemy.model.collection import Collection
-
-
-class BaseCoverageRecord:
-    """Holds the ``coverage_status`` enum shared by the two dormant coverage models."""
-
-    SUCCESS = "success"
-    TRANSIENT_FAILURE = "transient failure"
-    PERSISTENT_FAILURE = "persistent failure"
-    REGISTERED = "registered"
-
-    status_enum = Enum(
-        SUCCESS,
-        TRANSIENT_FAILURE,
-        PERSISTENT_FAILURE,
-        REGISTERED,
-        name="coverage_status",
-    )
 
 
 class Timestamp(Base):
