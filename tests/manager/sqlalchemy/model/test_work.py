@@ -1232,6 +1232,22 @@ class TestWork:
             "medium" not in search_doc["licensepools"][0]
         )  # No presentation edition means no medium
 
+    def test_to_search_doc_fiction_status(self, db: DatabaseTransactionFixture):
+        # The fiction status is tri-state, and the search document must
+        # preserve all three states. In particular, an unclassified work
+        # (fiction is None) must not be indexed as nonfiction, or it would
+        # incorrectly match a nonfiction-only lane.
+        work = db.work(with_license_pool=True)
+
+        work.fiction = True
+        assert work.to_search_document()["fiction"] == "fiction"
+
+        work.fiction = False
+        assert work.to_search_document()["fiction"] == "nonfiction"
+
+        work.fiction = None
+        assert work.to_search_document()["fiction"] is None
+
     def test_to_search_doc_datetime_cases(self, db: DatabaseTransactionFixture):
         # datetime.dates are tz unaware and converting to timestamps may cause errors
         # if the local timezone pushes it out of a valid date range (eg. year 0)
