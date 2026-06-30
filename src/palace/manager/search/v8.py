@@ -20,15 +20,10 @@ class SearchV8(SearchSchemaRevision):
 
     This revision is intentionally **self-contained**: it does not inherit from
     any previous revision and defines its complete mapping (analyzers, filters,
-    and fields) directly. This is how new schema revisions are meant to be defined.
+    and fields) directly. This is how new schema revisions are to be defined.
 
-    We formed a bad habit for several old schema revisions where they just chained
-    off one another (``SearchV7`` -> ``SearchV6`` -> ``SearchV5``) which meant
-    no old revision could be removed without breaking the ones build on top of
-    it.
-
-    From now on every revision should stand alone so that, once nothing in
-    production is using an older version, that version's module can simply be deleted.
+    Every search revision should stand alone so that, once nothing in production
+    is using an older version, that version's module can simply be deleted.
 
     Changes in v8:
       - The shard and replica counts are set explicitly.
