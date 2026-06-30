@@ -21,7 +21,7 @@ class SearchSchemaRevision(ABC):
 
     def name_for_index(self, base_name: str) -> str:
         """Produce the name of the index as it will appear in Opensearch,
-        such as 'circulation-works-v5'."""
+        such as 'circulation-works-v8'."""
         return f"{base_name}-v{self.version}"
 
     def script_name(self, script_name: str) -> str:
