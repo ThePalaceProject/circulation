@@ -226,15 +226,15 @@ class BibliothecaCirculationUpdater(LoggerMixin):
             if identifier is not None:
                 identifiers_not_mentioned.discard(identifier)
 
-            # Two-track reconciliation (same shape as the OPDS importer): apply
-            # bibliographic metadata when its hash changed; otherwise apply
-            # circulation when CirculationData.needs_apply() says so. The latter is
-            # reliable for availability because CirculationData.should_apply_to()
-            # compares the pool's live columns (the availability counts are excluded
-            # from the dedup hash, which they would otherwise drift from -- the event
-            # importer and loan/hold operations mutate licenses_* without restamping
-            # it). When metadata changed, its embedded circulation rides along and is
-            # reconciled by CirculationData.apply's own should_apply_to.
+            # Two-track reconciliation: apply bibliographic metadata when its hash
+            # changed; otherwise apply circulation when CirculationData.needs_apply()
+            # says so. The latter is reliable for availability because
+            # CirculationData.should_apply_to() compares the pool's live columns (the
+            # availability counts are excluded from the dedup hash, which they would
+            # otherwise drift from -- the event importer and loan/hold operations
+            # mutate licenses_* without restamping it). When metadata changed, its
+            # embedded circulation rides along and is reconciled by
+            # CirculationData.apply's own should_apply_to.
             circulation = bibliographic.circulation
             if bibliographic.needs_apply(self._session):
                 if synchronous:

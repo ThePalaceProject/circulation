@@ -304,8 +304,9 @@ class CirculationData(BaseMutableData):
         changed_availability = False
         changed_lp_type = False
         changed_lp_status = False
-        # The early return above already filtered out pools whose content hash has
-        # not changed. If we reach this point with a pool, we know we need to apply the availability data.
+        # The early return above (should_apply_to) only let this pool through because
+        # either its stable-field hash changed or its live availability columns drifted
+        # from the incoming snapshot. Either way, we need to apply the availability data.
         if pool:
             # Update availability information. This may result in
             # the issuance of additional circulation events.
@@ -395,7 +396,7 @@ class CirculationData(BaseMutableData):
 
         Looks up the existing :class:`~palace.manager.sqlalchemy.model.licensing.LicensePool`
         for this object's primary identifier in *collection* and delegates to
-        :meth:`~palace.manager.data_layer.base.mutable.BaseMutableData.should_apply_to`.
+        :meth:`should_apply_to`.
 
         :param session: Active database session used to look up the pool.
         :param collection: The collection the pool belongs to.
@@ -407,15 +408,13 @@ class CirculationData(BaseMutableData):
     def fields_excluded_from_hash(self) -> set[str]:
         """Exclude the volatile availability counts from the dedup hash.
 
-        ``licenses_owned``/``licenses_available``/``licenses_reserved`` and
-        ``patrons_in_hold_queue`` are mutated **out of band** — by the event
-        importer, loan/hold operations, and the circulation dispatcher via
-        :meth:`~palace.manager.sqlalchemy.model.licensing.LicensePool.update_availability`
-        (and ``update_availability_from_delta`` / ``update_availability_from_licenses``)
-        — which never restamp ``updated_at_data_hash``.  The hash therefore cannot
-        track them, so they are excluded from it and compared against the pool's live
-        columns in :meth:`should_apply_to` instead.  Every other field is only ever
-        written by :meth:`apply`, so the hash stays a reliable change-signal for it.
+        Rule for any field added to :class:`CirculationData`: it may ride the dedup
+        hash only if it is *exclusively* written by :meth:`apply` — then the stored
+        hash (the data as of the last apply) still reflects the live row, so
+        "incoming hash != stored hash" is a sound change-signal. A field that the
+        database can mutate independently of :meth:`apply` will drift from the hash;
+        exclude it here and live-compare it in :meth:`should_apply_to` instead (as the
+        availability counts below are).
         """
         return super().fields_excluded_from_hash() | {
             "licenses_owned",
