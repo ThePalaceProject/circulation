@@ -6,8 +6,6 @@ read/write aliases at each new index but never deleted the index they replaced,
 so ``circulation-works-v5``, ``-v6`` and ``-v7`` linger in the cluster consuming
 shards and disk. This removes them if they are still present, skipping any index
 an alias still points at.
-
-TODO: Remove this task once it has run on all deployments.
 """
 
 from __future__ import annotations
@@ -22,5 +20,8 @@ from palace.manager.service.container import Services
 
 
 def run(services: Services, session: Session, log: logging.Logger) -> Signature | None:
+    # Removing a handful of indexes is a fast metadata operation, so we run it
+    # directly here rather than dispatching a Celery task. If OpenSearch is
+    # briefly unavailable this raises and the task runs again on the next boot.
     remove_search_indices(services.search.service(), [5, 6, 7], log=log)
     return None
