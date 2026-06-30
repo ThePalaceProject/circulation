@@ -1,5 +1,6 @@
+import re
+
 from palace.manager.search.revision import SearchSchemaRevision
-from palace.manager.search.v7 import SearchV7
 from palace.manager.search.v8 import SearchV8
 
 
@@ -25,15 +26,48 @@ class TestSearchV8:
         ]:
             assert setting in index
 
-    def test_mapping_matches_v7(self):
-        """v8 is a faithful, self-contained copy of the v7 schema: same fields
-        and same analysis settings. Only the index settings differ (v8 pins the
-        shard count)."""
-        v8_document = SearchV8().mapping_document()
-        v7_document = SearchV7().mapping_document()
+    def test_character_filters(self):
+        # Verify the functionality of the regular expressions we tell
+        # Opensearch to use when normalizing fields that will be used
+        # for searching.
+        filters = []
+        for filter_name in SearchV8.AUTHOR_CHAR_FILTER_NAMES:
+            configuration = SearchV8.CHAR_FILTERS[filter_name]
+            find = re.compile(configuration["pattern"])
+            replace = configuration["replacement"]
+            # Hack to (imperfectly) convert Java regex format to Python format.
+            # $1 -> \1
+            replace = replace.replace("$", "\\")
+            filters.append((find, replace))
 
-        assert v8_document.serialize_properties() == v7_document.serialize_properties()
-        assert v8_document.settings["analysis"] == v7_document.settings["analysis"]
-        # v7 left the shard count to an inherited default; v8 sets it explicitly.
-        assert "index" not in v7_document.settings
-        assert "index" in v8_document.settings
+        def filters_to(start, finish):
+            """When all the filters are applied to `start`,
+            the result is `finish`.
+            """
+            for find, replace in filters:
+                start = find.sub(replace, start)
+            assert start == finish
+
+        # Only the primary author is considered for sorting purposes.
+        filters_to("Adams, John Joseph ; Yu, Charles", "Adams, John Joseph")
+
+        # The special system author '[Unknown]' is replaced with
+        # REPLACEMENT CHARACTER so it will be last in sorted lists.
+        filters_to("[Unknown]", "\N{REPLACEMENT CHARACTER}")
+
+        # Periods are removed.
+        filters_to("Tepper, Sheri S.", "Tepper, Sheri S")
+        filters_to("Tepper, Sheri S", "Tepper, Sheri S")
+
+        # The initials of authors who go by initials are normalized
+        # so that their books all sort together.
+        filters_to("Wells, HG", "Wells, HG")
+        filters_to("Wells, H G", "Wells, HG")
+        filters_to("Wells, H.G.", "Wells, HG")
+        filters_to("Wells, H. G.", "Wells, HG")
+
+        # It works with up to three initials.
+        filters_to("Tolkien, J. R. R.", "Tolkien, JRR")
+
+        # Parentheticals are removed.
+        filters_to("Wells, H. G. (Herbert George)", "Wells, HG")
