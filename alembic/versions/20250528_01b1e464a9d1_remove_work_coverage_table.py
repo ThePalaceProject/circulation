@@ -12,8 +12,6 @@ from alembic import op
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Unicode
 from sqlalchemy.dialects import postgresql
 
-from palace.manager.sqlalchemy.model.coverage import BaseCoverageRecord
-
 # revision identifiers, used by Alembic.
 revision = "01b1e464a9d1"
 down_revision = "d671b95566fb"
@@ -80,8 +78,11 @@ def downgrade() -> None:
         sa.Column(
             "status",
             postgresql.ENUM(
-                *BaseCoverageRecord.status_enum.enums,  #  type: ignore[attr-defined]
-                name=BaseCoverageRecord.status_enum.name,
+                "success",
+                "transient failure",
+                "persistent failure",
+                "registered",
+                name="coverage_status",
                 create_type=False,
             ),
             index=True,

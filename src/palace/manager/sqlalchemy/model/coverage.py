@@ -1,4 +1,4 @@
-# BaseCoverageRecord, Timestamp
+# Timestamp
 from __future__ import annotations
 
 import datetime
@@ -18,7 +18,6 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
-from sqlalchemy.sql.expression import or_
 
 from palace.util.datetime_helpers import utc_now
 
@@ -28,71 +27,6 @@ from palace.manager.util.sentinel import SentinelType
 
 if TYPE_CHECKING:
     from palace.manager.sqlalchemy.model.collection import Collection
-
-
-class BaseCoverageRecord:
-    """Contains useful constants used by CoverageRecord."""
-
-    SUCCESS = "success"
-    TRANSIENT_FAILURE = "transient failure"
-    PERSISTENT_FAILURE = "persistent failure"
-    REGISTERED = "registered"
-
-    ALL_STATUSES = [REGISTERED, SUCCESS, TRANSIENT_FAILURE, PERSISTENT_FAILURE]
-
-    # Count coverage as attempted if the record is not 'registered'.
-    PREVIOUSLY_ATTEMPTED = [SUCCESS, TRANSIENT_FAILURE, PERSISTENT_FAILURE]
-
-    # By default, count coverage as present if it ended in
-    # success or in persistent failure. Do not count coverage
-    # as present if it ended in transient failure.
-    DEFAULT_COUNT_AS_COVERED = [SUCCESS, PERSISTENT_FAILURE]
-
-    status_enum = Enum(
-        SUCCESS,
-        TRANSIENT_FAILURE,
-        PERSISTENT_FAILURE,
-        REGISTERED,
-        name="coverage_status",
-    )
-
-    @classmethod
-    def not_covered(
-        cls, count_as_covered=None, count_as_not_covered_if_covered_before=None
-    ):
-        """Filter a query to find only items without coverage records.
-
-        :param count_as_covered: A list of constants that indicate
-            types of coverage records that should count as 'coverage'
-            for purposes of this query.
-        :param count_as_not_covered_if_covered_before: If a coverage record
-            exists, but is older than the given date, do not count it as
-            covered.
-        :return: A clause that can be passed in to Query.filter().
-        """
-
-        if not count_as_covered:
-            count_as_covered = cls.DEFAULT_COUNT_AS_COVERED
-        elif isinstance(count_as_covered, (bytes, str)):
-            count_as_covered = [count_as_covered]
-
-        # If there is no coverage record, then of course the item is
-        # not covered.
-        missing = cls.id == None
-
-        # If we're looking for specific coverage statuses, then a
-        # record does not count if it has some other status.
-        missing = or_(missing, ~cls.status.in_(count_as_covered))
-
-        # If the record's timestamp is before the cutoff time, we
-        # don't count it as covered, regardless of which status it
-        # has.
-        if count_as_not_covered_if_covered_before:
-            missing = or_(
-                missing, cls.timestamp < count_as_not_covered_if_covered_before
-            )
-
-        return missing
 
 
 class Timestamp(Base):
