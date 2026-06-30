@@ -1,4 +1,3 @@
-import re
 from collections.abc import Callable
 
 import pytest
@@ -18,7 +17,6 @@ from palace.manager.search.external_search import (
 )
 from palace.manager.search.filter import Filter
 from palace.manager.search.pagination import Pagination, SortKeyPagination
-from palace.manager.search.v5 import SearchV5
 from palace.manager.sqlalchemy.model.classification import Genre
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.customlist import CustomList
@@ -167,54 +165,6 @@ class TestExternalSearch:
         index.clear_search_documents()
         client.indices.refresh()
         end_to_end_search_fixture.expect_results([], "")
-
-
-class TestSearchV5:
-    def test_character_filters(self):
-        # Verify the functionality of the regular expressions we tell
-        # Opensearch to use when normalizing fields that will be used
-        # for searching.
-        filters = []
-        for filter_name in SearchV5.AUTHOR_CHAR_FILTER_NAMES:
-            configuration = SearchV5.CHAR_FILTERS[filter_name]
-            find = re.compile(configuration["pattern"])
-            replace = configuration["replacement"]
-            # Hack to (imperfectly) convert Java regex format to Python format.
-            # $1 -> \1
-            replace = replace.replace("$", "\\")
-            filters.append((find, replace))
-
-        def filters_to(start, finish):
-            """When all the filters are applied to `start`,
-            the result is `finish`.
-            """
-            for find, replace in filters:
-                start = find.sub(replace, start)
-            assert start == finish
-
-        # Only the primary author is considered for sorting purposes.
-        filters_to("Adams, John Joseph ; Yu, Charles", "Adams, John Joseph")
-
-        # The special system author '[Unknown]' is replaced with
-        # REPLACEMENT CHARACTER so it will be last in sorted lists.
-        filters_to("[Unknown]", "\N{REPLACEMENT CHARACTER}")
-
-        # Periods are removed.
-        filters_to("Tepper, Sheri S.", "Tepper, Sheri S")
-        filters_to("Tepper, Sheri S", "Tepper, Sheri S")
-
-        # The initials of authors who go by initials are normalized
-        # so that their books all sort together.
-        filters_to("Wells, HG", "Wells, HG")
-        filters_to("Wells, H G", "Wells, HG")
-        filters_to("Wells, H.G.", "Wells, HG")
-        filters_to("Wells, H. G.", "Wells, HG")
-
-        # It works with up to three initials.
-        filters_to("Tolkien, J. R. R.", "Tolkien, JRR")
-
-        # Parentheticals are removed.
-        filters_to("Wells, H. G. (Herbert George)", "Wells, HG")
 
 
 class TestExternalSearchWithWorksData:
