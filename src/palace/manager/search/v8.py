@@ -28,17 +28,22 @@ class SearchV8(SearchSchemaRevision):
 
     Schema-wise, v8 is equivalent to v7 (the full v5 mapping plus v6's
     ``lane_priority_level`` field and v7's ``licensepools.last_updated`` field).
-    The mapping is unchanged; the differences are both in the index settings.
+    The mapping is unchanged; the differences are all in the index settings,
+    which v8 pins explicitly so that a newly created index is fully
+    deterministic rather than relying on inherited cluster defaults.
 
-    First, an explicit ``number_of_shards``. Earlier indexes inherited a
-    primary-shard count of 5 from the original Elasticsearch-era defaults,
-    carried forward through successive reindexes. ``number_of_shards`` is
-    immutable after index creation, so it must be set correctly up front;
-    pinning it here breaks that inheritance.
+    The shard and replica counts are set explicitly. ``number_of_shards`` is
+    pinned to 1: earlier indexes inherited a primary-shard count of 5 from the
+    original Elasticsearch-era defaults, carried forward through successive
+    reindexes, and since it is immutable after creation it must be set up front.
+    ``number_of_replicas`` is pinned to 1, the count every production index
+    already runs; it is dynamic and may still be retuned at runtime for a larger
+    topology.
 
-    Second, search slow-query-log thresholds (``index.search.slowlog.threshold.*``)
-    so that slow queries surface in the cluster slow log on every index this
-    revision builds. These are dynamic and remain tunable on a live index.
+    v8 also sets search slow-query-log thresholds
+    (``index.search.slowlog.threshold.*``) so that slow queries surface in the
+    cluster slow log on every index this revision builds; these too remain
+    tunable on a live index.
     """
 
     @property
@@ -50,6 +55,14 @@ class SearchV8(SearchSchemaRevision):
     # 10-30 GiB per-shard target for search workloads, so a single primary
     # shard is correct. This setting is immutable once an index is created.
     NUMBER_OF_SHARDS = 1
+
+    # The number of replicas for indexes created by this revision. Every
+    # production index currently runs a single replica (one full copy per data
+    # node across the two-AZ clusters), which is also the OpenSearch default.
+    # Unlike NUMBER_OF_SHARDS this is a dynamic setting and may be raised at
+    # runtime for a larger topology; it is pinned here only so that indexes are
+    # created with a known replica count rather than an inherited cluster default.
+    NUMBER_OF_REPLICAS = 1
 
     # Slow-query-log thresholds applied to every index this revision creates.
     # OpenSearch logs a query- or fetch-phase that exceeds one of these
@@ -297,14 +310,13 @@ class SearchV8(SearchSchemaRevision):
             normalizer=dict(self._normalizers),
             analyzer=dict(self._analyzers),
         )
-        # Pin the primary shard count explicitly. This is immutable after index
-        # creation and must not be left to an inherited/cluster default. The
-        # number of replicas is deliberately *not* set here: it is mutable at
-        # runtime and managed operationally for high availability (for example,
-        # Multi-AZ-with-Standby uses two replicas), so it should not be frozen
-        # into an immutable schema revision.
+        # Pin the shard and replica counts explicitly so the index is created
+        # with a deterministic configuration rather than inheriting a cluster
+        # default. number_of_shards is immutable after creation; number_of_replicas
+        # is dynamic and may still be retuned at runtime for high availability.
         document.settings["index"] = {
             "number_of_shards": self.NUMBER_OF_SHARDS,
+            "number_of_replicas": self.NUMBER_OF_REPLICAS,
             **self.SEARCH_SLOWLOG_THRESHOLDS,
         }
         document.properties = self._fields

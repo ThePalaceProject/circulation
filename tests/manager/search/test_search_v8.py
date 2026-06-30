@@ -26,6 +26,12 @@ class TestSearchV8:
         document = SearchV8().mapping_document()
         assert document.settings["index"]["number_of_shards"] == 1
 
+    def test_pins_number_of_replicas(self):
+        """The replica count is pinned explicitly so indexes are created with a
+        deterministic count rather than an inherited cluster default."""
+        document = SearchV8().mapping_document()
+        assert document.settings["index"]["number_of_replicas"] == 1
+
     def test_sets_search_slowlog_thresholds(self):
         """Slow-query-log thresholds are seeded so slow queries surface in the
         cluster slow log (and onward to CloudWatch) on every index v8 builds."""
