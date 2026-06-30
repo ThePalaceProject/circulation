@@ -1,3 +1,4 @@
+import logging
 from unittest.mock import MagicMock
 
 import pytest
@@ -7,6 +8,7 @@ from palace.manager.search.service import (
     SearchDocument,
     SearchPointer,
     SearchServiceOpensearch1,
+    remove_search_indices,
 )
 from tests.fixtures.search import ExternalSearchFixture
 from tests.mocks.search import MockSearchSchemaRevision
@@ -83,6 +85,23 @@ class TestService:
         assert indices.exists(
             index=revision.name_for_index(external_search_fixture.index_prefix)
         )
+
+    def test_index_remove(self, external_search_fixture: ExternalSearchFixture):
+        """index_remove deletes an existing index and is a no-op if it's absent."""
+        service = external_search_fixture.service
+        revision = MockSearchSchemaRevision(23)
+        service.index_create(revision)
+
+        name = revision.name_for_index(external_search_fixture.index_prefix)
+        indices = external_search_fixture.write_client.indices
+        assert indices.exists(index=name)
+
+        # Removing an existing index reports True and the index is gone.
+        assert service.index_remove(name) is True
+        assert not indices.exists(index=name)
+
+        # Removing a missing index is a no-op that reports False.
+        assert service.index_remove(name) is False
 
     def test_read_pointer_none(self, external_search_fixture: ExternalSearchFixture):
         """The read pointer is initially unset."""
@@ -199,3 +218,55 @@ class TestService:
         pointer = service._get_pointer("base-search-read")
         assert pointer is None
         mock_client.indices.get_alias.assert_called_once_with(name="base-search-read")
+
+
+class TestRemoveSearchIndices:
+    def test_removes_old_indices(self, external_search_fixture: ExternalSearchFixture):
+        service = external_search_fixture.service
+        base = external_search_fixture.index_prefix
+        indices = external_search_fixture.write_client.indices
+
+        # A current index that both aliases point at, plus old leftovers.
+        current = MockSearchSchemaRevision(8)
+        service.index_create(current)
+        service.read_pointer_set(current)
+        service.write_pointer_set(current)
+        for version in (5, 6, 7):
+            service.index_create(MockSearchSchemaRevision(version))
+
+        removed = remove_search_indices(
+            service, [5, 6, 7], log=logging.getLogger("test")
+        )
+
+        assert set(removed) == {f"{base}-v{version}" for version in (5, 6, 7)}
+        for version in (5, 6, 7):
+            assert not indices.exists(index=f"{base}-v{version}")
+        # The live index is untouched.
+        assert indices.exists(index=f"{base}-v8")
+
+    def test_skips_aliased_index(self, external_search_fixture: ExternalSearchFixture):
+        """An index a read or write alias still points at is never removed."""
+        service = external_search_fixture.service
+        base = external_search_fixture.index_prefix
+        indices = external_search_fixture.write_client.indices
+
+        # Point the read alias at an "old" version, as if a migration were still
+        # in progress and the read pointer had not yet moved on.
+        old = MockSearchSchemaRevision(5)
+        service.index_create(old)
+        service.read_pointer_set(old)
+
+        removed = remove_search_indices(service, [5], log=logging.getLogger("test"))
+
+        assert removed == []
+        assert indices.exists(index=f"{base}-v5")
+
+    def test_missing_index_is_noop(
+        self, external_search_fixture: ExternalSearchFixture
+    ):
+        """Removing versions whose indexes don't exist is a harmless no-op."""
+        service = external_search_fixture.service
+        removed = remove_search_indices(
+            service, [5, 6, 7], log=logging.getLogger("test")
+        )
+        assert removed == []
