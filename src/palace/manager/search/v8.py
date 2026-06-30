@@ -20,62 +20,39 @@ class SearchV8(SearchSchemaRevision):
 
     This revision is intentionally **self-contained**: it does not inherit from
     any previous revision and defines its complete mapping (analyzers, filters,
-    and fields) directly. Earlier revisions chained off one another
-    (``SearchV7`` -> ``SearchV6`` -> ``SearchV5``), which meant no old revision
-    could be removed without breaking the ones built on top of it. Every
-    revision should stand alone so that, once nothing in production is using an
-    older version, that version's module can simply be deleted.
+    and fields) directly. This is how new schema revisions are meant to be defined.
 
-    Schema-wise, v8 is equivalent to v7 (the full v5 mapping plus v6's
-    ``lane_priority_level`` field and v7's ``licensepools.last_updated`` field).
-    The mapping is unchanged; the differences are all in the index settings,
-    which v8 pins explicitly so that a newly created index is fully
-    deterministic rather than relying on inherited cluster defaults.
+    We formed a bad habit for several old schema revisions where they just chained
+    off one another (``SearchV7`` -> ``SearchV6`` -> ``SearchV5``) which meant
+    no old revision could be removed without breaking the ones build on top of
+    it.
 
-    The shard and replica counts are set explicitly. ``number_of_shards`` is
-    pinned to 1: earlier indexes inherited a primary-shard count of 5 from the
-    original Elasticsearch-era defaults, carried forward through successive
-    reindexes, and since it is immutable after creation it must be set up front.
-    ``number_of_replicas`` is pinned to 1, the count every production index
-    already runs; it is dynamic and may still be retuned at runtime for a larger
-    topology.
+    From now on every revision should stand alone so that, once nothing in
+    production is using an older version, that version's module can simply be deleted.
 
-    v8 also sets search slow-query-log thresholds
-    (``index.search.slowlog.threshold.*``) so that slow queries surface in the
-    cluster slow log on every index this revision builds; these too remain
-    tunable on a live index.
+    Changes in v8:
+      - The shard and replica counts are set explicitly.
+      - sets search slow-query-log thresholds
     """
 
     @property
     def version(self) -> int:
         return 8
 
-    # The number of primary shards for indexes created by this revision. Our
-    # per-library indexes are well under a gigabyte each, far below the
-    # 10-30 GiB per-shard target for search workloads, so a single primary
-    # shard is correct. This setting is immutable once an index is created.
+    # The number of primary shards for indexes created by this revision.
+    # This setting is immutable once an index is created.
     NUMBER_OF_SHARDS = 1
 
-    # The number of replicas for indexes created by this revision. Every
-    # production index currently runs a single replica (one full copy per data
-    # node across the two-AZ clusters), which is also the OpenSearch default.
-    # Unlike NUMBER_OF_SHARDS this is a dynamic setting and may be raised at
-    # runtime for a larger topology; it is pinned here only so that indexes are
-    # created with a known replica count rather than an inherited cluster default.
+    # The number of replicas for indexes created by this revision.
     NUMBER_OF_REPLICAS = 1
 
     # Slow-query-log thresholds applied to every index this revision creates.
-    # OpenSearch logs a query- or fetch-phase that exceeds one of these
-    # durations at the matching level, and AWS forwards those entries to the
-    # domain's SEARCH_SLOW_LOGS CloudWatch group. Unlike NUMBER_OF_SHARDS these
-    # are dynamic settings: they give each new index a baseline that can still
-    # be retuned on a live index without a reindex. Keys are relative to "index".
+    #  Keys are relative to "index".
     SEARCH_SLOWLOG_THRESHOLDS = {
-        "search.slowlog.threshold.query.warn": "2s",
+        "search.slowlog.threshold.query.warn": "3s",
         "search.slowlog.threshold.query.info": "1s",
-        "search.slowlog.threshold.query.debug": "500ms",
-        "search.slowlog.threshold.fetch.warn": "1s",
-        "search.slowlog.threshold.fetch.info": "500ms",
+        "search.slowlog.threshold.fetch.warn": "3s",
+        "search.slowlog.threshold.fetch.info": "1s",
     }
 
     # Use regular expressions to normalized values in sortable fields.
@@ -116,7 +93,6 @@ class SearchV8(SearchSchemaRevision):
         super().__init__()
 
         self._normalizers = {}
-        self._char_filters = {}
         self._filters = {}
         self._analyzers = {}
 
@@ -310,10 +286,7 @@ class SearchV8(SearchSchemaRevision):
             normalizer=dict(self._normalizers),
             analyzer=dict(self._analyzers),
         )
-        # Pin the shard and replica counts explicitly so the index is created
-        # with a deterministic configuration rather than inheriting a cluster
-        # default. number_of_shards is immutable after creation; number_of_replicas
-        # is dynamic and may still be retuned at runtime for high availability.
+        # Index settings
         document.settings["index"] = {
             "number_of_shards": self.NUMBER_OF_SHARDS,
             "number_of_replicas": self.NUMBER_OF_REPLICAS,
