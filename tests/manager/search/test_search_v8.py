@@ -26,6 +26,16 @@ class TestSearchV8:
         document = SearchV8().mapping_document()
         assert document.settings["index"]["number_of_shards"] == 1
 
+    def test_sets_search_slowlog_thresholds(self):
+        """Slow-query-log thresholds are seeded so slow queries surface in the
+        cluster slow log (and onward to CloudWatch) on every index v8 builds."""
+        index = SearchV8().mapping_document().settings["index"]
+        assert index["search.slowlog.threshold.query.warn"] == "2s"
+        assert index["search.slowlog.threshold.query.info"] == "1s"
+        assert index["search.slowlog.threshold.query.debug"] == "500ms"
+        assert index["search.slowlog.threshold.fetch.warn"] == "1s"
+        assert index["search.slowlog.threshold.fetch.info"] == "500ms"
+
     def test_mapping_matches_v7(self):
         """v8 is a faithful, self-contained copy of the v7 schema: same fields
         and same analysis settings. Only the index settings differ (v8 pins the

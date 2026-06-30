@@ -28,11 +28,17 @@ class SearchV8(SearchSchemaRevision):
 
     Schema-wise, v8 is equivalent to v7 (the full v5 mapping plus v6's
     ``lane_priority_level`` field and v7's ``licensepools.last_updated`` field).
-    The one deliberate addition is an explicit ``number_of_shards`` index
-    setting. Earlier indexes inherited a primary-shard count of 5 from the
-    original Elasticsearch-era defaults, carried forward through successive
-    reindexes. ``number_of_shards`` is immutable after index creation, so it
-    must be set correctly up front; pinning it here breaks that inheritance.
+    The mapping is unchanged; the differences are both in the index settings.
+
+    First, an explicit ``number_of_shards``. Earlier indexes inherited a
+    primary-shard count of 5 from the original Elasticsearch-era defaults,
+    carried forward through successive reindexes. ``number_of_shards`` is
+    immutable after index creation, so it must be set correctly up front;
+    pinning it here breaks that inheritance.
+
+    Second, search slow-query-log thresholds (``index.search.slowlog.threshold.*``)
+    so that slow queries surface in the cluster slow log on every index this
+    revision builds. These are dynamic and remain tunable on a live index.
     """
 
     @property
@@ -44,6 +50,20 @@ class SearchV8(SearchSchemaRevision):
     # 10-30 GiB per-shard target for search workloads, so a single primary
     # shard is correct. This setting is immutable once an index is created.
     NUMBER_OF_SHARDS = 1
+
+    # Slow-query-log thresholds applied to every index this revision creates.
+    # OpenSearch logs a query- or fetch-phase that exceeds one of these
+    # durations at the matching level, and AWS forwards those entries to the
+    # domain's SEARCH_SLOW_LOGS CloudWatch group. Unlike NUMBER_OF_SHARDS these
+    # are dynamic settings: they give each new index a baseline that can still
+    # be retuned on a live index without a reindex. Keys are relative to "index".
+    SEARCH_SLOWLOG_THRESHOLDS = {
+        "search.slowlog.threshold.query.warn": "2s",
+        "search.slowlog.threshold.query.info": "1s",
+        "search.slowlog.threshold.query.debug": "500ms",
+        "search.slowlog.threshold.fetch.warn": "1s",
+        "search.slowlog.threshold.fetch.info": "500ms",
+    }
 
     # Use regular expressions to normalized values in sortable fields.
     # These regexes are applied in order; that way "H. G. Wells"
@@ -283,6 +303,9 @@ class SearchV8(SearchSchemaRevision):
         # runtime and managed operationally for high availability (for example,
         # Multi-AZ-with-Standby uses two replicas), so it should not be frozen
         # into an immutable schema revision.
-        document.settings["index"] = {"number_of_shards": self.NUMBER_OF_SHARDS}
+        document.settings["index"] = {
+            "number_of_shards": self.NUMBER_OF_SHARDS,
+            **self.SEARCH_SLOWLOG_THRESHOLDS,
+        }
         document.properties = self._fields
         return document
