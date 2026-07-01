@@ -1803,10 +1803,9 @@ class OverdriveAPI(
         """Fetch Overdrive bibliographic metadata, apply it to the Edition, and
         make the LicensePool's Work presentation-ready.
 
-        This replaces the former ``OverdriveBibliographicCoverageProvider``
-        path that ran inside :meth:`update_licensepool`. A bad or unrecognized
-        Overdrive ID simply leaves the pool without a Work, matching the prior
-        behavior (``update_licensepool`` ignored the coverage result).
+        A bad or unrecognized Overdrive ID leaves the pool without a Work
+        rather than raising, so a single unknown title does not abort the
+        wider availability update.
         """
         identifier = license_pool.identifier
         info = self.metadata_lookup(identifier)
@@ -1837,11 +1836,9 @@ class OverdriveAPI(
                 replace=ReplacementPolicy.from_license_source(),
             )
         except Exception as e:
-            # Mirror the resilience of the former
-            # ``BibliographicCoverageProvider.set_bibliographic``: a database
-            # error or unexpected data shape during apply should not crash
-            # ``update_licensepool``. Log and leave the pool without updated
-            # coverage, matching the prior "silently continue" behavior.
+            # A failure while applying the bibliographic data must not abort the
+            # surrounding availability update, so log it and leave the pool's
+            # presentation edition unchanged.
             self.log.warning(
                 "Error applying Overdrive bibliographic data to edition %s: %s",
                 edition.id,
