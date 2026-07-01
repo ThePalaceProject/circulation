@@ -8,6 +8,7 @@ import pytest
 
 from palace.util.datetime_helpers import utc_now
 from palace.util.exceptions import BasePalaceException, PalaceValueError
+from palace.util.log import LogLevel
 
 from palace.manager.api.circulation.data import HoldInfo, LoanInfo
 from palace.manager.api.circulation.exceptions import (
@@ -1783,6 +1784,7 @@ class TestOverdriveAPI:
         # An exception raised while applying bibliographic data is caught and
         # logged rather than propagating out of update_licensepool, so one bad
         # title does not abort the wider availability update.
+        caplog.set_level(LogLevel.warning)
         api = overdrive_api_fixture.api
         identifier = db.identifier(identifier_type=Identifier.OVERDRIVE_ID)
         pool, _ = LicensePool.for_foreign_id(
