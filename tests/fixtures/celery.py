@@ -192,7 +192,6 @@ class ApplyBibliographicCall:
             edition,
             collection,
             replace=self.replace,
-            create_coverage_record=False,
         )
 
 

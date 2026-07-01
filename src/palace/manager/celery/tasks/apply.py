@@ -107,9 +107,7 @@ def bibliographic_apply(
             load_from_id(session, Collection, collection_id) if collection_id else None
         )
 
-        bibliographic.apply(
-            session, edition, collection, replace, create_coverage_record=False
-        )
+        bibliographic.apply(session, edition, collection, replace)
 
 
 class ApplyBibliographicCallable(Protocol):
