@@ -18,6 +18,7 @@ from requests.structures import CaseInsensitiveDict
 from sqlalchemy.orm import Session
 
 from palace.util.datetime_helpers import utc_now
+from palace.util.exceptions import BasePalaceException
 
 from palace.manager.api.circulation.base import (
     BaseCirculationAPI,
@@ -1835,7 +1836,7 @@ class OverdriveAPI(
                 self.collection,
                 replace=ReplacementPolicy.from_license_source(),
             )
-        except Exception as e:
+        except BasePalaceException as e:
             # A failure while applying the bibliographic data must not abort the
             # surrounding availability update, so log it and leave the pool's
             # presentation edition unchanged.
