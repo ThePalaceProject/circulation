@@ -33,6 +33,7 @@ Docker images created from this code are available at:
 - [circ-webapp](https://github.com/ThePalaceProject/circulation/pkgs/container/circ-webapp)
 - [circ-scripts](https://github.com/ThePalaceProject/circulation/pkgs/container/circ-scripts)
 - [circ-exec](https://github.com/ThePalaceProject/circulation/pkgs/container/circ-exec)
+- [circ-celery](https://github.com/ThePalaceProject/circulation/pkgs/container/circ-celery)
 
 Docker images are the preferred way to deploy this code in a production environment.
 
@@ -243,6 +244,29 @@ pass a broker URL and a result backend URL to the application.
 We support overriding a number of other Celery settings via environment variables, but in most cases
 the defaults should be sufficient. The full list of settings can be found in
 [`service/celery/configuration.py`](src/palace/manager/service/celery/configuration.py).
+
+##### `circ-celery` image
+
+The `circ-celery` image runs a single Celery process per container, so it can be deployed as the beat
+scheduler, one or more autoscaled worker pools, and the CloudWatch metrics camera — all from the same
+image. The role is chosen by the container command (`beat`, `worker`, or `cloudwatch`), and a few
+launch-time variables (read by the container's entrypoint, not by the application) configure the
+`worker` role:
+
+- `PALACE_CELERY_QUEUES`: Comma-separated list of queues a `worker` container should consume, e.g.
+    `high,default` (**required for the `worker` role**). Each queue's tasks are defined by
+    [`QueueNames`](src/palace/manager/service/celery/celery.py).
+- `PALACE_CELERY_CONCURRENCY`: The number of child processes for a `worker` container. This is a single
+    pool shared across all of the queues that container consumes; to give a queue its own concurrency,
+    run a separate `worker` deployment with its own `PALACE_CELERY_QUEUES`/`PALACE_CELERY_CONCURRENCY`.
+    The default is `1` (optional).
+- `PALACE_CELERY_WORKER_HOSTNAME`: The Celery `--hostname` for a `worker` container. The default is
+    `worker@%h` (optional).
+- `PALACE_CELERY_CLOUDWATCH_FLUSH_INTERVAL`: How often, in seconds, the `cloudwatch` role flushes queue
+    metrics. The default is `60` (optional).
+
+The `beat` and `cloudwatch` roles must each run as a single instance (a second beat would double-fire
+scheduled tasks); only the `worker` role should be scaled.
 
 #### Redis
 
