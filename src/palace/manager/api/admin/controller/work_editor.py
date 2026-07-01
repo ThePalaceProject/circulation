@@ -458,10 +458,6 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
         library = get_request_library()
         self.require_librarian(library)
 
-        work = self.load_work(library, identifier_type, identifier)
-        if isinstance(work, ProblemDetail):
-            return work
-
         return METADATA_REFRESH_FAILURE
 
     def classifications(
