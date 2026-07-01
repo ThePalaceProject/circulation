@@ -77,6 +77,37 @@ $ docker run --name search_index_refresh -it \
     ghcr.io/thepalaceproject/circ-exec:main
 ```
 
+### circ-celery
+
+This image runs a single Celery process per container. Unlike `circ-scripts`, which supervises the
+beat scheduler and every worker in one container with runit, `circ-celery` runs exactly one process,
+so each role can be deployed and (for workers) autoscaled independently. The role is chosen by the
+container command: `beat`, `worker`, or `cloudwatch`.
+
+```sh
+# The beat scheduler (run exactly one of these).
+$ docker run --name celery-beat -d \
+    -e PALACE_CELERY_BROKER_URL='redis://[host]:6379/0' \
+    -e PALACE_CELERY_RESULT_BACKEND='redis://[host]:6379/2' \
+    -e SIMPLIFIED_PRODUCTION_DATABASE='postgresql://[username]:[password]@[host]:[port]/[database_name]' \
+    ghcr.io/thepalaceproject/circ-celery:main beat
+
+# A worker pool (scale the replica count on queue depth). PALACE_CELERY_QUEUES is required.
+$ docker run --name celery-worker -d \
+    -e PALACE_CELERY_BROKER_URL='redis://[host]:6379/0' \
+    -e PALACE_CELERY_RESULT_BACKEND='redis://[host]:6379/2' \
+    -e SIMPLIFIED_PRODUCTION_DATABASE='postgresql://[username]:[password]@[host]:[port]/[database_name]' \
+    -e PALACE_CELERY_QUEUES='high,default' \
+    -e PALACE_CELERY_CONCURRENCY='8' \
+    ghcr.io/thepalaceproject/circ-celery:main worker
+```
+
+The `worker` launch variables (`PALACE_CELERY_QUEUES`, `PALACE_CELERY_CONCURRENCY`,
+`PALACE_CELERY_WORKER_HOSTNAME`) and the `cloudwatch` flush interval
+(`PALACE_CELERY_CLOUDWATCH_FLUSH_INTERVAL`) are documented in the top-level
+[`README.md`](../README.md). Logs are written to stdout/stderr rather than to files, so nothing is
+lost when an autoscaled worker is scaled away.
+
 ## Environment Variables
 
 Environment variables can be set with the `-e VARIABLE_KEY='variable_value'` option on the `docker run` command.

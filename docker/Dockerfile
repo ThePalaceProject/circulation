@@ -64,6 +64,34 @@ WORKDIR /home/palace/circulation/bin
 CMD ["/sbin/my_init"]
 
 ###############################################################################
+## Circ-celery Image
+##
+## A single image that runs one Celery process per container. The role is
+## selected by the first argument to the entrypoint (beat|worker|cloudwatch),
+## so one image backs the beat scheduler, every autoscaled worker pool, and the
+## CloudWatch metrics camera. Unlike the scripts image, it does NOT use runit to
+## supervise several processes -- one process per container is what lets the
+## worker pools be scaled horizontally, and the beat scheduler be pinned to a
+## single instance.
+###############################################################################
+
+FROM common AS celery
+
+# Set the local timezone so log timestamps line up with the other images. Beat's
+# own schedule is driven by the Celery `timezone` setting, not this.
+ENV TZ=US/Eastern
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime
+
+COPY --chmod=755 docker/celery-entrypoint.sh /celery-entrypoint.sh
+
+WORKDIR /var/www/circulation
+
+# The role is provided as the container command, e.g. `docker run circ-celery
+# worker`, with PALACE_CELERY_QUEUES / PALACE_CELERY_CONCURRENCY set for worker
+# pools. See docker/celery-entrypoint.sh for the supported roles and env vars.
+ENTRYPOINT ["/celery-entrypoint.sh"]
+
+###############################################################################
 ## Circ-webapp Image
 ###############################################################################
 
