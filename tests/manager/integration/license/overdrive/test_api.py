@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, create_autospec, patch
 import pytest
 
 from palace.util.datetime_helpers import utc_now
-from palace.util.exceptions import BasePalaceException
+from palace.util.exceptions import BasePalaceException, PalaceValueError
 
 from palace.manager.api.circulation.data import HoldInfo, LoanInfo
 from palace.manager.api.circulation.exceptions import (
@@ -1795,7 +1795,7 @@ class TestOverdriveAPI:
 
         api.metadata_lookup = MagicMock(return_value={"id": identifier.identifier})
         bibliographic = MagicMock()
-        bibliographic.apply.side_effect = ValueError("boom")
+        bibliographic.apply.side_effect = PalaceValueError("boom")
 
         with patch.object(
             OverdriveRepresentationExtractor,
@@ -1808,6 +1808,35 @@ class TestOverdriveAPI:
         bibliographic.apply.assert_called_once()
         assert not pool.work
         assert "Error applying Overdrive bibliographic data" in caplog.text
+
+    def test_ensure_bibliographic_coverage_reraises_unexpected_error(
+        self,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        db: DatabaseTransactionFixture,
+    ):
+        # An unexpected error (e.g. a programming bug) is not swallowed: only
+        # BasePalaceException is caught, so anything else propagates.
+        api = overdrive_api_fixture.api
+        identifier = db.identifier(identifier_type=Identifier.OVERDRIVE_ID)
+        pool, _ = LicensePool.for_foreign_id(
+            db.session,
+            DataSource.OVERDRIVE,
+            Identifier.OVERDRIVE_ID,
+            identifier.identifier,
+            collection=overdrive_api_fixture.collection,
+        )
+
+        api.metadata_lookup = MagicMock(return_value={"id": identifier.identifier})
+        bibliographic = MagicMock()
+        bibliographic.apply.side_effect = KeyError("typo")
+
+        with patch.object(
+            OverdriveRepresentationExtractor,
+            "book_info_to_bibliographic",
+            return_value=bibliographic,
+        ):
+            with pytest.raises(KeyError):
+                api._ensure_bibliographic_coverage(pool)
 
     def test_update_new_licensepool(
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
