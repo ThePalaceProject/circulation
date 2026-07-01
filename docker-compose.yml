@@ -1,34 +1,39 @@
 # Common CM setup
 # see: https://github.com/compose-spec/compose-spec/blob/master/spec.md#extension
+
+# The shared environment is its own anchor so a service (e.g. the celery worker)
+# can merge it and add a few of its own variables without repeating the block.
+x-cm-environment: &cm-environment
+  SIMPLIFIED_PRODUCTION_DATABASE: "postgresql://palace:test@pg:5432/circ"
+  PALACE_SEARCH_URL: "http://os:9200"
+  PALACE_STORAGE_ACCESS_KEY: "palace"
+  PALACE_STORAGE_SECRET_KEY: "test123456789"
+  PALACE_STORAGE_ENDPOINT_URL: "http://minio:9000"
+  PALACE_STORAGE_PUBLIC_ACCESS_BUCKET: "public"
+  PALACE_STORAGE_ANALYTICS_BUCKET: "analytics"
+  PALACE_STORAGE_URL_TEMPLATE: "http://localhost:9000/{bucket}/{key}"
+  PALACE_REPORTING_NAME: "TEST CM"
+  PALACE_SECRET_KEY: "SECRET_KEY_USED_FOR_ADMIN_UI_COOKIES"
+  PALACE_PATRON_WEB_HOSTNAMES: "*"
+  PALACE_BASE_URL: "http://localhost:6500"
+  PALACE_CELERY_BROKER_URL: "redis://redis:6379/0"
+  PALACE_CELERY_RESULT_BACKEND: "redis://redis:6379/2"
+  PALACE_CELERY_BROKER_TRANSPORT_OPTIONS_GLOBAL_KEYPREFIX: "test"
+  PALACE_CELERY_CLOUDWATCH_STATISTICS_DRYRUN: "true"
+  PALACE_REDIS_URL: "redis://redis:6379/1"
+  PALACE_GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO_JSON: "${PALACE_GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO_JSON-}"
+
+  # Set up the environment variables used for testing as well
+  PALACE_TEST_DATABASE_URL: "postgresql://palace:test@pg:5432/circ"
+  PALACE_TEST_SEARCH_URL: "http://os:9200"
+  PALACE_TEST_MINIO_URL: "http://minio:9000"
+  PALACE_TEST_MINIO_USER: "palace"
+  PALACE_TEST_MINIO_PASSWORD: "test123456789"
+  PALACE_TEST_REDIS_URL: "redis://redis:6379/3"
+
 x-cm-variables: &cm
   platform: "${BUILD_PLATFORM-}"
-  environment:
-    SIMPLIFIED_PRODUCTION_DATABASE: "postgresql://palace:test@pg:5432/circ"
-    PALACE_SEARCH_URL: "http://os:9200"
-    PALACE_STORAGE_ACCESS_KEY: "palace"
-    PALACE_STORAGE_SECRET_KEY: "test123456789"
-    PALACE_STORAGE_ENDPOINT_URL: "http://minio:9000"
-    PALACE_STORAGE_PUBLIC_ACCESS_BUCKET: "public"
-    PALACE_STORAGE_ANALYTICS_BUCKET: "analytics"
-    PALACE_STORAGE_URL_TEMPLATE: "http://localhost:9000/{bucket}/{key}"
-    PALACE_REPORTING_NAME: "TEST CM"
-    PALACE_SECRET_KEY: "SECRET_KEY_USED_FOR_ADMIN_UI_COOKIES"
-    PALACE_PATRON_WEB_HOSTNAMES: "*"
-    PALACE_BASE_URL: "http://localhost:6500"
-    PALACE_CELERY_BROKER_URL: "redis://redis:6379/0"
-    PALACE_CELERY_RESULT_BACKEND: "redis://redis:6379/2"
-    PALACE_CELERY_BROKER_TRANSPORT_OPTIONS_GLOBAL_KEYPREFIX: "test"
-    PALACE_CELERY_CLOUDWATCH_STATISTICS_DRYRUN: "true"
-    PALACE_REDIS_URL: "redis://redis:6379/1"
-    PALACE_GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO_JSON: "${PALACE_GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO_JSON-}"
-
-    # Set up the environment variables used for testing as well
-    PALACE_TEST_DATABASE_URL: "postgresql://palace:test@pg:5432/circ"
-    PALACE_TEST_SEARCH_URL: "http://os:9200"
-    PALACE_TEST_MINIO_URL: "http://minio:9000"
-    PALACE_TEST_MINIO_USER: "palace"
-    PALACE_TEST_MINIO_PASSWORD: "test123456789"
-    PALACE_TEST_REDIS_URL: "redis://redis:6379/3"
+  environment: *cm-environment
 
   depends_on:
     pg:
@@ -66,6 +71,40 @@ services:
       <<: *cm-build
       target: scripts
     image: "${SCRIPTS_IMAGE-}"
+
+  # The celery-* services all run from the single circ-celery image; the role is
+  # the container command. In production these become the beat deployment (one
+  # replica), the autoscaled worker deployment(s), and the CloudWatch camera.
+  celery-beat:
+    <<: *cm
+    build:
+      <<: *cm-build
+      target: celery
+    image: "${CELERY_IMAGE-}"
+    command: ["beat"]
+
+  celery-worker:
+    <<: *cm
+    build:
+      <<: *cm-build
+      target: celery
+    image: "${CELERY_IMAGE-}"
+    command: ["worker"]
+    # A single dev/test worker consumes every queue. In production each queue
+    # (or group) is its own deployment with its own queues/concurrency so it can
+    # be autoscaled independently.
+    environment:
+      <<: *cm-environment
+      PALACE_CELERY_QUEUES: "high,default,apply"
+      PALACE_CELERY_CONCURRENCY: "2"
+
+  celery-cloudwatch:
+    <<: *cm
+    build:
+      <<: *cm-build
+      target: celery
+    image: "${CELERY_IMAGE-}"
+    command: ["cloudwatch"]
 
   pg:
     image: "postgres:16"

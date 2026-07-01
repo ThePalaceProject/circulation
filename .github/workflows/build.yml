@@ -30,6 +30,8 @@ jobs:
       scripts-meta: ${{ steps.meta-scripts.outputs.json }}
       exec-repo: ${{ steps.ghcr-repo.outputs.exec }}
       exec-meta: ${{ steps.meta-exec.outputs.json }}
+      celery-repo: ${{ steps.ghcr-repo.outputs.celery }}
+      celery-meta: ${{ steps.meta-celery.outputs.json }}
 
     # https://docs.docker.com/build/ci/github-actions/local-registry/
     services:
@@ -74,6 +76,7 @@ jobs:
           webapp="ghcr.io/$repo/circ-webapp"
           scripts="ghcr.io/$repo/circ-scripts"
           exec="ghcr.io/$repo/circ-exec"
+          celery="ghcr.io/$repo/circ-celery"
           baseimage="ghcr.io/$repo/circ-baseimage"
           echo "webapp=$webapp"
           echo "webapp=$webapp" >> "$GITHUB_OUTPUT"
@@ -81,6 +84,8 @@ jobs:
           echo "scripts=$scripts" >> "$GITHUB_OUTPUT"
           echo "exec=$exec"
           echo "exec=$exec" >> "$GITHUB_OUTPUT"
+          echo "celery=$celery"
+          echo "celery=$celery" >> "$GITHUB_OUTPUT"
           echo "baseimage=$baseimage"
           echo "baseimage=$baseimage" >> "$GITHUB_OUTPUT"
 
@@ -222,6 +227,29 @@ jobs:
           labels: ${{ steps.meta-exec.outputs.labels }}
           outputs: type=image,"name=${{ steps.ghcr-repo.outputs.exec }}",push-by-digest=true,name-canonical=true,push=true
 
+      - name: Generate tags for circ-celery
+        id: meta-celery
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ steps.ghcr-repo.outputs.celery }}
+          tags: |
+            type=semver,pattern={{major}}.{{minor}},priority=10
+            type=semver,pattern={{version}},priority=20
+            type=ref,event=branch,priority=30
+            type=sha,priority=40
+
+      - name: Build circ-celery image
+        id: build-celery
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./docker/Dockerfile
+          target: celery
+          build-args: |
+            BASE_IMAGE=${{ steps.baseimage.outputs.tag }}
+          labels: ${{ steps.meta-celery.outputs.labels }}
+          outputs: type=image,"name=${{ steps.ghcr-repo.outputs.celery }}",push-by-digest=true,name-canonical=true,push=true
+
       - name: Export digests
         run: |
           mkdir -p ${{ runner.temp }}/digests/webapp
@@ -236,6 +264,10 @@ jobs:
           exec_digest="${{ steps.build-exec.outputs.digest }}"
           touch "${{ runner.temp }}/digests/exec/${exec_digest#sha256:}"
           echo "EXEC_DIGEST=$exec_digest"
+          mkdir -p ${{ runner.temp }}/digests/celery
+          celery_digest="${{ steps.build-celery.outputs.digest }}"
+          touch "${{ runner.temp }}/digests/celery/${celery_digest#sha256:}"
+          echo "CELERY_DIGEST=$celery_digest"
 
       - name: Upload digests
         uses: actions/upload-artifact@v7
@@ -292,6 +324,15 @@ jobs:
           echo "$IMAGE"
           echo "WEBAPP_IMAGE=$IMAGE" >> $GITHUB_ENV
 
+      # This sets the environment variable referenced in the docker-compose file
+      # for the celery containers to the digest of the image built in the build job.
+      - name: Set celery image
+        working-directory: ${{ runner.temp }}/digests/celery
+        run: |
+          IMAGE="${{needs.build.outputs.celery-repo}}$(printf '@sha256:%s' *)"
+          echo "$IMAGE"
+          echo "CELERY_IMAGE=$IMAGE" >> $GITHUB_ENV
+
       # See comment here: https://github.com/actions/runner-images/issues/1187#issuecomment-686735760
       - name: Disable network offload
         run: sudo ethtool -K eth0 tx off rx off
@@ -307,6 +348,9 @@ jobs:
 
       - name: Run scripts image tests
         run: ./docker/ci/test_scripts.sh scripts
+
+      - name: Run celery image tests
+        run: ./docker/ci/test_celery.sh
 
       - name: Output logs
         if: failure()
@@ -468,3 +512,10 @@ jobs:
           docker buildx imagetools create
           $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< '${{ needs.build.outputs.exec-meta }}')
           $(printf '${{ needs.build.outputs.exec-repo }}@sha256:%s ' *)
+
+      - name: Create manifest & push circ-celery
+        working-directory: ${{ runner.temp }}/digests/celery
+        run: >
+          docker buildx imagetools create
+          $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< '${{ needs.build.outputs.celery-meta }}')
+          $(printf '${{ needs.build.outputs.celery-repo }}@sha256:%s ' *)
