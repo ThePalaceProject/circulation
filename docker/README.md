@@ -82,7 +82,8 @@ $ docker run --name search_index_refresh -it \
 This image runs a single Celery process per container. Unlike `circ-scripts`, which supervises the
 beat scheduler and every worker in one container with runit, `circ-celery` runs exactly one process,
 so each role can be deployed and (for workers) autoscaled independently. The role is chosen by the
-container command: `beat`, `worker`, or `cloudwatch`.
+container command: `beat` or `worker`. Queue-depth metrics that drive autoscaling are published by the
+`publish_queue_stats` task on the beat schedule, so there is no separate always-on metrics container.
 
 ```sh
 # The beat scheduler (run exactly one of these).

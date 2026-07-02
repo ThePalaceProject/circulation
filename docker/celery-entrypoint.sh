@@ -3,18 +3,21 @@
 # Entrypoint for the circ-celery image.
 #
 # A single image backs every Celery process we run; the role is chosen by the
-# first argument, so the same image can be deployed as the beat scheduler, any
-# number of autoscaled worker pools, or the CloudWatch metrics camera:
+# first argument, so the same image can be deployed as the beat scheduler or any
+# number of autoscaled worker pools:
 #
 #   celery-entrypoint.sh beat
 #   celery-entrypoint.sh worker        (PALACE_CELERY_QUEUES required)
-#   celery-entrypoint.sh cloudwatch
 #
 # Exactly one Celery process runs per container (no runit supervision); that is
 # what lets the worker pools be scaled horizontally, one replica per unit of
 # queue depth. Logs are written to stdout/stderr (as JSON, via the application's
 # logging configuration) rather than to files, so nothing is lost when an
 # autoscaled worker is scaled away.
+#
+# Queue-depth metrics (which drive worker autoscaling) are published by the
+# periodic publish_queue_stats task on the beat schedule, so there is no separate
+# always-on metrics process/role here.
 
 set -euo pipefail
 
@@ -25,7 +28,7 @@ cd /var/www/circulation
 
 role="${1:-}"
 if [[ -z "$role" ]]; then
-  echo "Usage: $(basename "$0") <beat|worker|cloudwatch> [extra celery args]" >&2
+  echo "Usage: $(basename "$0") <beat|worker> [extra celery args]" >&2
   exit 64
 fi
 shift
@@ -62,19 +65,8 @@ case "$role" in
       --hostname "$hostname" \
       "$@"
     ;;
-  cloudwatch)
-    # Publishes the per-queue depth (QueueWaiting) and oldest-age
-    # (QueueOldestAge) metrics that drive worker autoscaling. A single replica
-    # snapshots the whole broker, so this is a singleton as well.
-    flush="${PALACE_CELERY_CLOUDWATCH_FLUSH_INTERVAL:-60}"
-    exec "$CELERY" -A "$APP" events \
-      -c "palace.manager.celery.monitoring.Cloudwatch" \
-      -F "$flush" \
-      --uid palace --gid palace \
-      "$@"
-    ;;
   *)
-    echo "Unknown role '$role' (expected: beat, worker, or cloudwatch)." >&2
+    echo "Unknown role '$role' (expected: beat or worker)." >&2
     exit 64
     ;;
 esac

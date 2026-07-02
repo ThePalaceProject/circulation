@@ -74,7 +74,9 @@ services:
 
   # The celery-* services all run from the single circ-celery image; the role is
   # the container command. In production these become the beat deployment (one
-  # replica), the autoscaled worker deployment(s), and the CloudWatch camera.
+  # replica) and the autoscaled worker deployment(s). Queue-depth metrics are
+  # published by the beat-scheduled publish_queue_stats task, so there is no
+  # separate metrics container.
   celery-beat:
     <<: *cm
     build:
@@ -97,14 +99,6 @@ services:
       <<: *cm-environment
       PALACE_CELERY_QUEUES: "high,default,apply"
       PALACE_CELERY_CONCURRENCY: "2"
-
-  celery-cloudwatch:
-    <<: *cm
-    build:
-      <<: *cm-build
-      target: celery
-    image: "${CELERY_IMAGE-}"
-    command: ["cloudwatch"]
 
   pg:
     image: "postgres:16"

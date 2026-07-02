@@ -67,12 +67,11 @@ CMD ["/sbin/my_init"]
 ## Circ-celery Image
 ##
 ## A single image that runs one Celery process per container. The role is
-## selected by the first argument to the entrypoint (beat|worker|cloudwatch),
-## so one image backs the beat scheduler, every autoscaled worker pool, and the
-## CloudWatch metrics camera. Unlike the scripts image, it does NOT use runit to
-## supervise several processes -- one process per container is what lets the
-## worker pools be scaled horizontally, and the beat scheduler be pinned to a
-## single instance.
+## selected by the first argument to the entrypoint (beat|worker), so one image
+## backs both the beat scheduler and every autoscaled worker pool. Unlike the
+## scripts image, it does NOT use runit to supervise several processes -- one
+## process per container is what lets the worker pools be scaled horizontally,
+## and the beat scheduler be pinned to a single instance.
 ###############################################################################
 
 FROM common AS celery

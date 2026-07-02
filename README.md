@@ -251,10 +251,9 @@ the defaults should be sufficient. The full list of settings can be found in
 ##### `circ-celery` image
 
 The `circ-celery` image runs a single Celery process per container, so it can be deployed as the beat
-scheduler, one or more autoscaled worker pools, and the CloudWatch metrics camera — all from the same
-image. The role is chosen by the container command (`beat`, `worker`, or `cloudwatch`), and a few
-launch-time variables (read by the container's entrypoint, not by the application) configure the
-`worker` role:
+scheduler or one or more autoscaled worker pools — all from the same image. The role is chosen by the
+container command (`beat` or `worker`), and a few launch-time variables (read by the container's
+entrypoint, not by the application) configure the `worker` role:
 
 - `PALACE_CELERY_QUEUES`: Comma-separated list of queues a `worker` container should consume, e.g.
     `high,default` (**required for the `worker` role**). Each queue's tasks are defined by
@@ -265,11 +264,11 @@ launch-time variables (read by the container's entrypoint, not by the applicatio
     The default is `1` (optional).
 - `PALACE_CELERY_WORKER_HOSTNAME`: The Celery `--hostname` for a `worker` container. The default is
     `worker@%h` (optional).
-- `PALACE_CELERY_CLOUDWATCH_FLUSH_INTERVAL`: How often, in seconds, the `cloudwatch` role flushes queue
-    metrics. The default is `60` (optional).
 
-The `beat` and `cloudwatch` roles must each run as a single instance (a second beat would double-fire
-scheduled tasks); only the `worker` role should be scaled.
+The `beat` role must run as a single instance (a second beat would double-fire scheduled tasks); only
+the `worker` role should be scaled. The queue-depth metrics that drive worker autoscaling
+(`QueueWaiting` / `QueueOldestAge`, in the `Celery` CloudWatch namespace) are published every minute by
+the `publish_queue_stats` task on the beat schedule, so no always-on metrics process is required.
 
 #### Redis
 

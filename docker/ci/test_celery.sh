@@ -3,7 +3,7 @@
 # Smoke test for the circ-celery image. Unlike the scripts image, circ-celery
 # runs a single Celery process per container (no runit), so we can't use the
 # `sv check` helpers. Instead we confirm the worker answers a ping over the
-# broker and that the beat and cloudwatch containers come up and stay running.
+# broker and that the beat container comes up and stays running.
 
 set -ex
 
@@ -39,11 +39,9 @@ timeout 120s bash -c "
   done
 "
 
-# Beat and the cloudwatch camera have no ping; confirm they started and are
-# still running (i.e. the entrypoint launched the right process and it did not
-# immediately exit).
+# Beat has no ping; confirm it started and is still running (i.e. the entrypoint
+# launched the right process and it did not immediately exit).
 assert_running celery-beat
-assert_running celery-cloudwatch
 assert_running celery-worker
 
 # Confirm beat has actually started its scheduler loop.
