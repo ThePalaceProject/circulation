@@ -81,6 +81,14 @@ FROM common AS celery
 ENV TZ=US/Eastern
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime
 
+# The entrypoint runs as root and drops to the `palace` user via `celery --uid`,
+# which does not reset HOME. Without this the worker would inherit root's
+# HOME=/root, and libpq (psycopg2) -- probing $HOME/.postgresql/postgresql.crt on
+# connect -- would hit EACCES on /root (mode 700), abort the SSL handshake, and
+# fall back to a plaintext connection that an SSL-required Postgres rejects. The
+# phusion-based images get this from my_init; here we set it explicitly.
+ENV HOME=/home/palace
+
 COPY --chmod=755 docker/celery-entrypoint.sh /celery-entrypoint.sh
 
 WORKDIR /var/www/circulation
