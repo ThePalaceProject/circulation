@@ -436,19 +436,22 @@ class SAMLWebSSOAuthenticationProvider(
         integration settings marked with ``patron_auth_filter_context=True``, including
         ``extra_data``), and ``library`` (``id``, ``name``, ``short_name``).
 
+        All configured expressions are always evaluated so that a single log entry
+        can report every failing level at once.
+
         :param db: Database session
         :param subject: Authenticated SAML subject to authorize
         :raises ProblemDetailException: if the subject is denied access or an expression errors
         """
-        expressions = [
-            e
-            for e in (
-                self._settings.filter_expression,
-                self._library_settings.filter_expression,
+        labeled_expressions = [
+            (label, e)
+            for label, e in (
+                ("integration", self._settings.filter_expression),
+                ("library", self._library_settings.filter_expression),
             )
-            if e
+            if e is not None
         ]
-        if not expressions:
+        if not labeled_expressions:
             return
 
         library = self.library(db)
@@ -456,6 +459,12 @@ class SAMLWebSSOAuthenticationProvider(
             raise ProblemDetailException(
                 problem_detail=SAML_GENERIC_ERROR.detailed("Library not found")
             )
+        self.log.debug(
+            "Evaluating filter expression for library %s (%s) with subject: %s",
+            library.name,
+            library.short_name,
+            subject,
+        )
         context = {
             "subject": subject,
             "integration": self._settings.filter_context_dump(),
@@ -466,23 +475,55 @@ class SAMLWebSSOAuthenticationProvider(
             },
         }
 
-        for expression in expressions:
+        failing: list[str] = []
+        eval_errors: list[FilterExpressionError] = []
+        for label, expression in labeled_expressions:
             try:
                 result = FilterExpression(
                     expression,
                     extra_safe_types=_SAML_FILTER_SAFE_TYPES,
                 ).evaluate(context)
             except FilterExpressionError as exc:
-                raise ProblemDetailException(
-                    problem_detail=SAML_GENERIC_ERROR.detailed(str(exc))
-                ) from exc
+                self.log.error(
+                    "Filter [%s] evaluation error for library %s (%s): %s",
+                    label,
+                    library.name,
+                    library.short_name,
+                    exc,
+                )
+                failing.append(label)
+                eval_errors.append(exc)
+                continue
+            self.log.info(
+                "Filter [%s] %s for library %s (%s)",
+                label,
+                "passed" if result else "failed",
+                library.name,
+                library.short_name,
+            )
             if not result:
-                raise ProblemDetailException(problem_detail=SAML_NO_ACCESS_ERROR)
+                failing.append(label)
+
+        if failing:
+            self.log.warning(
+                "Access denied for library %s (%s): filter(s) failed: %s; subject=%s",
+                library.name,
+                library.short_name,
+                ", ".join(failing),
+                subject,
+            )
+            if eval_errors:
+                raise ProblemDetailException(
+                    problem_detail=SAML_GENERIC_ERROR.detailed(
+                        "; ".join(str(e) for e in eval_errors)
+                    )
+                ) from eval_errors[0]
+            raise ProblemDetailException(problem_detail=SAML_NO_ACCESS_ERROR)
 
     def saml_callback(
         self, db: Session, subject: SAMLSubject
     ) -> tuple[Credential, Patron, PatronData]:
-        """Verifies the SAML subject, generates a Bearer token in the case of successful authentication and returns it
+        """Verify the SAML subject, generate a Bearer token on successful authentication, and return it.
 
         :param db: Database session
         :param subject: Subject object containing SAML Subject and AttributeStatement
@@ -506,6 +547,16 @@ class SAMLWebSSOAuthenticationProvider(
         # Create a credential for the Patron
         credential = self._credential_manager.create_saml_token(
             db, patron, subject, self._settings.session_lifetime
+        )
+
+        library = self.library(db)
+        lib_name = library.name if library else str(self.library_id)
+        lib_short = library.short_name if library else "unknown"
+        self.log.info(
+            "SAML patron access granted for library %s (%s): patron=%s",
+            lib_name,
+            lib_short,
+            patron_data.authorization_identifier,
         )
 
         return credential, patron, patron_data

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime
 import json
+import logging
 from unittest.mock import Mock
 
 import pytest
@@ -420,8 +421,10 @@ class TestOIDCCredentialManager:
         db: DatabaseTransactionFixture,
         mock_patron,
         sample_id_token_claims,
+        caplog: pytest.LogCaptureFixture,
     ):
         """Test refresh_token_if_needed when token is expired."""
+        caplog.set_level(logging.INFO)
         credential = manager.create_oidc_token(
             db.session,
             mock_patron,
@@ -457,6 +460,8 @@ class TestOIDCCredentialManager:
         expected_expiry = utc_now() + datetime.timedelta(seconds=3600)
         assert refreshed_credential.expires is not None
         assert abs((refreshed_credential.expires - expected_expiry).total_seconds()) < 5
+        assert "Successfully refreshed" in caplog.text
+        assert sample_id_token_claims["sub"] in caplog.text
 
     def test_refresh_token_if_needed_expiring_soon(
         self,

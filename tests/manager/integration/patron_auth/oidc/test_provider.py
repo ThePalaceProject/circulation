@@ -16,6 +16,7 @@ from palace.manager.api.authentication.base import PatronData, PatronLookupNotSu
 from palace.manager.integration.patron_auth.constants import (
     LOGOUT_REDIRECT_QUERY_PARAM,
 )
+from palace.manager.integration.patron_auth.oidc.auth import OIDCRefreshTokenError
 from palace.manager.integration.patron_auth.oidc.configuration.model import (
     OIDCAuthLibrarySettings,
     OIDCAuthSettings,
@@ -398,8 +399,13 @@ class TestOIDCAuthenticationProvider:
         assert result == patron
 
     def test_authenticated_patron_with_refresh_failure(
-        self, db: DatabaseTransactionFixture, oidc_provider
+        self,
+        db: DatabaseTransactionFixture,
+        oidc_provider: OIDCAuthenticationProvider,
+        caplog: pytest.LogCaptureFixture,
     ):
+        caplog.set_level(logging.WARNING)
+        library = db.default_library()
         patron = db.patron()
         patron.authorization_identifier = "test-user"
 
@@ -425,18 +431,27 @@ class TestOIDCAuthenticationProvider:
         )
         db.session.commit()
 
+        assert credential.credential is not None
         with patch.object(
             oidc_provider._credential_manager,
             "refresh_token_if_needed",
-            side_effect=Exception("Refresh failed"),
+            side_effect=OIDCRefreshTokenError("Refresh failed"),
         ):
             result = oidc_provider.authenticated_patron(
                 db.session, credential.credential
             )
 
         assert result == OIDC_TOKEN_EXPIRED
+        assert "Failed to refresh" in caplog.text
+        assert library.name is not None and library.name in caplog.text
+        assert library.short_name is not None and library.short_name in caplog.text
 
-    def test_remote_patron_lookup_from_oidc_claims_success(self, oidc_provider):
+    def test_remote_patron_lookup_from_oidc_claims_success(
+        self,
+        oidc_provider: OIDCAuthenticationProvider,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        caplog.set_level(logging.INFO)
         id_token_claims = {
             "sub": "test-user-123",
             "email": "test@example.com",
@@ -450,18 +465,27 @@ class TestOIDCAuthenticationProvider:
         assert patron_data.authorization_identifier == "test-user-123"
         assert patron_data.external_type == "A"
         assert patron_data.complete is True
+        assert "Extracted patron ID" in caplog.text
+        assert "test-user-123" in caplog.text
 
     def test_remote_patron_lookup_from_oidc_claims_missing_patron_id(
-        self, oidc_provider
+        self,
+        oidc_provider: OIDCAuthenticationProvider,
+        caplog: pytest.LogCaptureFixture,
     ):
+        caplog.set_level(logging.ERROR)
         id_token_claims = {"email": "test@example.com"}
 
         with pytest.raises(ProblemDetailException) as exc_info:
             oidc_provider.remote_patron_lookup_from_oidc_claims(id_token_claims)
 
         assert exc_info.value.problem_detail == OIDC_CANNOT_DETERMINE_PATRON
+        assert "Failed to extract patron ID" in caplog.text
 
-    def test_remote_patron_lookup_from_oidc_claims_with_regex(self):
+    def test_remote_patron_lookup_from_oidc_claims_with_regex(
+        self, caplog: pytest.LogCaptureFixture
+    ):
+        caplog.set_level(logging.INFO)
         settings = OIDCAuthSettings(
             issuer_url="https://idp.example.com",
             client_id="test-client-id",
@@ -485,8 +509,13 @@ class TestOIDCAuthenticationProvider:
 
         assert patron_data.permanent_id == "user123"
         assert patron_data.authorization_identifier == "user123"
+        assert "Extracted patron ID" in caplog.text
+        assert "user123" in caplog.text
 
-    def test_remote_patron_lookup_from_oidc_claims_regex_no_match(self):
+    def test_remote_patron_lookup_from_oidc_claims_regex_no_match(
+        self, caplog: pytest.LogCaptureFixture
+    ):
+        caplog.set_level(logging.WARNING)
         settings = OIDCAuthSettings(
             issuer_url="https://idp.example.com",
             client_id="test-client-id",
@@ -510,13 +539,21 @@ class TestOIDCAuthenticationProvider:
             provider.remote_patron_lookup_from_oidc_claims(id_token_claims)
 
         assert exc_info.value.problem_detail == OIDC_CANNOT_DETERMINE_PATRON
+        assert "Failed to extract patron ID" in caplog.text
 
     def test_remote_patron_lookup_raises_not_supported(self, oidc_provider):
         with pytest.raises(PatronLookupNotSupported):
             oidc_provider.remote_patron_lookup(PatronData(permanent_id="test"))
 
-    def test_oidc_callback(self, db: DatabaseTransactionFixture, oidc_provider):
+    def test_oidc_callback(
+        self,
+        db: DatabaseTransactionFixture,
+        oidc_provider: OIDCAuthenticationProvider,
+        caplog: pytest.LogCaptureFixture,
+    ):
         DataSource.lookup(db.session, "OIDC", autocreate=True)
+        caplog.set_level(logging.INFO)
+        library = db.default_library()
 
         id_token_claims = {
             "sub": "test-user-456",
@@ -539,6 +576,10 @@ class TestOIDCAuthenticationProvider:
         assert patron_data.permanent_id == "test-user-456"
         assert credential.credential is not None
         assert credential.patron == patron
+        assert "OIDC patron access granted" in caplog.text
+        assert library.name is not None and library.name in caplog.text
+        assert library.short_name is not None and library.short_name in caplog.text
+        assert "test-user-456" in caplog.text
 
     def test_get_authentication_manager(
         self, oidc_provider: OIDCAuthenticationProvider
@@ -662,9 +703,12 @@ class TestOIDCAuthenticationProvider:
         db: DatabaseTransactionFixture,
         create_oidc_settings: Callable[..., OIDCAuthSettings],
         create_oidc_provider: Callable[..., OIDCAuthenticationProvider],
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         """oidc_callback succeeds and returns (Credential, Patron, PatronData) when the filter passes."""
         DataSource.lookup(db.session, "OIDC", autocreate=True)
+        caplog.set_level(logging.INFO)
+        library = db.default_library()
         configuration = create_oidc_settings(
             filter_expression="claims['email'].endswith('@example.edu')"
         )
@@ -679,14 +723,19 @@ class TestOIDCAuthenticationProvider:
         assert isinstance(credential, Credential)
         assert isinstance(patron, Patron)
         assert isinstance(patron_data, PatronData)
+        assert "Filter [integration] passed" in caplog.text
+        assert library.name is not None and library.name in caplog.text
+        assert library.short_name is not None and library.short_name in caplog.text
 
     def test_oidc_callback_filter_evaluation_error(
         self,
         db: DatabaseTransactionFixture,
         create_oidc_settings: Callable[..., OIDCAuthSettings],
         create_oidc_provider: Callable[..., OIDCAuthenticationProvider],
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         """oidc_callback raises OIDC_FILTER_EVALUATION_ERROR when the filter expression errors at evaluation."""
+        caplog.set_level(logging.ERROR)
         configuration = create_oidc_settings(
             # Syntactically valid, so the model validator accepts it;
             # claims.nonexistent raises AttributeDoesNotExist at evaluation time.
@@ -702,6 +751,34 @@ class TestOIDCAuthenticationProvider:
             )
 
         assert exc_info.value.problem_detail.uri == OIDC_FILTER_EVALUATION_ERROR.uri
+        assert "Filter [integration] evaluation error" in caplog.text
+
+    def test_filter_claims_both_levels_eval_error(
+        self,
+        db: DatabaseTransactionFixture,
+        create_oidc_settings: Callable[..., OIDCAuthSettings],
+        create_oidc_provider: Callable[..., OIDCAuthenticationProvider],
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """When both filter levels raise FilterExpressionError, both messages appear in the detail."""
+        caplog.set_level(logging.ERROR)
+        configuration = create_oidc_settings(
+            filter_expression="claims.no_such_attr == 'x'"
+        )
+        provider = create_oidc_provider(
+            settings=configuration,
+            library_settings=OIDCAuthLibrarySettings(
+                filter_expression="claims.also_missing == 'x'"
+            ),
+        )
+
+        with pytest.raises(ProblemDetailException) as exc_info:
+            provider._filter_claims(db.session, self._FILTER_CLAIMS)
+
+        assert exc_info.value.problem_detail.uri == OIDC_FILTER_EVALUATION_ERROR.uri
+        detail = str(exc_info.value.problem_detail.detail)
+        assert "; " in detail
+        assert len([r for r in caplog.records if r.levelno == logging.ERROR]) == 2
 
     def test_filter_claims_library_not_found(
         self,
@@ -836,8 +913,10 @@ class TestOIDCAuthenticationProvider:
         library_expression: str | None,
         extra_data: object,
         expect_no_access: bool,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Integration and library filter expressions are ANDed; both must pass."""
+        caplog.set_level(logging.WARNING)
         configuration = create_oidc_settings(
             filter_expression=integration_expression,
             extra_data=extra_data,
@@ -857,3 +936,11 @@ class TestOIDCAuthenticationProvider:
 
         if expect_no_access:
             assert exc_info.value.problem_detail.uri == OIDC_NO_ACCESS_ERROR.uri
+            # All failures are collected into a single warning regardless of how many filters fail.
+            warning_records = [
+                r for r in caplog.records if r.levelno == logging.WARNING
+            ]
+            assert len(warning_records) == 1
+            assert (
+                str(list(self._FILTER_CLAIMS.keys())) in warning_records[0].getMessage()
+            )

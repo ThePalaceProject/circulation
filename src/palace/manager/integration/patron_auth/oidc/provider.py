@@ -23,7 +23,10 @@ from palace.manager.api.authenticator import BaseOIDCAuthenticationProvider
 from palace.manager.integration.patron_auth.constants import (
     LOGOUT_REDIRECT_QUERY_PARAM,
 )
-from palace.manager.integration.patron_auth.oidc.auth import OIDCAuthenticationManager
+from palace.manager.integration.patron_auth.oidc.auth import (
+    OIDCAuthenticationManager,
+    OIDCRefreshTokenError,
+)
 from palace.manager.integration.patron_auth.oidc.configuration.model import (
     OIDCAuthLibrarySettings,
     OIDCAuthSettings,
@@ -263,8 +266,14 @@ class OIDCAuthenticationProvider(
                 db, credential, auth_manager
             )
             return refreshed_credential.patron
-        except Exception as e:
-            self.log.warning(f"Failed to refresh OIDC token: {e}")
+        except OIDCRefreshTokenError as e:
+            library = self.library(db)
+            lib_label = (
+                f"{library.name} ({library.short_name})"
+                if library
+                else f"library_id={self.library_id}"
+            )
+            self.log.warning("Failed to refresh OIDC token for %s: %s", lib_label, e)
             return OIDC_TOKEN_EXPIRED
 
     def get_authentication_manager(self) -> OIDCAuthenticationManager:
@@ -293,7 +302,7 @@ class OIDCAuthenticationProvider(
         return self._auth_manager
 
     def remote_patron_lookup_from_oidc_claims(
-        self, id_token_claims: dict[str, str]
+        self, id_token_claims: dict[str, Any]
     ) -> PatronData:
         """Create PatronData from ID token claims.
 
@@ -302,9 +311,15 @@ class OIDCAuthenticationProvider(
         :raises: ProblemDetailException if patron cannot be determined
         """
         patron_id_claim = self._settings.patron_id_claim
+        id_token_claim_names = list(id_token_claims.keys())
         raw_patron_id = id_token_claims.get(patron_id_claim)
 
         if not raw_patron_id:
+            self.log.error(
+                "Failed to extract patron ID: claim '%s' not found; token claims: %s",
+                patron_id_claim,
+                id_token_claim_names,
+            )
             raise ProblemDetailException(problem_detail=OIDC_CANNOT_DETERMINE_PATRON)
 
         if self._settings.patron_id_regular_expression:
@@ -312,6 +327,12 @@ class OIDCAuthenticationProvider(
                 str(raw_patron_id)
             )
             if not match or "patron_id" not in match.groupdict():
+                # raw_patron_id is intentionally included to aid regex debugging.
+                self.log.warning(
+                    "Failed to extract patron ID: value %r for claim '%s' did not match pattern",
+                    raw_patron_id,
+                    patron_id_claim,
+                )
                 raise ProblemDetailException(
                     problem_detail=OIDC_CANNOT_DETERMINE_PATRON
                 )
@@ -319,6 +340,12 @@ class OIDCAuthenticationProvider(
         else:
             patron_id = str(raw_patron_id)
 
+        self.log.info(
+            "Extracted patron ID '%s' from claim '%s'; token claims: %s",
+            patron_id,
+            patron_id_claim,
+            id_token_claim_names,
+        )
         return PatronData(
             permanent_id=patron_id,
             authorization_identifier=patron_id,
@@ -350,24 +377,34 @@ class OIDCAuthenticationProvider(
         ``patron_auth_filter_context=True``, including ``extra_data``),
         and ``library`` (``id``, ``name``, ``short_name``).
 
+        All configured expressions are always evaluated so that a single log entry
+        can report every failing level at once.
+
         :param db: Database session
         :param id_token_claims: Validated ID token claims from the OIDC provider
         :raises ProblemDetailException: if the patron is denied access or an expression errors
         """
-        expressions = [
-            e
-            for e in (
-                self._settings.filter_expression,
-                self._library_settings.filter_expression,
+        labeled_expressions = [
+            (label, e)
+            for label, e in (
+                ("integration", self._settings.filter_expression),
+                ("library", self._library_settings.filter_expression),
             )
             if e is not None
         ]
-        if not expressions:
+        if not labeled_expressions:
             return
 
+        id_token_claim_names = list(id_token_claims.keys())
         library = self.library(db)
         if library is None:
             raise ProblemDetailException(problem_detail=OIDC_LIBRARY_NOT_FOUND)
+        self.log.debug(
+            "Evaluating filter expression for library %s (%s) with claims: %s",
+            library.name,
+            library.short_name,
+            id_token_claim_names,
+        )
         context = {
             "claims": id_token_claims,
             "integration": self._settings.filter_context_dump(),
@@ -378,20 +415,52 @@ class OIDCAuthenticationProvider(
             },
         }
 
-        for expression in expressions:
+        failing: list[str] = []
+        eval_errors: list[FilterExpressionError] = []
+        for label, expression in labeled_expressions:
             try:
                 result = FilterExpression(expression).evaluate(context)
             except FilterExpressionError as exc:
-                raise ProblemDetailException(
-                    problem_detail=OIDC_FILTER_EVALUATION_ERROR.detailed(str(exc))
-                ) from exc
+                self.log.error(
+                    "Filter [%s] evaluation error for library %s (%s): %s",
+                    label,
+                    library.name,
+                    library.short_name,
+                    exc,
+                )
+                failing.append(label)
+                eval_errors.append(exc)
+                continue
+            self.log.info(
+                "Filter [%s] %s for library %s (%s)",
+                label,
+                "passed" if result else "failed",
+                library.name,
+                library.short_name,
+            )
             if not result:
-                raise ProblemDetailException(problem_detail=OIDC_NO_ACCESS_ERROR)
+                failing.append(label)
+
+        if failing:
+            self.log.warning(
+                "Access denied for library %s (%s): filter(s) failed: %s; claim names=%s",
+                library.name,
+                library.short_name,
+                ", ".join(failing),
+                id_token_claim_names,
+            )
+            if eval_errors:
+                raise ProblemDetailException(
+                    problem_detail=OIDC_FILTER_EVALUATION_ERROR.detailed(
+                        "; ".join(str(e) for e in eval_errors)
+                    )
+                ) from eval_errors[0]
+            raise ProblemDetailException(problem_detail=OIDC_NO_ACCESS_ERROR)
 
     def oidc_callback(
         self,
         db: Session,
-        id_token_claims: dict[str, str],
+        id_token_claims: dict[str, Any],
         access_token: str,
         refresh_token: str | None = None,
         expires_in: int | None = None,
@@ -424,6 +493,16 @@ class OIDCAuthenticationProvider(
             expires_in,
             self._settings.session_lifetime,
             id_token,
+        )
+
+        library = self.library(db)
+        lib_name = library.name if library else str(self.library_id)
+        lib_short = library.short_name if library else "unknown"
+        self.log.info(
+            "OIDC patron access granted for library %s (%s): patron=%s",
+            lib_name,
+            lib_short,
+            patron_data.authorization_identifier,
         )
 
         return credential, patron, patron_data
