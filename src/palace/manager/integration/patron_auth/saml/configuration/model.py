@@ -139,6 +139,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
                 "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST. "
                 "Leave empty to use environment configuration (PALACE_SAML_SP_METADATA or PALACE_SAML_SP_METADATA_FILE)."
             ),
+            type=FormFieldType.TEXTAREA,
         ),
     ] = None
     service_provider_private_key: Annotated[
