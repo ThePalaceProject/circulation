@@ -549,6 +549,31 @@ class TestBaseSettings:
                 "a default value or factory and yet its required property is set to False"
             ) in caplog.text
 
+        @pytest.mark.parametrize(
+            "field_type, monospace, in_output",
+            [
+                pytest.param(FormFieldType.TEXTAREA, True, True, id="textarea-true"),
+                pytest.param(FormFieldType.JSON, True, True, id="json-true"),
+                pytest.param(FormFieldType.TEXT, True, True, id="text-true"),
+                pytest.param(FormFieldType.TEXT, False, False, id="text-false"),
+                pytest.param(FormFieldType.TEXT, None, False, id="text-default"),
+            ],
+        )
+        def test_monospace(
+            self,
+            field_type: FormFieldType,
+            monospace: bool | None,
+            in_output: bool,
+        ) -> None:
+            kwargs: dict[str, Any] = {"label": "Test", "type": field_type}
+            if monospace is not None:
+                kwargs["use_monospace_font"] = monospace
+            _, entry = FormMetadata(**kwargs).to_dict(MagicMock(), "test", False)
+            if in_output:
+                assert entry["use_monospace_font"] is True
+            else:
+                assert "use_monospace_font" not in entry
+
     def test_get_form_field_label_by_alias(
         self, base_settings_fixture: BaseSettingsFixture
     ) -> None:
