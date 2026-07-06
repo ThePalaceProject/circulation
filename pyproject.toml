@@ -74,7 +74,7 @@ dependencies = [
     "opensearch-py>=3.2.0,<4",
     "palace-opds",
     "palace-util",
-    "pillow>=12.0.0,<13",
+    "pillow>=12.3.0,<13",
     "psycopg2-binary>=2.9.12,<2.10",
     "pycountry>=26.2.16,<27",
     "pycryptodome>=3.18,<4",
