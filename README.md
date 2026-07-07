@@ -781,10 +781,10 @@ Setting `PALACE_TEST_DATABASE_EXTERNAL_SCHEMA` to `true` tells the tests that th
 been applied to the provided database (by the current code), so the fixtures use that schema as-is,
 without dropping and recreating it from the current models. With database creation left enabled (the
 default), each worker clones the provided database as a template into its own per-worker database, so
-the suite can still run in parallel. If you additionally set `PALACE_TEST_DATABASE_CREATE_DATABASE` to
-`false`, the provided database is used directly, which requires the tests to be run serially. This is
-used by the backwards-compatibility CI check, which runs a previous release's tests against a schema
-built by the current code.
+the suite can still run in parallel. This is how the backwards-compatibility CI check runs a previous
+release's tests against a schema built by the current code. If you additionally set
+`PALACE_TEST_DATABASE_CREATE_DATABASE` to `false`, the provided database is used directly, which
+requires the tests to be run serially.
 
 ### Override `pytest` Arguments
 
