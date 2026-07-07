@@ -3,8 +3,9 @@ from __future__ import annotations
 import re
 import urllib.parse
 from collections.abc import Mapping, Sequence
+from typing import cast
 
-from pymarc import Field, Indicators, Record, Subfield
+from pymarc import Field, Indicators, Leader, Record, Subfield
 
 from palace.util.datetime_helpers import utc_now
 from palace.util.log import LoggerMixin
@@ -139,9 +140,14 @@ class Annotator(LoggerMixin):
         return record
 
     @classmethod
-    def _record(cls, leader: str | None = None) -> Record:
+    def _record(cls, leader: str | Leader | None = None) -> Record:
         leader = leader or cls.leader()
-        return Record(leader=leader, force_utf8=True)
+        # pymarc's ``Record.leader`` is a ``Leader``, but its ``Record(leader=...)``
+        # constructor is typed to accept only ``str`` even though it accepts a
+        # ``Leader`` at runtime. Cast to bridge that upstream type asymmetry.
+        # TODO: Drop this cast once the fix is released upstream:
+        #   https://gitlab.com/pymarc/pymarc/-/merge_requests/229
+        return Record(leader=cast(str, leader), force_utf8=True)
 
     @classmethod
     def _copy_record(cls, record: Record) -> Record:
