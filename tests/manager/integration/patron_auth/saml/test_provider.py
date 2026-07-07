@@ -1,5 +1,6 @@
 import datetime
 import json
+import logging
 from collections.abc import Callable
 from contextlib import nullcontext
 from unittest.mock import MagicMock, create_autospec, patch
@@ -1222,8 +1223,11 @@ class TestSAMLWebSSOAuthenticationProvider:
         controller_fixture: ControllerFixture,
         create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
         create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
+        caplog: pytest.LogCaptureFixture,
     ):
         """saml_callback succeeds and returns (Credential, Patron, PatronData) when the filter passes."""
+        caplog.set_level(logging.INFO)
+        library = controller_fixture.db.default_library()
         subject = SAMLSubject(
             "http://idp.example.com",
             None,
@@ -1248,6 +1252,40 @@ class TestSAMLWebSSOAuthenticationProvider:
         assert isinstance(credential, Credential)
         assert isinstance(patron, Patron)
         assert isinstance(patron_data, PatronData)
+        assert "Filter [integration] passed" in caplog.text
+        assert "SAML patron access granted" in caplog.text
+        assert library.name is not None and library.name in caplog.text
+        assert library.short_name is not None and library.short_name in caplog.text
+
+    def test_filter_subject_both_levels_eval_error(
+        self,
+        controller_fixture: ControllerFixture,
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
+        create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """When both filter levels raise FilterExpressionError, both messages appear in the detail."""
+        caplog.set_level(logging.ERROR)
+        configuration = create_saml_configuration(
+            filter_expression="subject.no_such_attr == 'x'"
+        )
+        provider = create_saml_provider(
+            settings=configuration,
+            library_settings=SAMLWebSSOAuthLibrarySettings(
+                filter_expression="subject.also_missing == 'x'"
+            ),
+        )
+
+        with pytest.raises(ProblemDetailException) as exc_info:
+            provider._filter_subject(
+                controller_fixture.db.session,
+                SAMLSubject("http://idp.example.com", None, None),
+            )
+
+        assert exc_info.value.problem_detail.uri == SAML_GENERIC_ERROR.uri
+        detail = str(exc_info.value.problem_detail.detail)
+        assert "; " in detail
+        assert len([r for r in caplog.records if r.levelno == logging.ERROR]) == 2
 
     def test_filter_subject_library_not_found(
         self,
@@ -1388,8 +1426,10 @@ class TestSAMLWebSSOAuthenticationProvider:
         library_expression: str | None,
         extra_data: object,
         expect_no_access: bool,
+        caplog: pytest.LogCaptureFixture,
     ):
         """Integration and library filter expressions are ANDed; both must pass."""
+        caplog.set_level(logging.WARNING)
         configuration = create_saml_configuration(
             filter_expression=integration_expression,
             extra_data=extra_data,
@@ -1412,3 +1452,9 @@ class TestSAMLWebSSOAuthenticationProvider:
 
         if expect_no_access:
             assert exc_info.value.problem_detail.uri == SAML_NO_ACCESS_ERROR.uri
+            # All failures are collected into a single warning regardless of how many filters fail.
+            warning_records = [
+                r for r in caplog.records if r.levelno == logging.WARNING
+            ]
+            assert len(warning_records) == 1
+            assert "idp.example.com" in warning_records[0].getMessage()

@@ -332,7 +332,11 @@ class OIDCCredentialManager(LoggerMixin):
             # If no expiry provided, keep existing expiry logic
             self.log.warning("Refreshed token has no expiry information")
 
-        self.log.info(f"Successfully refreshed credential {credential.id}")
+        self.log.info(
+            "Successfully refreshed credential %s, claims: %s",
+            credential.id,
+            new_id_token_claims,
+        )
         return credential
 
     def lookup_patron_by_identifier(
