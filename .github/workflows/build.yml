@@ -419,7 +419,11 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
+      # Skip on tag (release) builds: this commit was already tested on its branch/main
+      # push, so re-running here is redundant. See backwards-compatibility-test for why
+      # release builds must not run these gated tests.
       - name: Test migrations
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         run: ./docker/ci/test_migrations.sh
 
   backwards-compatibility-test:
@@ -457,7 +461,11 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
+      # Skip on tag (release) builds. On a release the just-published tag becomes the "latest"
+      # release, so the script would resolve the previous-release image to this build's own
+      # X.Y.Z tag — which the push job hasn't created yet — deadlocking the release.
       - name: Test backwards compatibility
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./docker/ci/test_backwards_compatibility.sh
