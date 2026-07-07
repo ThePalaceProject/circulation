@@ -55,12 +55,10 @@ if [[ -z "${PREV_RELEASE_IMAGE:-}" ]]; then
 
   # Resolve the previous release's tag. We deliberately do NOT fail the job when this lookup
   # fails: `gh release view` exits non-zero both when there is genuinely no prior release (a
-  # legitimate skip) and on transient errors (auth hiccup, rate limit, network blip), and a blip
-  # here should not block the release pipeline. But we must not fail *open silently* -- so, unlike
-  # a bare `2>/dev/null`, we let gh's error flow to the job log and check its exit status, and on
+  # legitimate skip) and on transient errors (auth hiccup, rate limit, network blip). But we
+  # don't fail *open silently*, we let gh's error flow to the job log and check its exit status, and on
   # any failure we emit a GitHub Actions ::warning:: before skipping. That makes the gate no-op
-  # visible at the PR/checks level instead of quietly passing. This gate is therefore best-effort
-  # with respect to release resolution.
+  # visible at the PR/checks level instead of quietly passing.
   prev_tag="$(gh "${gh_release_args[@]}")"
   gh_status=$?
   if [[ ${gh_status} -ne 0 || -z "${prev_tag}" ]]; then
