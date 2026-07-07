@@ -48,16 +48,27 @@ fail() {
 if [[ -z "${PREV_RELEASE_IMAGE:-}" ]]; then
   # In CI gh infers the repo from $GITHUB_REPOSITORY; locally it infers it from the git
   # remote of the current directory.
+  gh_release_args=(release view --json tagName --jq '.tagName')
   if [[ -n "${GITHUB_REPOSITORY:-}" ]]; then
-    prev_version="$(gh release view --repo "${GITHUB_REPOSITORY}" --json tagName --jq '.tagName' 2>/dev/null | sed 's/^v//')"
-  else
-    prev_version="$(gh release view --json tagName --jq '.tagName' 2>/dev/null | sed 's/^v//')"
+    gh_release_args+=(--repo "${GITHUB_REPOSITORY}")
   fi
-  if [[ -z "${prev_version}" ]]; then
-    echo "No previous GitHub release found; nothing to check. Skipping."
+
+  # Resolve the previous release's tag. We deliberately do NOT fail the job when this lookup
+  # fails: `gh release view` exits non-zero both when there is genuinely no prior release (a
+  # legitimate skip) and on transient errors (auth hiccup, rate limit, network blip), and a blip
+  # here should not block the release pipeline. But we must not fail *open silently* -- so, unlike
+  # a bare `2>/dev/null`, we let gh's error flow to the job log and check its exit status, and on
+  # any failure we emit a GitHub Actions ::warning:: before skipping. That makes the gate no-op
+  # visible at the PR/checks level instead of quietly passing. This gate is therefore best-effort
+  # with respect to release resolution.
+  prev_tag="$(gh "${gh_release_args[@]}")"
+  gh_status=$?
+  if [[ ${gh_status} -ne 0 || -z "${prev_tag}" ]]; then
+    echo "::warning::Backwards-compatibility check skipped: could not resolve the previous release (gh exit ${gh_status}). The gate did NOT run for this build -- see gh's error above. A transient gh/auth/network failure or a genuine absence of releases both land here."
     exit 0
   fi
-  PREV_RELEASE_IMAGE="ghcr.io/thepalaceproject/circ-webapp:${prev_version}"
+
+  PREV_RELEASE_IMAGE="ghcr.io/thepalaceproject/circ-webapp:${prev_tag#v}"
 fi
 export PREV_RELEASE_IMAGE
 echo "Previous release image: ${PREV_RELEASE_IMAGE}"
