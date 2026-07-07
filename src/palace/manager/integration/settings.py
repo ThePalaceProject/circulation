@@ -118,6 +118,11 @@ class FormMetadata(LoggerMixin):
     # If set to True, the Admin UI will be directed to hide this field.
     hidden: bool = False
 
+    # If set to True, hints the Admin UI that it should render the field's input in a
+    # monospace font. Useful for fields whose values are easier to read in monospace
+    # (e.g. structured data, code).
+    use_monospace_font: bool = False
+
     # If set to True, this field is eligible to be included in the patron auth filter
     # expression context. Fields that contain credentials (e.g., private keys, client
     # secrets) or large blobs (e.g., XML metadata) should leave this False.
@@ -179,6 +184,8 @@ class FormMetadata(LoggerMixin):
             ]
         if self.format is not None:
             form_entry["format"] = self.format
+        if self.use_monospace_font:
+            form_entry["use_monospace_font"] = True
 
         return self.weight, form_entry
 
