@@ -85,6 +85,10 @@ so each role can be deployed and (for workers) autoscaled independently. The rol
 container command: `beat` or `worker`. Queue-depth metrics that drive autoscaling are published by the
 `publish_queue_stats` task on the beat schedule, so there is no separate always-on metrics container.
 
+Like the other images, `circ-celery` boots via `my_init` and so initializes or migrates the database
+on startup (advisory-locked `alembic upgrade head`) before the Celery process starts. No separate
+migration step is required.
+
 ```sh
 # The beat scheduler (run exactly one of these).
 $ docker run --name celery-beat -d \

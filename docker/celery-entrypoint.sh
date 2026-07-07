@@ -2,6 +2,11 @@
 #
 # Entrypoint for the circ-celery image.
 #
+# my_init runs this script as its main command (after the shared
+# /etc/my_init.d startup scripts, which apply the DB migration), so by the time
+# we exec Celery the schema is already at head -- the same path the webapp and
+# scripts images use.
+#
 # A single image backs every Celery process we run; the role is chosen by the
 # first argument, so the same image can be deployed as the beat scheduler or any
 # number of autoscaled worker pools:
