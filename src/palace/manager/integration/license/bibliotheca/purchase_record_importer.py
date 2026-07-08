@@ -13,7 +13,7 @@ from palace.util.log import LoggerMixin
 
 from palace.manager.celery.tasks import apply
 from palace.manager.data_layer.policy.replacement import ReplacementPolicy
-from palace.manager.integration.license.bibliotheca import BibliothecaAPI
+from palace.manager.integration.license.bibliotheca.api import BibliothecaAPI
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.sqlalchemy.model.identifier import Identifier

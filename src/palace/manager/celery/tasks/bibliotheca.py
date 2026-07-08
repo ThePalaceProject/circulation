@@ -32,15 +32,15 @@ from palace.manager.api.circulation.exceptions import RemoteInitiatedServerError
 from palace.manager.celery.importer import workflow_lock_guard
 from palace.manager.celery.task import Task
 from palace.manager.celery.utils import ModelNotFoundError, load_from_id, signature_with
-from palace.manager.integration.license.bibliotheca import BibliothecaAPI
-from palace.manager.integration.license.bibliotheca_circulation_updater import (
+from palace.manager.integration.license.bibliotheca.api import BibliothecaAPI
+from palace.manager.integration.license.bibliotheca.circulation_updater import (
     BibliothecaCirculationUpdater,
 )
-from palace.manager.integration.license.bibliotheca_importer import (
+from palace.manager.integration.license.bibliotheca.importer import (
     EVENT_IMPORT_OVERLAP,
     BibliothecaEventImporter,
 )
-from palace.manager.integration.license.bibliotheca_purchase_record_importer import (
+from palace.manager.integration.license.bibliotheca.purchase_record_importer import (
     DEFAULT_PURCHASE_RECORD_START_TIME,
     PURCHASE_RECORD_SERVICE_NAME,
     BibliothecaPurchaseRecordImporter,

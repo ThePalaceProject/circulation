@@ -17,7 +17,7 @@ from palace.manager.feed.facets.feed import Facets, FeaturedFacets
 from palace.manager.feed.facets.search import SearchFacets
 from palace.manager.feed.worklist.base import WorkList
 from palace.manager.feed.worklist.top_level import TopLevelWorkList
-from palace.manager.integration.license.bibliotheca import BibliothecaAPI
+from palace.manager.integration.license.bibliotheca.api import BibliothecaAPI
 from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
 from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.search.filter import Filter

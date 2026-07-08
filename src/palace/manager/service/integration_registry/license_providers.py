@@ -16,7 +16,7 @@ class LicenseProvidersRegistry(IntegrationRegistry["CirculationApiType"]):
     def __init__(self) -> None:
         super().__init__(Goals.LICENSE_GOAL)
 
-        from palace.manager.integration.license.bibliotheca import BibliothecaAPI
+        from palace.manager.integration.license.bibliotheca.api import BibliothecaAPI
         from palace.manager.integration.license.boundless.api import BoundlessApi
         from palace.manager.integration.license.opds.for_distributors.api import (
             OPDSForDistributorsAPI,

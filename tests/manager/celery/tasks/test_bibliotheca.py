@@ -19,16 +19,16 @@ from palace.manager.celery.tasks.bibliotheca import (
     _circulation_update_workflow_lock,
     _purchase_record_workflow_lock,
 )
-from palace.manager.integration.license.bibliotheca import BibliothecaAPI
-from palace.manager.integration.license.bibliotheca_circulation_updater import (
+from palace.manager.integration.license.bibliotheca.api import BibliothecaAPI
+from palace.manager.integration.license.bibliotheca.circulation_updater import (
     CIRCULATION_UPDATE_BATCH_SIZE,
     CIRCULATION_UPDATE_SERVICE_NAME,
     BatchUpdateResult,
 )
-from palace.manager.integration.license.bibliotheca_importer import (
+from palace.manager.integration.license.bibliotheca.importer import (
     EVENT_IMPORT_SERVICE_NAME,
 )
-from palace.manager.integration.license.bibliotheca_purchase_record_importer import (
+from palace.manager.integration.license.bibliotheca.purchase_record_importer import (
     _MARC_PAGE_SIZE,
     DEFAULT_PURCHASE_RECORD_START_TIME,
     PURCHASE_RECORD_SERVICE_NAME,
@@ -130,7 +130,7 @@ class TestBibliothecaImportAllCollections:
 
 
 class TestBibliothecaImportCollection:
-    @patch("palace.manager.integration.license.bibliotheca_importer.BibliothecaAPI")
+    @patch("palace.manager.integration.license.bibliotheca.importer.BibliothecaAPI")
     def test_creates_timestamp_on_first_run(
         self,
         mock_api_cls: MagicMock,
@@ -148,7 +148,7 @@ class TestBibliothecaImportCollection:
         assert ts is not None
         assert ts.finish is not None
 
-    @patch("palace.manager.integration.license.bibliotheca_importer.BibliothecaAPI")
+    @patch("palace.manager.integration.license.bibliotheca.importer.BibliothecaAPI")
     def test_starts_from_stored_timestamp(
         self,
         mock_api_cls: MagicMock,
@@ -179,7 +179,7 @@ class TestBibliothecaImportCollection:
         expected_start = one_hour_ago - timedelta(minutes=5)
         assert abs((slice_start - expected_start).total_seconds()) < 2
 
-    @patch("palace.manager.integration.license.bibliotheca_importer.BibliothecaAPI")
+    @patch("palace.manager.integration.license.bibliotheca.importer.BibliothecaAPI")
     def test_explicit_start_used_directly(
         self,
         mock_api_cls: MagicMock,
@@ -206,7 +206,7 @@ class TestBibliothecaImportCollection:
         slice_start, _ = mock_api.get_events_between.call_args.args
         assert abs((slice_start - explicit_start).total_seconds()) < 1
 
-    @patch("palace.manager.integration.license.bibliotheca_importer.BibliothecaAPI")
+    @patch("palace.manager.integration.license.bibliotheca.importer.BibliothecaAPI")
     def test_already_up_to_date(
         self,
         mock_api_cls: MagicMock,
@@ -225,7 +225,7 @@ class TestBibliothecaImportCollection:
 
         mock_api_cls.return_value.get_events_between.assert_not_called()
 
-    @patch("palace.manager.integration.license.bibliotheca_importer.BibliothecaAPI")
+    @patch("palace.manager.integration.license.bibliotheca.importer.BibliothecaAPI")
     def test_replaces_when_more_slices_remain(
         self,
         mock_api_cls: MagicMock,
@@ -254,7 +254,7 @@ class TestBibliothecaImportCollection:
         # The next start should be approximately 5 minutes after the slice started.
         assert replace_sig.kwargs["start"] is not None
 
-    @patch("palace.manager.integration.license.bibliotheca_importer.BibliothecaAPI")
+    @patch("palace.manager.integration.license.bibliotheca.importer.BibliothecaAPI")
     def test_no_replace_on_last_slice(
         self,
         mock_api_cls: MagicMock,
@@ -297,7 +297,7 @@ class TestBibliothecaImportCollection:
         caplog.set_level(LogLevel.warning)
 
         with patch(
-            "palace.manager.integration.license.bibliotheca_importer.BibliothecaAPI"
+            "palace.manager.integration.license.bibliotheca.importer.BibliothecaAPI"
         ) as mock_api_cls:
             bibliotheca.import_collection.delay(collection_id=collection.id).wait()
             mock_api_cls.return_value.get_events_between.assert_not_called()
@@ -328,7 +328,7 @@ class TestBibliothecaImportCollection:
         mock_response = MockRequestsResponse(500, content="Internal Server Error")
 
         with patch(
-            "palace.manager.integration.license.bibliotheca_importer.BibliothecaAPI"
+            "palace.manager.integration.license.bibliotheca.importer.BibliothecaAPI"
         ) as mock_api_cls:
             mock_api_cls.return_value.get_events_between.side_effect = (
                 BadResponseException("http://test.com", "Bad response", mock_response)
@@ -456,7 +456,7 @@ class TestBibliothecaImportCollection:
         assert ts.finish is not None
         assert ts.finish > ten_minutes_ago
 
-    @patch("palace.manager.integration.license.bibliotheca_importer.BibliothecaAPI")
+    @patch("palace.manager.integration.license.bibliotheca.importer.BibliothecaAPI")
     def test_timestamp_updated_after_each_slice(
         self,
         mock_api_cls: MagicMock,
@@ -508,7 +508,7 @@ class TestBibliothecaImportCollection:
         lock_c1.acquire()
 
         with patch(
-            "palace.manager.integration.license.bibliotheca_importer.BibliothecaAPI"
+            "palace.manager.integration.license.bibliotheca.importer.BibliothecaAPI"
         ) as mock_api_cls2:
             mock_api_cls2.return_value.get_events_between.return_value = iter([])
             # Collection 2 should process normally.
@@ -646,7 +646,7 @@ class TestImportPurchaseRecordsForAllCollections:
 
 class TestImportPurchaseRecordsByCollection:
     @patch(
-        "palace.manager.integration.license.bibliotheca_purchase_record_importer.BibliothecaAPI"
+        "palace.manager.integration.license.bibliotheca.purchase_record_importer.BibliothecaAPI"
     )
     def test_first_run_starts_from_default_start_time(
         self,
@@ -676,7 +676,7 @@ class TestImportPurchaseRecordsByCollection:
         assert abs((slice_start - expected_start).total_seconds()) < 1
 
     @patch(
-        "palace.manager.integration.license.bibliotheca_purchase_record_importer.BibliothecaAPI"
+        "palace.manager.integration.license.bibliotheca.purchase_record_importer.BibliothecaAPI"
     )
     def test_starts_from_stored_timestamp(
         self,
@@ -709,7 +709,7 @@ class TestImportPurchaseRecordsByCollection:
         assert abs((slice_start - stored_finish).total_seconds()) < 1
 
     @patch(
-        "palace.manager.integration.license.bibliotheca_purchase_record_importer.BibliothecaAPI"
+        "palace.manager.integration.license.bibliotheca.purchase_record_importer.BibliothecaAPI"
     )
     def test_already_up_to_date(
         self,
@@ -731,7 +731,7 @@ class TestImportPurchaseRecordsByCollection:
         mock_api_cls.return_value.marc_request.assert_not_called()
 
     @patch(
-        "palace.manager.integration.license.bibliotheca_purchase_record_importer.BibliothecaAPI"
+        "palace.manager.integration.license.bibliotheca.purchase_record_importer.BibliothecaAPI"
     )
     def test_replaces_when_more_days_remain(
         self,
@@ -769,7 +769,7 @@ class TestImportPurchaseRecordsByCollection:
         assert replace_sig.kwargs["offset"] == 1
 
     @patch(
-        "palace.manager.integration.license.bibliotheca_purchase_record_importer.BibliothecaPurchaseRecordImporter.import_day"
+        "palace.manager.integration.license.bibliotheca.purchase_record_importer.BibliothecaPurchaseRecordImporter.import_day"
     )
     def test_replaces_with_next_offset_when_page_full(
         self,
@@ -814,7 +814,7 @@ class TestImportPurchaseRecordsByCollection:
         assert replace_sig.kwargs["offset"] == 1 + _MARC_PAGE_SIZE
 
     @patch(
-        "palace.manager.integration.license.bibliotheca_purchase_record_importer.BibliothecaAPI"
+        "palace.manager.integration.license.bibliotheca.purchase_record_importer.BibliothecaAPI"
     )
     def test_no_replace_on_last_day(
         self,
@@ -860,7 +860,7 @@ class TestImportPurchaseRecordsByCollection:
         caplog.set_level(LogLevel.warning)
 
         with patch(
-            "palace.manager.integration.license.bibliotheca_purchase_record_importer.BibliothecaAPI"
+            "palace.manager.integration.license.bibliotheca.purchase_record_importer.BibliothecaAPI"
         ) as mock_api_cls:
             bibliotheca.import_purchase_records_by_collection.delay(
                 collection_id=collection.id
@@ -893,7 +893,7 @@ class TestImportPurchaseRecordsByCollection:
         mock_response = MockRequestsResponse(500, content="Internal Server Error")
 
         with patch(
-            "palace.manager.integration.license.bibliotheca_purchase_record_importer.BibliothecaAPI"
+            "palace.manager.integration.license.bibliotheca.purchase_record_importer.BibliothecaAPI"
         ) as mock_api_cls:
             mock_api_cls.return_value.marc_request.side_effect = BadResponseException(
                 "http://test.com", "Bad response", mock_response
@@ -939,7 +939,7 @@ class TestImportPurchaseRecordsByCollection:
         )
 
         with patch(
-            "palace.manager.integration.license.bibliotheca_purchase_record_importer.BibliothecaAPI"
+            "palace.manager.integration.license.bibliotheca.purchase_record_importer.BibliothecaAPI"
         ) as mock_api_cls:
             mock_api_cls.return_value.marc_request.side_effect = (
                 RemoteInitiatedServerError("boom", BibliothecaAPI.SERVICE_NAME)
@@ -955,7 +955,7 @@ class TestImportPurchaseRecordsByCollection:
             assert mock_api_cls.return_value.marc_request.call_count == 5
 
     @patch(
-        "palace.manager.integration.license.bibliotheca_purchase_record_importer.BibliothecaAPI"
+        "palace.manager.integration.license.bibliotheca.purchase_record_importer.BibliothecaAPI"
     )
     def test_timestamp_updated_after_each_day(
         self,
@@ -990,7 +990,7 @@ class TestImportPurchaseRecordsByCollection:
         assert abs((ts.finish - expected_finish).total_seconds()) < 5
 
     @patch(
-        "palace.manager.integration.license.bibliotheca_purchase_record_importer.BibliothecaAPI"
+        "palace.manager.integration.license.bibliotheca.purchase_record_importer.BibliothecaAPI"
     )
     def test_force_reimport_clears_timestamp_before_import(
         self,
@@ -1032,7 +1032,7 @@ class TestImportPurchaseRecordsByCollection:
         assert ts.finish == expected_finish
 
     @patch(
-        "palace.manager.integration.license.bibliotheca_purchase_record_importer.BibliothecaAPI"
+        "palace.manager.integration.license.bibliotheca.purchase_record_importer.BibliothecaAPI"
     )
     def test_reset_timestamp_not_forwarded_to_replacement(
         self,
@@ -1085,7 +1085,7 @@ class TestImportPurchaseRecordsByCollection:
         )
 
         with patch(
-            "palace.manager.integration.license.bibliotheca_purchase_record_importer.BibliothecaAPI"
+            "palace.manager.integration.license.bibliotheca.purchase_record_importer.BibliothecaAPI"
         ) as mock_api_cls:
             # Return a fresh empty iterator on every call so each day's page
             # returns 0 records (day_complete=True, no pagination within a day).
@@ -1165,7 +1165,7 @@ class TestImportPurchaseRecordsByCollection:
         caplog.set_level(LogLevel.warning)
 
         with patch(
-            "palace.manager.integration.license.bibliotheca_purchase_record_importer.BibliothecaAPI"
+            "palace.manager.integration.license.bibliotheca.purchase_record_importer.BibliothecaAPI"
         ) as mock_api_cls:
             bibliotheca.import_purchase_records_by_collection.delay(
                 collection_id=collection.id,
@@ -1312,7 +1312,7 @@ class TestCirculationUpdateCollection:
         mock_updater.update_batch.assert_called_once_with(99)
 
     @patch(
-        "palace.manager.integration.license.bibliotheca_circulation_updater.BibliothecaAPI"
+        "palace.manager.integration.license.bibliotheca.circulation_updater.BibliothecaAPI"
     )
     def test_already_complete_no_replace(
         self,
@@ -1336,7 +1336,7 @@ class TestCirculationUpdateCollection:
         mock_replace.assert_not_called()
 
     @patch(
-        "palace.manager.integration.license.bibliotheca_circulation_updater.BibliothecaAPI"
+        "palace.manager.integration.license.bibliotheca.circulation_updater.BibliothecaAPI"
     )
     def test_full_batch_issues_replace_with_next_offset(
         self,
@@ -1373,7 +1373,7 @@ class TestCirculationUpdateCollection:
         assert replace_sig.kwargs["offset"] == 100
 
     @patch(
-        "palace.manager.integration.license.bibliotheca_circulation_updater.BibliothecaAPI"
+        "palace.manager.integration.license.bibliotheca.circulation_updater.BibliothecaAPI"
     )
     def test_partial_batch_no_replace(
         self,
@@ -1406,7 +1406,7 @@ class TestCirculationUpdateCollection:
         mock_replace.assert_not_called()
 
     @patch(
-        "palace.manager.integration.license.bibliotheca_circulation_updater.BibliothecaAPI"
+        "palace.manager.integration.license.bibliotheca.circulation_updater.BibliothecaAPI"
     )
     def test_replace_carries_collection_id(
         self,
@@ -1643,7 +1643,7 @@ class TestCirculationUpdateCollection:
         assert collection.name in caplog.text
 
     @patch(
-        "palace.manager.integration.license.bibliotheca_circulation_updater.BibliothecaAPI"
+        "palace.manager.integration.license.bibliotheca.circulation_updater.BibliothecaAPI"
     )
     def test_full_sweep_chains_through_every_batch_and_releases_lock(
         self,

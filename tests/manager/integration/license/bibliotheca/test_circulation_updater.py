@@ -11,8 +11,8 @@ from palace.manager.celery.tasks import apply
 from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.identifier import IdentifierData
-from palace.manager.integration.license.bibliotheca import BibliothecaAPI
-from palace.manager.integration.license.bibliotheca_circulation_updater import (
+from palace.manager.integration.license.bibliotheca.api import BibliothecaAPI
+from palace.manager.integration.license.bibliotheca.circulation_updater import (
     CIRCULATION_UPDATE_BATCH_SIZE,
     CIRCULATION_UPDATE_SERVICE_NAME,
     BibliothecaCirculationUpdater,
