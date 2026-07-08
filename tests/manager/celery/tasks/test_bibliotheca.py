@@ -413,7 +413,8 @@ class TestBibliothecaImportCollection:
         redis_fixture: RedisFixture,
     ) -> None:
         """Smoke test: the full Celery task path processes an event and advances the
-        Timestamp.  Detailed event-handling assertions live in test_bibliotheca_importer.
+        Timestamp.  Detailed event-handling assertions live in
+        tests/manager/integration/license/bibliotheca/test_importer.py.
         """
         collection = bibliotheca_task_fixture.collection
 
