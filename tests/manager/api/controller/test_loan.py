@@ -51,7 +51,7 @@ from palace.manager.api.problem_details import (
 from palace.manager.core.classifier import Classifier
 from palace.manager.core.problem_details import INTEGRATION_ERROR, INVALID_INPUT
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
-from palace.manager.integration.license.bibliotheca import BibliothecaAPI
+from palace.manager.integration.license.bibliotheca.api import BibliothecaAPI
 from palace.manager.integration.license.opds.opds1.api import OPDSAPI
 from palace.manager.service.redis.exception import TRANSIENT_REDIS_ERRORS
 from palace.manager.service.redis.models.patron_activity import PatronActivity

@@ -2,7 +2,7 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from palace.manager.integration.license.bibliotheca import BibliothecaAPI
+from palace.manager.integration.license.bibliotheca.api import BibliothecaAPI
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.util.http.base import raise_for_bad_response

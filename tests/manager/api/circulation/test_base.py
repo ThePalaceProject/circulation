@@ -7,7 +7,7 @@ from palace.util.datetime_helpers import utc_now
 
 from palace.manager.api.circulation.data import HoldInfo, LoanInfo
 from palace.manager.data_layer.format import FormatData
-from palace.manager.integration.license.bibliotheca import BibliothecaAPI
+from palace.manager.integration.license.bibliotheca.api import BibliothecaAPI
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
