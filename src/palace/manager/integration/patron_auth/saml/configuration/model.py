@@ -140,6 +140,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
                 "Leave empty to use environment configuration (PALACE_SAML_SP_METADATA or PALACE_SAML_SP_METADATA_FILE)."
             ),
             type=FormFieldType.TEXTAREA,
+            use_monospace_font=True,
         ),
     ] = None
     service_provider_private_key: Annotated[
@@ -149,6 +150,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
             description="Private key used for encrypting SAML requests. "
             "Leave empty to use environment configuration (PALACE_SAML_SP_PRIVATE_KEY or PALACE_SAML_SP_PRIVATE_KEY_FILE).",
             type=FormFieldType.TEXTAREA,
+            use_monospace_font=True,
         ),
     ] = None
     federated_identity_provider_entity_ids: Annotated[
@@ -216,6 +218,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
                 "The expression will extract the <b>patron_id</b> from the first SAML attribute that matches "
                 "or NameID if it matches the expression."
             ),
+            use_monospace_font=True,
         ),
     ] = None
     non_federated_identity_provider_xml_metadata: Annotated[
@@ -229,6 +232,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
                 "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect."
             ),
             type=FormFieldType.TEXTAREA,
+            use_monospace_font=True,
         ),
     ] = None
     session_lifetime: Annotated[
@@ -278,6 +282,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
                 "</pre>"
             ),
             type=FormFieldType.TEXTAREA,
+            use_monospace_font=True,
         ),
     ] = None
     # Note: the key-ordering caveat in the description below is a JSONB storage
@@ -295,6 +300,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
             ),
             type=FormFieldType.JSON,
             patron_auth_filter_context=True,
+            use_monospace_font=True,
         ),
     ] = None
     service_provider_strict_mode: Annotated[
@@ -484,6 +490,7 @@ class SAMLWebSSOAuthLibrarySettings(AuthProviderLibrarySettings):
                 " syntax and examples."
             ),
             type=FormFieldType.TEXTAREA,
+            use_monospace_font=True,
         ),
     ] = None
 
