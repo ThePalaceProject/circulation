@@ -277,6 +277,7 @@ class OIDCAuthSettings(AuthProviderSettings, LoggerMixin):
                 "<pre>(?P&lt;patron_id&gt;[^@]+)@example\\.edu</pre>"
                 "Leave empty to use the full claim value."
             ),
+            use_monospace_font=True,
         ),
     ] = None
 
@@ -316,6 +317,7 @@ class OIDCAuthSettings(AuthProviderSettings, LoggerMixin):
                 "<pre>claims['email'].endswith('@example.edu')</pre>"
             ),
             type=FormFieldType.TEXTAREA,
+            use_monospace_font=True,
         ),
     ] = None
 
@@ -334,6 +336,7 @@ class OIDCAuthSettings(AuthProviderSettings, LoggerMixin):
             ),
             type=FormFieldType.JSON,
             patron_auth_filter_context=True,
+            use_monospace_font=True,
         ),
     ] = None
 
@@ -584,6 +587,7 @@ class OIDCAuthLibrarySettings(AuthProviderLibrarySettings):
                 " syntax and available context variables."
             ),
             type=FormFieldType.TEXTAREA,
+            use_monospace_font=True,
         ),
     ] = None
 
