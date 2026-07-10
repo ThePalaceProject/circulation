@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Literal
+from typing import Any, Literal
 from unittest import mock
 
 import feedparser
@@ -1127,12 +1127,15 @@ class TestCustomListsController:
         custom_list.library = admin_librarian_fixture.ctrl.db.default_library()
         custom_list.add_entry(w1)
         custom_list.auto_update_enabled = True
-        custom_list.auto_update_query = '{"query":"...."}'
+        custom_list.auto_update_query = json.dumps(
+            {"query": {"key": "title", "value": "old"}}
+        )
         custom_list.auto_update_status = CustomList.UPDATED
         admin_librarian_fixture.ctrl.db.session.commit()
 
         assert isinstance(custom_list.name, str)
         assert custom_list.library is not None
+        changed_query = {"query": {"key": "title", "value": "changed"}}
         response = admin_librarian_fixture.manager.admin_custom_lists_controller._create_or_update_list(
             custom_list.library,
             custom_list.name,
@@ -1141,11 +1144,11 @@ class TestCustomListsController:
             [],
             id=custom_list.id,
             auto_update=True,
-            auto_update_query={"query": "...changed"},
+            auto_update_query=changed_query,
         )
 
         assert response.status_code == 200
-        assert custom_list.auto_update_query == '{"query": "...changed"}'
+        assert custom_list.auto_update_query == json.dumps(changed_query)
         assert custom_list.auto_update_status == CustomList.REPOPULATE
         assert [e.work_id for e in custom_list.entries] == [w1.id]
 
@@ -1163,12 +1166,109 @@ class TestCustomListsController:
             [],
             id=None,
             auto_update=True,
-            auto_update_query={"foo": object()},  # type: ignore[dict-item]
+            auto_update_query={"foo": object()},
         )
 
         assert isinstance(response, ProblemDetail)
         assert response.status_code == 400
         assert response.detail == "auto_update_query is not JSON serializable"
+
+    @pytest.mark.parametrize(
+        "query,expected_reason",
+        [
+            pytest.param(
+                {"query": {"key": "published", "value": "2025>01>01"}},
+                "Could not parse 'published' value '2025>01>01'. Only use 'YYYY-MM-DD'",
+                id="unparseable-published-value",
+            ),
+            pytest.param(
+                {"query": {"key": "not_a_field", "value": "x"}},
+                "Unrecognized key: not_a_field",
+                id="unknown-key",
+            ),
+            pytest.param(
+                {"query": {"key": "title", "value": "x", "op": "sideways"}},
+                "Unrecognized operator: sideways",
+                id="unknown-operator",
+            ),
+            pytest.param(
+                {"not_query": {"key": "title", "value": "x"}},
+                "'query' key must be present as the root",
+                id="missing-query-root",
+            ),
+        ],
+    )
+    def test_auto_update_query_must_be_a_valid_search_query(
+        self,
+        query: dict[str, Any],
+        expected_reason: str,
+        admin_librarian_fixture: AdminLibrarianFixture,
+        db: DatabaseTransactionFixture,
+    ):
+        """A JSON-serializable query that the search layer cannot parse is rejected.
+
+        Storing one would produce a list that silently stops updating: the
+        entry-update task can only log and skip a list whose query fails to parse.
+        """
+        library = db.default_library()
+        response = admin_librarian_fixture.manager.admin_custom_lists_controller._create_or_update_list(
+            library,
+            "test list",
+            [],
+            [],
+            [],
+            id=None,
+            auto_update=True,
+            auto_update_query=query,
+        )
+
+        assert isinstance(response, ProblemDetail)
+        assert response.status_code == 400
+        assert response.detail is not None
+        assert "auto_update_query is not a valid search query" in response.detail
+        assert expected_reason in response.detail
+
+        # Nothing was persisted.
+        assert CustomList.find(db.session, "test list", library=library) is None
+
+    def test_auto_update_query_validated_on_edit(
+        self,
+        admin_librarian_fixture: AdminLibrarianFixture,
+    ):
+        """An existing list's query is validated too, not just a new list's.
+
+        Edits were the gap: creating a list incidentally exercised its query through
+        populate_query_pages, but an edit never parsed the query at all.
+        """
+        custom_list: CustomList
+        custom_list, _ = admin_librarian_fixture.ctrl.db.customlist(
+            data_source_name=DataSource.LIBRARY_STAFF, num_entries=0
+        )
+        custom_list.library = admin_librarian_fixture.ctrl.db.default_library()
+        custom_list.auto_update_enabled = True
+        good_query = json.dumps({"query": {"key": "title", "value": "good"}})
+        custom_list.auto_update_query = good_query
+        custom_list.auto_update_status = CustomList.UPDATED
+        admin_librarian_fixture.ctrl.db.session.commit()
+
+        assert isinstance(custom_list.name, str)
+        assert custom_list.library is not None
+        response = admin_librarian_fixture.manager.admin_custom_lists_controller._create_or_update_list(
+            custom_list.library,
+            custom_list.name,
+            [],
+            [],
+            [],
+            id=custom_list.id,
+            auto_update=True,
+            auto_update_query={"query": {"key": "published", "value": "2025>01>01"}},
+        )
+
+        assert isinstance(response, ProblemDetail)
+        assert response.status_code == 400
+        # The previously-good query is left untouched.
+        assert custom_list.auto_update_query == good_query
+        assert custom_list.auto_update_status == CustomList.UPDATED
 
     def test_auto_update_create_unable_to_serialize_facets(
         self,
@@ -1184,7 +1284,7 @@ class TestCustomListsController:
             [],
             id=None,
             auto_update=True,
-            auto_update_query={"query": "foo"},
+            auto_update_query={"query": {"key": "title", "value": "foo"}},
             auto_update_facets={"foo": object()},  # type: ignore[dict-item]
         )
 
@@ -1206,6 +1306,6 @@ class TestCustomListsController:
             [{}, {}],
             id=None,
             auto_update=True,
-            auto_update_query={"query": "foo"},
+            auto_update_query={"query": {"key": "title", "value": "foo"}},
         )
         assert response == AUTO_UPDATE_CUSTOM_LIST_CANNOT_HAVE_ENTRIES

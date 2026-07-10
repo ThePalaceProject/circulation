@@ -34,6 +34,7 @@ from palace.manager.core.problem_details import INVALID_INPUT, METHOD_NOT_ALLOWE
 from palace.manager.core.query.customlist import CustomListQueries
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.worklist.base import WorkList
+from palace.manager.search.query import JSONQuery, QueryParseException
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.customlist import CustomList
 from palace.manager.sqlalchemy.model.datasource import DataSource
@@ -129,7 +130,7 @@ class CustomListsController(
         deleted_entries: list[dict[str, Any]] | None = None,
         id: int | None = None,
         auto_update: bool | None = None,
-        auto_update_query: dict[str, str] | None = None,
+        auto_update_query: dict[str, Any] | None = None,
         auto_update_facets: dict[str, str] | None = None,
     ) -> ProblemDetail | Response:
         data_source = DataSource.lookup(self._db, DataSource.LIBRARY_STAFF)
@@ -167,6 +168,21 @@ class CustomListsController(
                     raise ProblemDetailException(
                         INVALID_INPUT.detailed(
                             "auto_update_query is not JSON serializable"
+                        )
+                    )
+
+                # A query that is valid JSON may still be a query our search layer
+                # cannot parse (an unknown key, a bad operator, a `published` value
+                # that isn't YYYY-MM-DD, ...). Reject it here rather than storing it:
+                # the nightly entry-update task can only log and skip such a list, so
+                # an unvalidated query means a list that silently stops updating.
+                try:
+                    # Building the query is what validates it; the result is discarded.
+                    _ = JSONQuery(auto_update_query).search_query
+                except QueryParseException as exc:
+                    raise ProblemDetailException(
+                        INVALID_INPUT.detailed(
+                            f"auto_update_query is not a valid search query: {exc.detail}"
                         )
                     )
 
