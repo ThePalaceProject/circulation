@@ -78,7 +78,7 @@ fi
 trap cleanup EXIT
 
 # (2) Build the current schema by initializing a fresh database with the current image.
-compose_cmd up -d pg os minio redis || fail "Could not start service containers."
+compose_cmd up -d pg os minio valkey || fail "Could not start service containers."
 run_in_container webapp "./bin/util/initialize_instance" \
   || fail "Failed to initialize the database with the current image."
 
