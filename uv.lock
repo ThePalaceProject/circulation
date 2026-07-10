@@ -1965,11 +1965,11 @@ wheels = [
 
 [[package]]
 name = "nameparser"
-version = "1.2.1"
+version = "1.3.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/97/5d/ca60f316239f27f7fb544229fba828334b6ceecd161456c6050490cb49db/nameparser-1.2.1.tar.gz", hash = "sha256:62646ce9bc4961eb546b8bc8afb94227713682fa3568d0de1f56f9713a8062a7", size = 40656, upload-time = "2026-06-19T23:05:43.574Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/cd/1f/1d23a2c8c03c6f6fa072b09ba57e96884506bf5393f4750efe8de25afcd6/nameparser-1.3.0.tar.gz", hash = "sha256:12b027988d97867aa0d96d362e49cc5381346dec92536cb8e3eee9a8ce8ef14d", size = 94465, upload-time = "2026-07-06T06:37:04.451Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b8/f5/ab2d6806cdf59d2c42a6e838fcdbfcfb27e1d095d44649de8f499852dae3/nameparser-1.2.1-py3-none-any.whl", hash = "sha256:0e81087e3cf6b9c88f26733a315ca21f3da05847e4863432da492927fef4dc53", size = 25726, upload-time = "2026-06-19T23:05:42.305Z" },
+    { url = "https://files.pythonhosted.org/packages/23/85/3b5e36d8c3efbdd19cccdb186a47f70401c3169350e20a3fbc50e6e09885/nameparser-1.3.0-py3-none-any.whl", hash = "sha256:bb44f29e50bb817b121633c79ac04f1a3a516719556d10bcb945972d8b6e238a", size = 45790, upload-time = "2026-07-06T06:37:03.22Z" },
 ]
 
 [[package]]
@@ -2187,7 +2187,7 @@ requires-dist = [
     { name = "jwcrypto", specifier = ">=1.5.8,<2" },
     { name = "levenshtein", specifier = ">=0.27,<0.28" },
     { name = "lxml", extras = ["html-clean"], specifier = "==6.1.1" },
-    { name = "nameparser", specifier = ">=1.2.1,<2" },
+    { name = "nameparser", specifier = ">=1.3.0,<2" },
     { name = "openpyxl", specifier = ">=3.1,<4" },
     { name = "opensearch-py", specifier = ">=3.2.0,<4" },
     { name = "palace-opds", editable = "packages/palace-opds" },
