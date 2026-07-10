@@ -419,13 +419,61 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
+      # Skip on tag (release) builds: this commit was already tested on its branch/main
+      # push, so re-running here is redundant. See backwards-compatibility-test for why
+      # release builds must not run these gated tests.
       - name: Test migrations
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         run: ./docker/ci/test_migrations.sh
+
+  backwards-compatibility-test:
+    name: Backwards compatibility test
+    runs-on: ubuntu-24.04
+    needs: [build]
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Download digests
+        uses: actions/download-artifact@v8
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-amd64
+
+      # This sets the environment variable referenced in the docker-compose file
+      # for the image to use for the webapp container to the digest of the image
+      # that was built in the build job.
+      - name: Set webapp image
+        working-directory: ${{ runner.temp }}/digests/webapp
+        run: |
+          IMAGE="${{needs.build.outputs.webapp-repo}}$(printf '@sha256:%s' *)"
+          echo "$IMAGE"
+          echo "WEBAPP_IMAGE=$IMAGE" >> $GITHUB_ENV
+
+      # See comment here: https://github.com/actions/runner-images/issues/1187#issuecomment-686735760
+      - name: Disable network offload
+        run: sudo ethtool -K eth0 tx off rx off
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # Skip on tag (release) builds. On a release the just-published tag becomes the "latest"
+      # release, so the script would resolve the previous-release image to this build's own
+      # X.Y.Z tag — which the push job hasn't created yet — deadlocking the release.
+      - name: Test backwards compatibility
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./docker/ci/test_backwards_compatibility.sh
 
   push:
     name: Tag & Push Images
     runs-on: ubuntu-24.04
-    needs: [build, integration-test, unit-test, migration-test]
+    needs: [build, integration-test, unit-test, migration-test, backwards-compatibility-test]
     permissions:
       contents: read
       packages: write
