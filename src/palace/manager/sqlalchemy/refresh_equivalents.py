@@ -12,7 +12,11 @@ use in tests.
 
 from __future__ import annotations
 
+from collections.abc import Collection, Iterable
+from itertools import batched
+
 from sqlalchemy import and_, delete, select, union
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from palace.manager.sqlalchemy.model.identifier import (
@@ -20,6 +24,43 @@ from palace.manager.sqlalchemy.model.identifier import (
     Identifier,
     RecursiveEquivalencyCache,
 )
+
+# Number of rows sent per INSERT statement.
+INSERT_CHUNK_SIZE = 10_000
+
+
+def _insert_cache_rows(session: Session, rows: Iterable[dict[str, int]]) -> None:
+    """
+    Insert (parent_identifier_id, identifier_id) rows into the cache.
+
+    Rows that already exist are skipped rather than raising a unique violation.
+    We are not the only writer of this table: the ``Identifier`` creation
+    listener inserts self-reference rows from webapp transactions, and a
+    redelivered Celery task can run a second refresh chain concurrently with the
+    first. Because every parent's rows are deleted and recomputed from the same
+    source data, a row a concurrent transaction commits under us holds the same
+    value we were about to write, so ignoring the conflict converges on the
+    correct chain instead of aborting the whole batch.
+    """
+    for chunk in batched(rows, INSERT_CHUNK_SIZE):
+        session.execute(
+            pg_insert(RecursiveEquivalencyCache)
+            .values(list(chunk))
+            .on_conflict_do_nothing(
+                index_elements=["parent_identifier_id", "identifier_id"]
+            )
+        )
+
+
+def _delete_cache_rows(session: Session, parent_ids: Collection[int]) -> None:
+    """Delete every cache row belonging to any of the given parent identifiers."""
+    if not parent_ids:
+        return
+    session.execute(
+        delete(RecursiveEquivalencyCache).where(
+            RecursiveEquivalencyCache.parent_identifier_id.in_(parent_ids)
+        )
+    )
 
 
 def process_identifier_ids(session: Session, identifier_ids: frozenset[int]) -> None:
@@ -58,25 +99,23 @@ def process_identifier_ids(session: Session, identifier_ids: frozenset[int]) -> 
         .add_columns(Identifier.id)
     )
     chained_identifiers = session.execute(qu).fetchall()
+    if not chained_identifiers:
+        return
 
-    # Delete old cache entries for every affected parent, then insert fresh ones.
-    completed: set[int] = set()
-    new_rows: list[RecursiveEquivalencyCache] = []
-    for link_id, parent_id in chained_identifiers:
-        if parent_id not in completed:
-            session.execute(
-                delete(RecursiveEquivalencyCache).where(
-                    RecursiveEquivalencyCache.parent_identifier_id == parent_id
-                )
-            )
-        new_rows.append(
-            RecursiveEquivalencyCache(
-                parent_identifier_id=parent_id, identifier_id=link_id
-            )
-        )
-        completed.add(parent_id)
-
-    session.add_all(new_rows)
+    # Delete the old cache entries for every affected parent, then insert the
+    # fresh ones. The parents are deleted in a single statement, in a stable
+    # (sorted) order, so that two refreshes racing on overlapping chains are
+    # less likely to deadlock against each other.
+    _delete_cache_rows(
+        session, sorted({parent_id for _, parent_id in chained_identifiers})
+    )
+    _insert_cache_rows(
+        session,
+        (
+            {"parent_identifier_id": parent_id, "identifier_id": link_id}
+            for link_id, parent_id in chained_identifiers
+        ),
+    )
 
 
 def add_identity_equivalents(session: Session, batch_size: int = 200) -> None:
@@ -86,6 +125,10 @@ def add_identity_equivalents(session: Session, batch_size: int = 200) -> None:
 
     This ensures that queries against the cache always return at least the
     identifier itself, even when it has no equivalencies.
+
+    An Identifier created by another transaction after this scan begins gets its
+    self-reference from the ``Identifier`` creation listener, which may commit
+    before we do; the insert tolerates that (see :func:`_insert_cache_rows`).
     """
     missing_q = (
         select(Identifier.id)
@@ -100,11 +143,13 @@ def add_identity_equivalents(session: Session, batch_size: int = 200) -> None:
         .execution_options(yield_per=batch_size)
     )
 
-    for (identifier_id,) in session.execute(missing_q):
-        session.add(
-            RecursiveEquivalencyCache(
-                parent_identifier_id=identifier_id, identifier_id=identifier_id
-            )
+    for partition in session.execute(missing_q).partitions():
+        _insert_cache_rows(
+            session,
+            (
+                {"parent_identifier_id": identifier_id, "identifier_id": identifier_id}
+                for (identifier_id,) in partition
+            ),
         )
 
 
