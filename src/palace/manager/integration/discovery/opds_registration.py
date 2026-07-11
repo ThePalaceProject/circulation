@@ -515,17 +515,22 @@ class OpdsRegistrationService(
         # communicated to the registry.
         registration.stage = desired_stage
 
-        # Reset MARC export for the library if the web client URL changed, so
-        # delta-only consumers receive a full refresh with the updated 856 fields.
+        # Reset MARC export for the library if the web client URL change affects
+        # MARC output, so delta-only consumers receive a full refresh with the
+        # updated 856 fields.
         if (
             web_client_url != registration.web_client
             and registration.library is not None
         ):
             session = Session.object_session(registration)
-            if session is not None:
-                MarcExporter.reset_on_web_client_change(
-                    session, registration.library, new_url=web_client_url
-                )
+            if session is not None and MarcExporter.needs_reset_for_web_client_change(
+                session, registration.library, new_url=web_client_url
+            ):
+                # Imported locally because the celery task module (via the service
+                # container's discovery registry) transitively imports this module.
+                from palace.manager.celery.tasks.marc import marc_export_reset
+
+                marc_export_reset.delay(registration.library_id)
 
         # Store the web client URL
         registration.web_client = web_client_url

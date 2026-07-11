@@ -10,6 +10,7 @@ from palace.manager.api.admin.controller.integration_settings import (
 )
 from palace.manager.api.admin.form_data import ProcessFormData
 from palace.manager.api.admin.problem_details import MULTIPLE_SERVICES_FOR_LIBRARY
+from palace.manager.celery.tasks.marc import marc_export_reset
 from palace.manager.integration.catalog.marc.exporter import MarcExporter
 from palace.manager.integration.goals import Goals
 from palace.manager.integration.settings import BaseSettings
@@ -102,14 +103,16 @@ class CatalogServicesController(
                     catalog_service, libraries_data, impl_cls.library_settings_class()
                 )
 
-            # Reset MARC export for any library whose settings actually changed.
+            # Queue a MARC export reset for any library whose settings actually
+            # changed, so the next run produces a fresh full export along with a
+            # full-content delta.
             for lc in catalog_service.library_configurations:
                 if (
-                    lc.library_id in old_library_settings
+                    lc.library_id is not None
+                    and lc.library_id in old_library_settings
                     and old_library_settings[lc.library_id] != (lc.settings_dict or {})
-                    and lc.library is not None
                 ):
-                    MarcExporter.reset_marc_export(self._db, lc.library)
+                    marc_export_reset.delay(lc.library_id)
 
             # Trigger a site configuration change
             site_configuration_has_changed(self._db)

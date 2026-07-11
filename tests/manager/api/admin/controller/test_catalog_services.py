@@ -21,6 +21,7 @@ from palace.manager.api.admin.problem_details import (
     NO_PROTOCOL_FOR_NEW_SERVICE,
     UNKNOWN_PROTOCOL,
 )
+from palace.manager.celery.tasks.marc import marc_export_reset
 from palace.manager.integration.catalog.marc.exporter import MarcExporter
 from palace.manager.integration.catalog.marc.settings import MarcExporterLibrarySettings
 from palace.manager.integration.goals import Goals
@@ -337,8 +338,8 @@ class TestCatalogServicesController:
         changed: bool,
         expect_reset: bool,
     ):
-        mock_reset = MagicMock()
-        monkeypatch.setattr(MarcExporter, "reset_marc_export", mock_reset)
+        mock_delay = MagicMock()
+        monkeypatch.setattr(marc_export_reset, "delay", mock_delay)
 
         library = db.default_library()
         service = db.integration_configuration(
@@ -382,9 +383,9 @@ class TestCatalogServicesController:
             assert isinstance(response, Response)
 
         if expect_reset:
-            mock_reset.assert_called_once_with(db.session, library)
+            mock_delay.assert_called_once_with(library.id)
         else:
-            mock_reset.assert_not_called()
+            mock_delay.assert_not_called()
 
     def test_catalog_services_post_no_reset_for_new_library(
         self,
@@ -394,8 +395,8 @@ class TestCatalogServicesController:
         monkeypatch: MonkeyPatch,
     ):
         """Adding a new library to a service does not trigger a reset (no prior records)."""
-        mock_reset = MagicMock()
-        monkeypatch.setattr(MarcExporter, "reset_marc_export", mock_reset)
+        mock_delay = MagicMock()
+        monkeypatch.setattr(marc_export_reset, "delay", mock_delay)
 
         service = db.integration_configuration(
             MarcExporter, Goals.CATALOG_GOAL, name="marc"
@@ -425,4 +426,4 @@ class TestCatalogServicesController:
             response = controller.process_catalog_services()
             assert isinstance(response, Response)
 
-        mock_reset.assert_not_called()
+        mock_delay.assert_not_called()

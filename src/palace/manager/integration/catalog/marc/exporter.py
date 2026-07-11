@@ -188,28 +188,28 @@ class MarcExporter(
         )
 
     @staticmethod
-    def reset_marc_export(session: Session, library: Library) -> None:
-        """Delete all MarcFile records for a library's MARC-enabled collections.
+    def files_for_reset(session: Session, library: Library) -> Generator[MarcFile]:
+        """MarcFile records for a library's MARC-enabled collections.
 
-        Causes the next export run to behave like a first run, producing both a
-        full export and a full-content delta for delta-only consumers.
+        Deleting these records (and their S3 objects) causes the next export run
+        to behave like a first run, producing both a full export and a
+        full-content delta for delta-only consumers.
         """
         for collection in MarcExporter.marc_enabled_collections(session, library):
-            for record in session.execute(
+            yield from session.execute(
                 select(MarcFile).where(
                     MarcFile.library == library,
                     MarcFile.collection == collection,
                 )
-            ).scalars():
-                session.delete(record)
+            ).scalars()
 
     @staticmethod
-    def reset_on_web_client_change(
+    def needs_reset_for_web_client_change(
         session: Session, library: Library, new_url: str | None
-    ) -> None:
-        """Reset MARC export if a registry web-client URL change affects MARC output.
+    ) -> bool:
+        """Whether a registry web-client URL change affects the library's MARC output.
 
-        No-op when new_url is already present as the manual web_client_url in a
+        False when new_url is already present as the manual web_client_url in a
         MARC library configuration for this library — the effective set of exported
         URLs would be unchanged.
         """
@@ -226,9 +226,9 @@ class MarcExporter(
                 ).scalars()
             }
             if new_url in marc_manual_urls:
-                return
+                return False
 
-        MarcExporter.reset_marc_export(session, library)
+        return True
 
     @classmethod
     def enabled_collections(

@@ -3,7 +3,6 @@ from functools import partial
 
 import pytest
 from freezegun import freeze_time
-from sqlalchemy import select
 from sqlalchemy.exc import InvalidRequestError
 
 from palace.util.datetime_helpers import datetime_utc, utc_now
@@ -657,7 +656,7 @@ class TestMarcExporter:
             marc_exporter_fixture.collection2,
         }
 
-    def test_reset_marc_export(
+    def test_files_for_reset(
         self,
         db: DatabaseTransactionFixture,
         marc_exporter_fixture: MarcExporterFixture,
@@ -669,8 +668,8 @@ class TestMarcExporter:
         collection1.export_marc_records = True
         collection2.export_marc_records = True
 
-        # No-op when there are no records.
-        MarcExporter.reset_marc_export(db.session, library1)
+        # No records, nothing to reset.
+        assert list(MarcExporter.files_for_reset(db.session, library1)) == []
 
         # Create MarcFile records for library1 across two collections.
         file1 = marc_exporter_fixture.marc_file(
@@ -679,20 +678,16 @@ class TestMarcExporter:
         file2 = marc_exporter_fixture.marc_file(
             library=library1, collection=collection2
         )
-        # Record for library2 on collection1 must not be affected.
-        file3 = marc_exporter_fixture.marc_file(
-            library=library2, collection=collection1
-        )
+        # Record for library2 on collection1 must not be included.
+        marc_exporter_fixture.marc_file(library=library2, collection=collection1)
 
-        MarcExporter.reset_marc_export(db.session, library1)
-
-        remaining = db.session.execute(select(MarcFile)).scalars().all()
-        assert file3 in remaining
-        assert file1 not in remaining
-        assert file2 not in remaining
+        assert set(MarcExporter.files_for_reset(db.session, library1)) == {
+            file1,
+            file2,
+        }
 
     @pytest.mark.parametrize(
-        "new_url, manual_url, expect_reset",
+        "new_url, manual_url, expected",
         [
             pytest.param(None, None, True, id="none-always-resets"),
             pytest.param("http://new", None, True, id="new-url-not-in-manual"),
@@ -704,16 +699,15 @@ class TestMarcExporter:
             ),
         ],
     )
-    def test_reset_on_web_client_change(
+    def test_needs_reset_for_web_client_change(
         self,
         db: DatabaseTransactionFixture,
         marc_exporter_fixture: MarcExporterFixture,
         new_url: str | None,
         manual_url: str | None,
-        expect_reset: bool,
+        expected: bool,
     ) -> None:
         library1 = marc_exporter_fixture.library1
-        marc_exporter_fixture.collection1.export_marc_records = True
 
         if manual_url is not None:
             marc_integration = marc_exporter_fixture.integration()
@@ -723,14 +717,9 @@ class TestMarcExporter:
                 MarcExporterLibrarySettings(web_client_url=manual_url),
             )
 
-        marc_file = marc_exporter_fixture.marc_file(
-            library=library1, collection=marc_exporter_fixture.collection1
+        assert (
+            MarcExporter.needs_reset_for_web_client_change(
+                db.session, library1, new_url=new_url
+            )
+            == expected
         )
-
-        MarcExporter.reset_on_web_client_change(db.session, library1, new_url=new_url)
-
-        remaining = db.session.execute(select(MarcFile)).scalars().all()
-        if expect_reset:
-            assert marc_file not in remaining
-        else:
-            assert marc_file in remaining

@@ -18,6 +18,7 @@ from palace.manager.api.problem_details import (
     REMOTE_INTEGRATION_FAILED,
     SHARED_SECRET_DECRYPTION_ERROR,
 )
+from palace.manager.celery.tasks.marc import marc_export_reset
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.problem_details import INTEGRATION_ERROR, INVALID_INPUT
 from palace.manager.integration.catalog.marc.exporter import MarcExporter
@@ -724,14 +725,23 @@ class TestOpdsRegistrationService:
         assert SHARED_SECRET_DECRYPTION_ERROR == excinfo.value.problem_detail
 
     @pytest.mark.parametrize(
-        "existing_web_client, catalog_web_client, expect_reset",
+        "existing_web_client, catalog_web_client, needs_reset, expect_delay",
         [
-            pytest.param(None, "http://new-url", True, id="none-to-url"),
-            pytest.param("http://old-url", "http://new-url", True, id="url-changed"),
+            pytest.param(None, "http://new-url", True, True, id="none-to-url"),
             pytest.param(
-                "http://same-url", "http://same-url", False, id="url-unchanged"
+                "http://old-url", "http://new-url", True, True, id="url-changed"
             ),
-            pytest.param(None, None, False, id="both-none"),
+            pytest.param(
+                "http://old-url",
+                "http://new-url",
+                False,
+                False,
+                id="url-changed-no-reset-needed",
+            ),
+            pytest.param(
+                "http://same-url", "http://same-url", True, False, id="url-unchanged"
+            ),
+            pytest.param(None, None, True, False, id="both-none"),
         ],
     )
     def test__process_registration_result_resets_marc_on_web_client_change(
@@ -740,10 +750,15 @@ class TestOpdsRegistrationService:
         monkeypatch: MonkeyPatch,
         existing_web_client: str | None,
         catalog_web_client: str | None,
-        expect_reset: bool,
+        needs_reset: bool,
+        expect_delay: bool,
     ):
-        mock_reset = MagicMock()
-        monkeypatch.setattr(MarcExporter, "reset_on_web_client_change", mock_reset)
+        mock_needs_reset = MagicMock(return_value=needs_reset)
+        monkeypatch.setattr(
+            MarcExporter, "needs_reset_for_web_client_change", mock_needs_reset
+        )
+        mock_delay = MagicMock()
+        monkeypatch.setattr(marc_export_reset, "delay", mock_delay)
 
         registration = remote_registry_fixture.create_registration()
         registration.web_client = existing_web_client
@@ -757,14 +772,20 @@ class TestOpdsRegistrationService:
         m = remote_registry_fixture.registry._process_registration_result
         m(registration, catalog, MagicMock(), RegistrationStage.TESTING)
 
-        if expect_reset:
-            mock_reset.assert_called_once()
-            call_args = mock_reset.call_args
-            _, call_library = call_args.args
-            assert call_library == registration.library
-            assert call_args.kwargs.get("new_url") == catalog_web_client
+        # The reset check is only consulted when the web client URL changed.
+        if existing_web_client != catalog_web_client:
+            mock_needs_reset.assert_called_once_with(
+                remote_registry_fixture.db.session,
+                registration.library,
+                new_url=catalog_web_client,
+            )
         else:
-            mock_reset.assert_not_called()
+            mock_needs_reset.assert_not_called()
+
+        if expect_delay:
+            mock_delay.assert_called_once_with(registration.library_id)
+        else:
+            mock_delay.assert_not_called()
 
 
 class TestLibraryRegistrationScript:

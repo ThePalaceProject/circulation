@@ -2,6 +2,7 @@ import datetime
 from unittest.mock import ANY, call, patch
 
 import pytest
+from botocore.exceptions import ClientError
 from pymarc import MARCReader
 from sqlalchemy import select
 
@@ -421,3 +422,71 @@ def test_marc_export_cleanup_shared_key(
 
     # S3 object deleted exactly once despite two records sharing the key.
     assert mock_s3.deleted.count(shared_key) == 1
+
+
+def test_marc_export_reset(
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+    s3_service_fixture: S3ServiceFixture,
+    marc_exporter_fixture: MarcExporterFixture,
+    services_fixture: ServicesFixture,
+):
+    marc_exporter_fixture.configure_export()
+    mock_s3 = s3_service_fixture.mock_service()
+    services_fixture.services.storage.public.override(mock_s3)
+
+    library1 = marc_exporter_fixture.library1
+    library2 = marc_exporter_fixture.library2
+    assert library1.id is not None
+
+    # A nonexistent library is a no-op.
+    marc.marc_export_reset.delay(library_id=-1).wait()
+
+    # First-run pair for library1 / collection1 sharing one S3 object, plus a
+    # record in another collection. Library2's record must not be affected.
+    shared_key = db.fresh_str()
+    marc_exporter_fixture.marc_file(key=shared_key)
+    marc_exporter_fixture.marc_file(key=shared_key, since=MARC_EPOCH)
+    collection2_key = marc_exporter_fixture.marc_file(
+        collection=marc_exporter_fixture.collection2
+    ).key
+    library2_file = marc_exporter_fixture.marc_file(library=library2)
+
+    marc.marc_export_reset.delay(library_id=library1.id).wait()
+
+    # Only library2's record remains.
+    remaining = db.session.execute(select(MarcFile)).scalars().all()
+    assert remaining == [library2_file]
+
+    # The shared S3 object was deleted exactly once; the other object once.
+    assert mock_s3.deleted.count(shared_key) == 1
+    assert mock_s3.deleted.count(collection2_key) == 1
+
+
+def test_marc_export_reset_s3_failure(
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+    s3_service_fixture: S3ServiceFixture,
+    marc_exporter_fixture: MarcExporterFixture,
+    services_fixture: ServicesFixture,
+):
+    """A failed S3 deletion orphans the object but never leaves the reset half-applied."""
+    marc_exporter_fixture.configure_export()
+    mock_s3 = s3_service_fixture.mock_service()
+    services_fixture.services.storage.public.override(mock_s3)
+
+    library1 = marc_exporter_fixture.library1
+    assert library1.id is not None
+
+    marc_exporter_fixture.marc_file()
+    marc_exporter_fixture.marc_file(collection=marc_exporter_fixture.collection2)
+
+    with patch.object(
+        mock_s3,
+        "delete",
+        side_effect=ClientError({"Error": {}}, "DeleteObject"),
+    ):
+        marc.marc_export_reset.delay(library_id=library1.id).wait()
+
+    # All MarcFile records were deleted despite the S3 failures.
+    assert db.session.execute(select(MarcFile)).scalars().all() == []

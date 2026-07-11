@@ -2,16 +2,11 @@ import datetime
 from contextlib import ExitStack
 from tempfile import TemporaryFile
 
+from botocore.exceptions import BotoCoreError, ClientError
 from celery import shared_task
 from sqlalchemy import func, select
 
 from palace.util.datetime_helpers import utc_now
-
-# Sentinel timestamp used as `since` on a full-content delta MarcFile record.
-# When a library's settings reset causes a fresh full export, a paired delta
-# record with this timestamp is created so delta-only consumers also receive
-# the complete dataset.
-MARC_EPOCH = datetime.datetime(1900, 1, 1, tzinfo=datetime.UTC)
 
 from palace.manager.celery.task import Task
 from palace.manager.celery.utils import signature_with
@@ -28,8 +23,15 @@ from palace.manager.sqlalchemy.model.identifier import (
     Identifier,
     RecursiveEquivalencyCache,
 )
+from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.marcfile import MarcFile
-from palace.manager.sqlalchemy.util import create
+from palace.manager.sqlalchemy.util import create, get_one
+
+# Sentinel timestamp used as `since` on a full-content delta MarcFile record.
+# When a library's settings reset causes a fresh full export, a paired delta
+# record with this timestamp is created so delta-only consumers also receive
+# the complete dataset.
+MARC_EPOCH = datetime.datetime(1900, 1, 1, tzinfo=datetime.UTC)
 
 
 @shared_task(queue=QueueNames.default, bind=True)
@@ -281,6 +283,9 @@ def marc_export_cleanup(
 ) -> None:
     """
     Cleanup old MARC exports that are outdated or no longer needed.
+
+    The S3 object is deleted before the MarcFile record, so a failure leaves the
+    record in place to be retried by the next scheduled cleanup run.
     """
     storage_service = task.services.storage.public()
     registry = task.services.integration_registry.catalog_services()
@@ -305,3 +310,52 @@ def marc_export_cleanup(
                 storage_service.delete(file_record.key)
             session.delete(file_record)
             session.commit()
+
+
+@shared_task(queue=QueueNames.default, bind=True)
+def marc_export_reset(task: Task, library_id: int) -> None:
+    """
+    Reset MARC export for a library, so that the next export run behaves like a
+    first run, producing both a new full export and a full-content delta.
+
+    This is triggered when a library's MARC export configuration changes, to make
+    sure that consumers relying only on deltas receive a complete refresh with the
+    updated settings. It deletes the MarcFile records for the library's
+    MARC-enabled collections, along with the corresponding S3 objects.
+
+    The records are deleted in a single transaction, so a failure cannot leave the
+    reset half-applied. The S3 objects are then deleted best-effort: a failed
+    deletion orphans that object (with an error logged), but never compromises
+    the reset itself.
+
+    Repeated configuration changes can queue duplicate tasks. We don't guard
+    against that: the task is idempotent (a duplicate finds no records and is a
+    no-op), so a lock would only add a failure mode without preventing any harm.
+    """
+    storage_service = task.services.storage.public()
+    with task.session() as session:
+        library = get_one(session, Library, id=library_id)
+        if library is None:
+            task.log.warning(
+                f"Library {library_id} not found. Skipping MARC export reset."
+            )
+            return
+
+        keys: set[str] = set()
+        for file_record in MarcExporter.files_for_reset(session, library):
+            task.log.info(f"Deleting MARC export {file_record.key} ({file_record.id}).")
+            keys.add(file_record.key)
+            session.delete(file_record)
+        session.commit()
+
+        for key in keys:
+            # Skip keys that other MarcFile records still reference.
+            other_refs = session.execute(
+                select(func.count(MarcFile.id)).where(MarcFile.key == key)
+            ).scalar_one()
+            if other_refs > 0:
+                continue
+            try:
+                storage_service.delete(key)
+            except (BotoCoreError, ClientError):
+                task.log.exception(f"Failed to delete orphaned MARC export '{key}'.")
