@@ -3,6 +3,7 @@ import uuid
 from types import TracebackType
 from typing import IO, Literal, Self
 
+from botocore.exceptions import BotoCoreError, ClientError
 from pydantic import BaseModel
 
 from palace.util.exceptions import BasePalaceException
@@ -159,6 +160,12 @@ class MarcUploadManager(LoggerMixin):
         return True
 
     def abort(self) -> None:
+        """Abort the in-progress multipart upload, best-effort.
+
+        The upload is being discarded, so a failed abort is logged and swallowed
+        rather than raised. The upload is left unfinalized on failure, so a later
+        call can retry the abort.
+        """
         if self._finalized:
             return
 
@@ -166,9 +173,16 @@ class MarcUploadManager(LoggerMixin):
             self._finalized = True
             return
 
-        self.storage_service.multipart_abort(
-            self.context.s3_key, self.context.upload_id
-        )
+        try:
+            self.storage_service.multipart_abort(
+                self.context.s3_key, self.context.upload_id
+            )
+        except (BotoCoreError, ClientError):
+            self.log.exception(
+                f"Failed to abort upload '{self.context.s3_key}' "
+                f"(UploadID: {self.context.upload_id})."
+            )
+            return
         self._finalized = True
 
     @property

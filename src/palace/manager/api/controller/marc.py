@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from palace.manager.api.util.flask import get_request_library
-from palace.manager.integration.catalog.marc.exporter import MarcExporter
+from palace.manager.integration.catalog.marc.exporter import MARC_EPOCH, MarcExporter
 from palace.manager.service.integration_registry.catalog_services import (
     CatalogServicesRegistry,
 )
@@ -171,7 +171,12 @@ class MARCRecordController:
                     body += "<ul>"
                     for update in files.deltas:
                         update_url = self.storage_service.generate_url(update.key)
-                        update_label = f"Updates from {update.since.strftime(time_format)} to {update.created.strftime(time_format)}"
+                        # Avoid misleading label for full-content delta.
+                        update_label = (
+                            f"Full content as of {update.created.strftime(time_format)}"
+                            if update.since == MARC_EPOCH
+                            else f"Updates from {update.since.strftime(time_format)} to {update.created.strftime(time_format)}"
+                        )
                         body += f'<li><a href="{update_url}">{update_label}</a></li>'
                     body += "</ul>"
 

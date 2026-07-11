@@ -1,16 +1,23 @@
 import datetime
+import uuid
 from contextlib import ExitStack
 from tempfile import TemporaryFile
+from typing import Any
 
 from botocore.exceptions import BotoCoreError, ClientError
 from celery import shared_task
 from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
 from palace.util.datetime_helpers import utc_now
 
 from palace.manager.celery.task import Task
 from palace.manager.celery.utils import signature_with
-from palace.manager.integration.catalog.marc.exporter import LibraryInfo, MarcExporter
+from palace.manager.integration.catalog.marc.exporter import (
+    MARC_EPOCH,
+    LibraryInfo,
+    MarcExporter,
+)
 from palace.manager.integration.catalog.marc.uploader import (
     MarcUploadManager,
     UploadContext,
@@ -27,11 +34,15 @@ from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.marcfile import MarcFile
 from palace.manager.sqlalchemy.util import create, get_one
 
-# Sentinel timestamp used as `since` on a full-content delta MarcFile record.
-# When a library's settings reset causes a fresh full export, a paired delta
-# record with this timestamp is created so delta-only consumers also receive
-# the complete dataset.
-MARC_EPOCH = datetime.datetime(1900, 1, 1, tzinfo=datetime.UTC)
+# LibraryInfo fields that change between runs without a configuration change.
+_VOLATILE_LIBRARY_INFO_FIELDS = frozenset({"last_updated", "needs_update"})
+
+# LibraryInfo tuple fields whose values are compared as unordered sets.
+# TODO: The `filtered_audiences` and `filtered_genres` library settings are
+#  compared below, but changing them does not yet queue a MARC export reset.
+_UNORDERED_LIBRARY_INFO_FIELDS = frozenset(
+    {"web_client_urls", "filtered_audiences", "filtered_genres"}
+)
 
 
 @shared_task(queue=QueueNames.default, bind=True)
@@ -111,6 +122,126 @@ def marc_export_collection_lock(
         ["MarcUpload", Collection.redis_key_from_id(collection_id), f"Delta::{delta}"],
         lock_timeout=datetime.timedelta(minutes=20),
     )
+
+
+def _export_settings_changed(snapshot: LibraryInfo, current: LibraryInfo) -> bool:
+    """Whether a library's export-affecting settings differ between two LibraryInfo.
+
+    Ignores the fields that may change between runs without affecting the export
+    and compares the tuple fields as unordered sets of values.
+    """
+
+    def comparable(info: LibraryInfo) -> dict[str, Any]:
+        dumped = info.model_dump(exclude=set(_VOLATILE_LIBRARY_INFO_FIELDS))
+        for field in _UNORDERED_LIBRARY_INFO_FIELDS:
+            dumped[field] = sorted(dumped[field])
+        return dumped
+
+    return comparable(snapshot) != comparable(current)
+
+
+def _export_config_changed(
+    session: Session,
+    collection_id: int,
+    snapshot: LibraryInfo,
+    current: LibraryInfo | None,
+) -> bool:
+    """Whether a library's MARC configuration changed while an export was in flight.
+
+    True when the library is no longer MARC-enabled (current is None), when its
+    settings no longer match the ones from export generation time, or when a concurrent
+    `marc_export_reset` deleted the library's MarcFile records. The settings check also
+    covers a reset that found no records to delete during a first run.
+    """
+    if current is None:
+        return True
+    if _export_settings_changed(snapshot, current):
+        return True
+    records_gone: bool = (
+        snapshot.last_updated is not None
+        and session.execute(
+            select(func.count(MarcFile.id)).where(
+                MarcFile.library_id == snapshot.library_id,
+                MarcFile.collection_id == collection_id,
+            )
+        ).scalar_one()
+        == 0
+    )
+    return records_gone
+
+
+def _finalize_uploads(
+    task: Task,
+    session: Session,
+    uploads: dict[LibraryInfo, MarcUploadManager],
+    collection_id: int,
+    start_time: datetime.datetime,
+    delta: bool,
+) -> list[LibraryInfo]:
+    """Complete the uploads and create their MarcFile records.
+
+    Uploads for libraries whose configuration changed while the export was in
+    flight are discarded instead. Returns the current LibraryInfo for those
+    libraries, so the caller can re-queue a fresh full export for them.
+    """
+    registry = task.services.integration_registry.catalog_services()
+    current_infos = {
+        info.library_id: info
+        for info in MarcExporter.enabled_libraries(session, registry, collection_id)
+    }
+    drifted_libraries: list[LibraryInfo] = []
+    for library, upload in uploads.items():
+        # Recording an upload after the library's configuration changed would
+        # leave stale content behind, so discard it and let the caller re-queue
+        # a fresh full export.
+        # Note: There is a race condition window between the check here and the
+        # commit for the export.
+        current = current_infos.get(library.library_id)
+        if _export_config_changed(session, collection_id, library, current):
+            task.log.warning(
+                f"MARC export configuration for library "
+                f"{library.library_short_name} ({library.library_id}) "
+                f"changed while this export was in flight. "
+                f"Discarding '{upload.context.s3_key}'."
+            )
+            upload.abort()
+            # A library that is no longer MARC-enabled is discarded without a re-run.
+            if current is not None:
+                drifted_libraries.append(current)
+            continue
+
+        if upload.complete():
+            create(
+                session,
+                MarcFile,
+                id=upload.context.upload_uuid,
+                library_id=library.library_id,
+                collection_id=collection_id,
+                created=start_time,
+                key=upload.context.s3_key,
+                since=library.last_updated if delta else None,
+            )
+            # For first-run (or reset) libraries in a full export, create a
+            # full-content delta record pointing at the same S3 object.
+            # Delta-only consumers will receive the complete dataset without
+            # a second upload.
+            if not delta and library.last_updated is None:
+                create(
+                    session,
+                    MarcFile,
+                    library_id=library.library_id,
+                    collection_id=collection_id,
+                    created=start_time,
+                    key=upload.context.s3_key,
+                    since=MARC_EPOCH,
+                )
+            task.log.info(f"Completed upload for '{upload.context.s3_key}'")
+        else:
+            task.log.warning(
+                f"No upload for '{upload.context.s3_key}', "
+                f"because there were no records."
+            )
+    return drifted_libraries
 
 
 @shared_task(queue=QueueNames.default, bind=True)
@@ -218,44 +349,29 @@ def marc_export_collection(
 
             if no_more_works:
                 # Task is complete. Finalize the s3 uploads and create MarcFile records in DB.
-                for library, upload in uploads.items():
-                    if upload.complete():
-                        create(
-                            session,
-                            MarcFile,
-                            id=upload.context.upload_uuid,
-                            library_id=library.library_id,
-                            collection_id=collection_id,
-                            created=start_time,
-                            key=upload.context.s3_key,
-                            since=library.last_updated if delta else None,
-                        )
-                        # For first-run (or reset) libraries in a full export, create a
-                        # full-content delta record pointing at the same S3 object.
-                        # Delta-only consumers will receive the complete dataset without
-                        # a second upload.
-                        if not delta and library.last_updated is None:
-                            create(
-                                session,
-                                MarcFile,
-                                library_id=library.library_id,
-                                collection_id=collection_id,
-                                created=start_time,
-                                key=upload.context.s3_key,
-                                since=MARC_EPOCH,
-                            )
-                        task.log.info(f"Completed upload for '{upload.context.s3_key}'")
-                    else:
-                        task.log.warning(
-                            f"No upload for '{upload.context.s3_key}', "
-                            f"because there were no records."
-                        )
-
+                drifted_libraries = _finalize_uploads(
+                    task, session, uploads, collection_id, start_time, delta
+                )
                 task.log.info(
                     f"Finished generating MARC records for collection '{collection_name}' ({collection_id}) "
                     f"in {(utc_now() - start_time).seconds} seconds."
                 )
-                return
+
+    if no_more_works:
+        if drifted_libraries:
+            # Re-run a full export for the libraries whose configuration changed
+            # while this export was in flight, so they get fresh content with
+            # their new settings right away rather than at the next scheduled run.
+            raise task.replace(
+                marc_export_collection.s(
+                    collection_id=collection_id,
+                    collection_name=collection_name,
+                    start_time=utc_now(),
+                    libraries=drifted_libraries,
+                    batch_size=batch_size,
+                )
+            )
+        return
 
     # This task is complete, but there are more works waiting to be exported. So we requeue ourselves
     # to process the next batch.
@@ -274,6 +390,21 @@ def marc_export_collection(
             last_work_id=last_work_id,
         )
     )
+
+
+def _marc_file_key_ref_count(
+    session: Session, key: str, exclude_id: uuid.UUID | None = None
+) -> int:
+    """Count the MarcFile records referencing the given S3 key.
+
+    A first-run full export and its paired full-content delta share an S3 key,
+    so the object must only be deleted when the last record referencing it goes.
+    """
+    stmt = select(func.count(MarcFile.id)).where(MarcFile.key == key)
+    if exclude_id is not None:
+        stmt = stmt.where(MarcFile.id != exclude_id)
+    count: int = session.execute(stmt).scalar_one()
+    return count
 
 
 @shared_task(queue=QueueNames.default, bind=True)
@@ -298,15 +429,12 @@ def marc_export_cleanup(
                 raise task.replace(marc_export_cleanup.s())
 
             task.log.info(f"Deleting MARC export {file_record.key} ({file_record.id}).")
-            # Only delete the S3 object when no other MarcFile records share the key.
-            # A first-run full export and its paired full-content delta share an S3 key.
-            other_refs = session.execute(
-                select(func.count(MarcFile.id)).where(
-                    MarcFile.key == file_record.key,
-                    MarcFile.id != file_record.id,
+            if (
+                _marc_file_key_ref_count(
+                    session, file_record.key, exclude_id=file_record.id
                 )
-            ).scalar_one()
-            if other_refs == 0:
+                == 0
+            ):
                 storage_service.delete(file_record.key)
             session.delete(file_record)
             session.commit()
@@ -315,22 +443,17 @@ def marc_export_cleanup(
 @shared_task(queue=QueueNames.default, bind=True)
 def marc_export_reset(task: Task, library_id: int) -> None:
     """
-    Reset MARC export for a library, so that the next export run behaves like a
+    Reset MARC export for a library so that the next export run behaves like a
     first run, producing both a new full export and a full-content delta.
-
-    This is triggered when a library's MARC export configuration changes, to make
-    sure that consumers relying only on deltas receive a complete refresh with the
-    updated settings. It deletes the MarcFile records for the library's
+    Deletes the MarcFile records and associated S3 objects for the library's
     MARC-enabled collections, along with the corresponding S3 objects.
 
     The records are deleted in a single transaction, so a failure cannot leave the
     reset half-applied. The S3 objects are then deleted best-effort: a failed
-    deletion orphans that object (with an error logged), but never compromises
-    the reset itself.
+    deletion orphans that object and logs an error, but allows the reset to continue.
 
     Repeated configuration changes can queue duplicate tasks. We don't guard
-    against that: the task is idempotent (a duplicate finds no records and is a
-    no-op), so a lock would only add a failure mode without preventing any harm.
+    against that since the task is idempotent.
     """
     storage_service = task.services.storage.public()
     with task.session() as session:
@@ -348,13 +471,13 @@ def marc_export_reset(task: Task, library_id: int) -> None:
             session.delete(file_record)
         session.commit()
 
-        for key in keys:
-            # Skip keys that other MarcFile records still reference.
-            other_refs = session.execute(
-                select(func.count(MarcFile.id)).where(MarcFile.key == key)
-            ).scalar_one()
-            if other_refs > 0:
-                continue
+        # Skip keys that other MarcFile records still reference.
+        still_referenced = set(
+            session.scalars(
+                select(MarcFile.key).where(MarcFile.key.in_(keys)).distinct()
+            )
+        )
+        for key in keys - still_referenced:
             try:
                 storage_service.delete(key)
             except (BotoCoreError, ClientError):

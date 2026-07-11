@@ -4,8 +4,8 @@ import datetime
 from collections.abc import Generator, Iterable, Sequence
 
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import select
 from sqlalchemy.orm import Session, aliased, raiseload, selectinload
+from sqlalchemy.sql import Select, select
 
 from palace.util.datetime_helpers import utc_now
 from palace.util.log import LoggerMixin
@@ -37,6 +37,9 @@ from palace.manager.sqlalchemy.model.licensing import (
 )
 from palace.manager.sqlalchemy.model.marcfile import MarcFile
 from palace.manager.sqlalchemy.model.work import Work, WorkGenre
+
+# Sentinel timestamp used as `since` on a full-content delta MarcFile record.
+MARC_EPOCH = datetime.datetime(1900, 1, 1, tzinfo=datetime.UTC)
 
 
 class LibraryInfo(BaseModel):
@@ -169,20 +172,25 @@ class MarcExporter(
         return last_updated_file.created if last_updated_file else None
 
     @staticmethod
+    def _marc_enabled_collections_query(library: Library) -> Select:
+        """Query selecting the MARC-export-enabled collections associated with a library."""
+        return (
+            select(Collection)
+            .join(Collection.integration_configuration)
+            .join(IntegrationConfiguration.library_configurations)
+            .where(
+                IntegrationLibraryConfiguration.library == library,
+                Collection.export_marc_records == True,
+            )
+        )
+
+    @staticmethod
     def marc_enabled_collections(
         session: Session, library: Library
     ) -> list[Collection]:
         """Return all MARC-export-enabled collections associated with this library."""
         return (
-            session.execute(
-                select(Collection)
-                .join(Collection.integration_configuration)
-                .join(IntegrationConfiguration.library_configurations)
-                .where(
-                    IntegrationLibraryConfiguration.library == library,
-                    Collection.export_marc_records == True,
-                )
-            )
+            session.execute(MarcExporter._marc_enabled_collections_query(library))
             .scalars()
             .all()
         )
@@ -195,40 +203,60 @@ class MarcExporter(
         to behave like a first run, producing both a full export and a
         full-content delta for delta-only consumers.
         """
-        for collection in MarcExporter.marc_enabled_collections(session, library):
-            yield from session.execute(
-                select(MarcFile).where(
-                    MarcFile.library == library,
-                    MarcFile.collection == collection,
-                )
-            ).scalars()
+        enabled_collection_ids = MarcExporter._marc_enabled_collections_query(
+            library
+        ).with_only_columns(Collection.id)
+        yield from session.execute(
+            select(MarcFile).where(
+                MarcFile.library == library,
+                MarcFile.collection_id.in_(enabled_collection_ids),
+            )
+        ).scalars()
 
     @staticmethod
     def needs_reset_for_web_client_change(
-        session: Session, library: Library, new_url: str | None
+        session: Session,
+        registry: CatalogServicesRegistry,
+        library: Library,
+        old_url: str | None,
+        new_url: str | None,
     ) -> bool:
         """Whether a registry web-client URL change affects the library's MARC output.
 
-        False when new_url is already present as the manual web_client_url in a
-        MARC library configuration for this library — the effective set of exported
-        URLs would be unchanged.
+        The exported set of web client URLs is every registry-supplied URL plus
+        the manual web_client_url of each MARC library configuration (see
+        _web_client_urls). A change cannot affect that set when both the old and
+        new URLs are already covered by the manual URLs (or absent), so no reset
+        is needed in that case.
         """
-        if new_url is not None:
-            marc_manual_urls = {
-                row.settings_dict.get("web_client_url")
-                for row in session.execute(
-                    select(IntegrationLibraryConfiguration)
-                    .join(IntegrationConfiguration)
-                    .where(
-                        IntegrationLibraryConfiguration.library == library,
-                        IntegrationConfiguration.protocol == MarcExporter.__name__,
-                    )
-                ).scalars()
-            }
-            if new_url in marc_manual_urls:
-                return False
+        marc_integrations = registry.configurations_query(MarcExporter).subquery()
+        marc_library_configs = (
+            session.execute(
+                select(IntegrationLibraryConfiguration)
+                .join(
+                    marc_integrations,
+                    IntegrationLibraryConfiguration.parent_id == marc_integrations.c.id,
+                )
+                .where(IntegrationLibraryConfiguration.library == library)
+            )
+            .scalars()
+            .all()
+        )
 
-        return True
+        # A library with no MARC exporter configuration exports nothing, so no
+        # URL change can affect its output.
+        if not marc_library_configs:
+            return False
+
+        marc_manual_urls = {
+            MarcExporter.library_settings_load(row).web_client_url
+            for row in marc_library_configs
+        }
+
+        def covered(url: str | None) -> bool:
+            return url is None or url in marc_manual_urls
+
+        return not (covered(old_url) and covered(new_url))
 
     @classmethod
     def enabled_collections(

@@ -323,10 +323,11 @@ class TestCatalogServicesController:
         assert none_service is None
 
     @pytest.mark.parametrize(
-        "changed, expect_reset",
+        "changed, legacy, expect_reset",
         [
-            pytest.param(True, True, id="settings-changed"),
-            pytest.param(False, False, id="settings-unchanged"),
+            pytest.param(True, False, True, id="settings-changed"),
+            pytest.param(False, False, False, id="settings-unchanged"),
+            pytest.param(False, True, False, id="legacy-dict-normalized"),
         ],
     )
     def test_catalog_services_post_resets_marc_export_on_settings_change(
@@ -336,6 +337,7 @@ class TestCatalogServicesController:
         db: DatabaseTransactionFixture,
         monkeypatch: MonkeyPatch,
         changed: bool,
+        legacy: bool,
         expect_reset: bool,
     ):
         mock_delay = MagicMock()
@@ -353,9 +355,17 @@ class TestCatalogServicesController:
         # Configure initial library settings with include_summary=False.
         lc = service.for_library(library)
         assert lc is not None
-        MarcExporter.library_settings_update(
-            lc, MarcExporterLibrarySettings(include_summary=False, include_genres=False)
-        )
+        if legacy:
+            # Simulate a legacy stored dict with explicit default values, which a
+            # raw dict comparison would misread as a change after normalization.
+            lc.settings_dict = {"include_summary": False, "include_genres": False}
+        else:
+            MarcExporter.library_settings_update(
+                lc,
+                MarcExporterLibrarySettings(
+                    include_summary=False, include_genres=False
+                ),
+            )
 
         # POST with either changed or unchanged settings.
         new_include_summary = "true" if changed else "false"

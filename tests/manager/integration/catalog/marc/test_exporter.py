@@ -10,9 +10,13 @@ from palace.util.datetime_helpers import datetime_utc, utc_now
 from palace.manager.core.classifier import Classifier
 from palace.manager.integration.catalog.marc.exporter import LibraryInfo, MarcExporter
 from palace.manager.integration.catalog.marc.settings import MarcExporterLibrarySettings
+from palace.manager.integration.goals import Goals
 from palace.manager.sqlalchemy.model.classification import Genre
 from palace.manager.sqlalchemy.model.discovery_service_registration import (
     DiscoveryServiceRegistration,
+)
+from palace.manager.sqlalchemy.model.integration import (
+    IntegrationLibraryConfiguration,
 )
 from palace.manager.sqlalchemy.model.marcfile import MarcFile
 from palace.manager.sqlalchemy.model.work import WorkGenre
@@ -687,15 +691,43 @@ class TestMarcExporter:
         }
 
     @pytest.mark.parametrize(
-        "new_url, manual_url, expected",
+        "old_url, new_url, marc_configs, expected",
         [
-            pytest.param(None, None, True, id="none-always-resets"),
-            pytest.param("http://new", None, True, id="new-url-not-in-manual"),
             pytest.param(
-                "http://manual", "http://manual", False, id="new-url-matches-manual"
+                "http://old", "http://new", (None,), True, id="url-change-no-manual"
+            ),
+            pytest.param(None, "http://new", (None,), True, id="url-added"),
+            pytest.param("http://old", None, (None,), True, id="url-removed"),
+            pytest.param(
+                None,
+                "http://manual",
+                ("http://manual",),
+                False,
+                id="added-url-covered-by-manual",
             ),
             pytest.param(
-                "http://other", "http://manual", True, id="new-url-differs-from-manual"
+                "http://old",
+                "http://manual",
+                ("http://manual",),
+                True,
+                id="old-url-not-covered",
+            ),
+            pytest.param(
+                "http://manual",
+                None,
+                ("http://manual",),
+                False,
+                id="removed-url-covered-by-manual",
+            ),
+            pytest.param(
+                "http://manual1",
+                "http://manual2",
+                ("http://manual1", "http://manual2"),
+                False,
+                id="both-urls-covered-by-manual",
+            ),
+            pytest.param(
+                "http://old", "http://new", (), False, id="no-marc-configuration"
             ),
         ],
     )
@@ -703,14 +735,20 @@ class TestMarcExporter:
         self,
         db: DatabaseTransactionFixture,
         marc_exporter_fixture: MarcExporterFixture,
+        old_url: str | None,
         new_url: str | None,
-        manual_url: str | None,
+        marc_configs: tuple[str | None, ...],
         expected: bool,
     ) -> None:
+        """Each marc_configs entry is a MARC library configuration's manual
+        web_client_url (None for a configuration without one); an empty tuple
+        means the library has no MARC exporter configuration at all."""
         library1 = marc_exporter_fixture.library1
 
-        if manual_url is not None:
-            marc_integration = marc_exporter_fixture.integration()
+        for idx, manual_url in enumerate(marc_configs):
+            marc_integration = db.integration_configuration(
+                MarcExporter, Goals.CATALOG_GOAL, name=f"MARC Exporter {idx}"
+            )
             db.integration_library_configuration(
                 marc_integration,
                 library1,
@@ -719,7 +757,43 @@ class TestMarcExporter:
 
         assert (
             MarcExporter.needs_reset_for_web_client_change(
-                db.session, library1, new_url=new_url
+                db.session,
+                marc_exporter_fixture.registry,
+                library1,
+                old_url=old_url,
+                new_url=new_url,
             )
             == expected
+        )
+
+    def test_needs_reset_for_web_client_change_other_protocol(
+        self,
+        db: DatabaseTransactionFixture,
+        marc_exporter_fixture: MarcExporterFixture,
+    ) -> None:
+        """A matching URL on a non-MARC catalog integration doesn't count as covered."""
+        library1 = marc_exporter_fixture.library1
+        marc_integration = db.integration_configuration(
+            MarcExporter, Goals.CATALOG_GOAL, name="MARC Exporter"
+        )
+        db.integration_library_configuration(marc_integration, library1)
+        other = db.integration_configuration(
+            "fake protocol", Goals.CATALOG_GOAL, name="other"
+        )
+        # Created directly: the db fixture helper resolves the protocol through
+        # the registry, which doesn't know "fake protocol".
+        other_lc, _ = create(
+            db.session,
+            IntegrationLibraryConfiguration,
+            parent=other,
+            library=library1,
+        )
+        other_lc.settings_dict = {"web_client_url": "http://manual"}
+
+        assert MarcExporter.needs_reset_for_web_client_change(
+            db.session,
+            marc_exporter_fixture.registry,
+            library1,
+            old_url=None,
+            new_url="http://manual",
         )

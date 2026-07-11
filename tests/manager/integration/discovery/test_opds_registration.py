@@ -5,7 +5,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import ANY, MagicMock
 
 import pytest
 from Crypto.Cipher import PKCS1_OAEP
@@ -776,7 +776,9 @@ class TestOpdsRegistrationService:
         if existing_web_client != catalog_web_client:
             mock_needs_reset.assert_called_once_with(
                 remote_registry_fixture.db.session,
+                ANY,
                 registration.library,
+                old_url=existing_web_client,
                 new_url=catalog_web_client,
             )
         else:
