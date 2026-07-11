@@ -1,8 +1,11 @@
+import pytest
+
 from palace.manager.sqlalchemy.model.identifier import (
     Equivalency,
     RecursiveEquivalencyCache,
 )
 from palace.manager.sqlalchemy.refresh_equivalents import (
+    _insert_cache_rows,
     add_identity_equivalents,
     process_identifier_ids,
     refresh_equivalent_identifiers,
@@ -89,6 +92,35 @@ class TestProcessIdentifierIds:
 
         assert b.id not in recursive_equivalency_cache.cache_for(a.id)
 
+    def test_tolerates_rows_the_delete_did_not_remove(
+        self,
+        db: DatabaseTransactionFixture,
+        recursive_equivalency_cache: RecursiveEquivalencyCacheFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        # A concurrent writer can commit a cache row for a parent after we have
+        # already deleted that parent's rows, so the rows we are about to insert
+        # may collide. Simulate that by disabling the delete entirely: the insert
+        # must skip the existing rows rather than raise a unique violation.
+        a = db.identifier()
+        b = db.identifier()
+        db.session.add(Equivalency(input_id=a.id, output_id=b.id, strength=1.0))
+        db.session.flush()
+
+        process_identifier_ids(db.session, frozenset([a.id, b.id]))
+        db.session.flush()
+        assert recursive_equivalency_cache.cache_for(a.id) == {a.id, b.id}
+
+        monkeypatch.setattr(
+            "palace.manager.sqlalchemy.refresh_equivalents._delete_cache_rows",
+            lambda session, parent_ids: None,
+        )
+        process_identifier_ids(db.session, frozenset([a.id, b.id]))
+        db.session.flush()
+
+        assert recursive_equivalency_cache.cache_for(a.id) == {a.id, b.id}
+        assert recursive_equivalency_cache.cache_for(b.id) == {a.id, b.id}
+
 
 class TestAddIdentityEquivalents:
     def test_adds_self_references(
@@ -119,6 +151,39 @@ class TestAddIdentityEquivalents:
 
         # No duplicate rows should be added.
         assert after == before
+
+
+class TestInsertCacheRows:
+    def test_skips_existing_rows(
+        self,
+        db: DatabaseTransactionFixture,
+        recursive_equivalency_cache: RecursiveEquivalencyCacheFixture,
+    ) -> None:
+        # A row committed by a concurrent writer — the Identifier creation
+        # listener, or a second refresh chain — must not abort the insert.
+        a = db.identifier()
+        b = db.identifier()
+        db.session.flush()
+        # a and b already have self-references from the creation listener.
+
+        rows = [
+            {"parent_identifier_id": a.id, "identifier_id": a.id},
+            {"parent_identifier_id": a.id, "identifier_id": b.id},
+        ]
+        _insert_cache_rows(db.session, rows)
+        db.session.flush()
+
+        assert recursive_equivalency_cache.cache_for(a.id) == {a.id, b.id}
+
+        # Re-inserting the same rows is a no-op.
+        _insert_cache_rows(db.session, rows)
+        db.session.flush()
+
+        assert recursive_equivalency_cache.cache_for(a.id) == {a.id, b.id}
+
+    def test_empty_input(self, db: DatabaseTransactionFixture) -> None:
+        _insert_cache_rows(db.session, [])
+        assert db.session.query(RecursiveEquivalencyCache).count() == 0
 
 
 class TestRefreshEquivalentIdentifiers:
