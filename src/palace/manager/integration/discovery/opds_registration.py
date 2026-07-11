@@ -19,6 +19,7 @@ from palace.manager.api.problem_details import (
 )
 from palace.manager.core.problem_details import INTEGRATION_ERROR
 from palace.manager.integration.base import HasIntegrationConfiguration
+from palace.manager.integration.catalog.marc.exporter import MarcExporter
 from palace.manager.integration.goals import Goals
 from palace.manager.integration.settings import (
     BaseSettings,
@@ -513,6 +514,18 @@ class OpdsRegistrationService(
         # Our opinion about the proper stage of this library was successfully
         # communicated to the registry.
         registration.stage = desired_stage
+
+        # Reset MARC export for the library if the web client URL changed, so
+        # delta-only consumers receive a full refresh with the updated 856 fields.
+        if (
+            web_client_url != registration.web_client
+            and registration.library is not None
+        ):
+            session = Session.object_session(registration)
+            if session is not None:
+                MarcExporter.reset_on_web_client_change(
+                    session, registration.library, new_url=web_client_url
+                )
 
         # Store the web client URL
         registration.web_client = web_client_url

@@ -1,3 +1,5 @@
+from typing import Any
+
 import flask
 from flask import Response
 
@@ -87,11 +89,27 @@ class CatalogServicesController(
             validated_settings = ProcessFormData.get_settings(settings_class, form_data)
             catalog_service.settings_dict = validated_settings.model_dump()
 
+            # Capture current library settings so we can detect changes after the update.
+            old_library_settings: dict[int, dict[str, Any]] = {
+                lc.library_id: (lc.settings_dict or {}).copy()
+                for lc in catalog_service.library_configurations
+                if lc.library_id is not None
+            }
+
             # Update library settings
             if libraries_data:
                 self.process_libraries(
                     catalog_service, libraries_data, impl_cls.library_settings_class()
                 )
+
+            # Reset MARC export for any library whose settings actually changed.
+            for lc in catalog_service.library_configurations:
+                if (
+                    lc.library_id in old_library_settings
+                    and old_library_settings[lc.library_id] != (lc.settings_dict or {})
+                    and lc.library is not None
+                ):
+                    MarcExporter.reset_marc_export(self._db, lc.library)
 
             # Trigger a site configuration change
             site_configuration_has_changed(self._db)

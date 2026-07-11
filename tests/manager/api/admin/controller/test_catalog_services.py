@@ -1,9 +1,11 @@
 import json
 from contextlib import nullcontext
+from unittest.mock import MagicMock
 
 import flask
 import pytest
 from flask import Response
+from pytest import MonkeyPatch
 from werkzeug.datastructures import ImmutableMultiDict
 
 from palace.manager.api.admin.controller.catalog_services import (
@@ -318,3 +320,109 @@ class TestCatalogServicesController:
 
         none_service = get_one(db.session, IntegrationConfiguration, id=service.id)
         assert none_service is None
+
+    @pytest.mark.parametrize(
+        "changed, expect_reset",
+        [
+            pytest.param(True, True, id="settings-changed"),
+            pytest.param(False, False, id="settings-unchanged"),
+        ],
+    )
+    def test_catalog_services_post_resets_marc_export_on_settings_change(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller: CatalogServicesController,
+        db: DatabaseTransactionFixture,
+        monkeypatch: MonkeyPatch,
+        changed: bool,
+        expect_reset: bool,
+    ):
+        mock_reset = MagicMock()
+        monkeypatch.setattr(MarcExporter, "reset_marc_export", mock_reset)
+
+        library = db.default_library()
+        service = db.integration_configuration(
+            MarcExporter,
+            Goals.CATALOG_GOAL,
+            name="marc",
+            libraries=[library],
+        )
+        protocol = service.protocol
+
+        # Configure initial library settings with include_summary=False.
+        lc = service.for_library(library)
+        assert lc is not None
+        MarcExporter.library_settings_update(
+            lc, MarcExporterLibrarySettings(include_summary=False, include_genres=False)
+        )
+
+        # POST with either changed or unchanged settings.
+        new_include_summary = "true" if changed else "false"
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
+            flask.request.form = ImmutableMultiDict(
+                [
+                    ("name", "marc"),
+                    ("id", str(service.id)),
+                    ("protocol", str(protocol)),
+                    (
+                        "libraries",
+                        json.dumps(
+                            [
+                                {
+                                    "short_name": library.short_name,
+                                    "include_summary": new_include_summary,
+                                    "include_genres": "false",
+                                }
+                            ]
+                        ),
+                    ),
+                ]
+            )
+            response = controller.process_catalog_services()
+            assert isinstance(response, Response)
+
+        if expect_reset:
+            mock_reset.assert_called_once_with(db.session, library)
+        else:
+            mock_reset.assert_not_called()
+
+    def test_catalog_services_post_no_reset_for_new_library(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller: CatalogServicesController,
+        db: DatabaseTransactionFixture,
+        monkeypatch: MonkeyPatch,
+    ):
+        """Adding a new library to a service does not trigger a reset (no prior records)."""
+        mock_reset = MagicMock()
+        monkeypatch.setattr(MarcExporter, "reset_marc_export", mock_reset)
+
+        service = db.integration_configuration(
+            MarcExporter, Goals.CATALOG_GOAL, name="marc"
+        )
+        protocol = service.protocol
+
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
+            flask.request.form = ImmutableMultiDict(
+                [
+                    ("name", "marc"),
+                    ("id", str(service.id)),
+                    ("protocol", str(protocol)),
+                    (
+                        "libraries",
+                        json.dumps(
+                            [
+                                {
+                                    "short_name": db.default_library().short_name,
+                                    "include_summary": "false",
+                                    "include_genres": "false",
+                                }
+                            ]
+                        ),
+                    ),
+                ]
+            )
+            response = controller.process_catalog_services()
+            assert isinstance(response, Response)
+
+        mock_reset.assert_not_called()

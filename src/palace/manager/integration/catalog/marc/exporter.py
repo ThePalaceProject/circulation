@@ -168,6 +168,68 @@ class MarcExporter(
 
         return last_updated_file.created if last_updated_file else None
 
+    @staticmethod
+    def marc_enabled_collections(
+        session: Session, library: Library
+    ) -> list[Collection]:
+        """Return all MARC-export-enabled collections associated with this library."""
+        return (
+            session.execute(
+                select(Collection)
+                .join(Collection.integration_configuration)
+                .join(IntegrationConfiguration.library_configurations)
+                .where(
+                    IntegrationLibraryConfiguration.library == library,
+                    Collection.export_marc_records == True,
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    @staticmethod
+    def reset_marc_export(session: Session, library: Library) -> None:
+        """Delete all MarcFile records for a library's MARC-enabled collections.
+
+        Causes the next export run to behave like a first run, producing both a
+        full export and a full-content delta for delta-only consumers.
+        """
+        for collection in MarcExporter.marc_enabled_collections(session, library):
+            for record in session.execute(
+                select(MarcFile).where(
+                    MarcFile.library == library,
+                    MarcFile.collection == collection,
+                )
+            ).scalars():
+                session.delete(record)
+
+    @staticmethod
+    def reset_on_web_client_change(
+        session: Session, library: Library, new_url: str | None
+    ) -> None:
+        """Reset MARC export if a registry web-client URL change affects MARC output.
+
+        No-op when new_url is already present as the manual web_client_url in a
+        MARC library configuration for this library — the effective set of exported
+        URLs would be unchanged.
+        """
+        if new_url is not None:
+            marc_manual_urls = {
+                row.settings_dict.get("web_client_url")
+                for row in session.execute(
+                    select(IntegrationLibraryConfiguration)
+                    .join(IntegrationConfiguration)
+                    .where(
+                        IntegrationLibraryConfiguration.library == library,
+                        IntegrationConfiguration.protocol == MarcExporter.__name__,
+                    )
+                ).scalars()
+            }
+            if new_url in marc_manual_urls:
+                return
+
+        MarcExporter.reset_marc_export(session, library)
+
     @classmethod
     def enabled_collections(
         cls, session: Session, registry: CatalogServicesRegistry

@@ -3,8 +3,15 @@ from contextlib import ExitStack
 from tempfile import TemporaryFile
 
 from celery import shared_task
+from sqlalchemy import func, select
 
 from palace.util.datetime_helpers import utc_now
+
+# Sentinel timestamp used as `since` on a full-content delta MarcFile record.
+# When a library's settings reset causes a fresh full export, a paired delta
+# record with this timestamp is created so delta-only consumers also receive
+# the complete dataset.
+MARC_EPOCH = datetime.datetime(1900, 1, 1, tzinfo=datetime.UTC)
 
 from palace.manager.celery.task import Task
 from palace.manager.celery.utils import signature_with
@@ -221,6 +228,20 @@ def marc_export_collection(
                             key=upload.context.s3_key,
                             since=library.last_updated if delta else None,
                         )
+                        # For first-run (or reset) libraries in a full export, create a
+                        # full-content delta record pointing at the same S3 object.
+                        # Delta-only consumers will receive the complete dataset without
+                        # a second upload.
+                        if not delta and library.last_updated is None:
+                            create(
+                                session,
+                                MarcFile,
+                                library_id=library.library_id,
+                                collection_id=collection_id,
+                                created=start_time,
+                                key=upload.context.s3_key,
+                                since=MARC_EPOCH,
+                            )
                         task.log.info(f"Completed upload for '{upload.context.s3_key}'")
                     else:
                         task.log.warning(
@@ -272,6 +293,15 @@ def marc_export_cleanup(
                 raise task.replace(marc_export_cleanup.s())
 
             task.log.info(f"Deleting MARC export {file_record.key} ({file_record.id}).")
-            storage_service.delete(file_record.key)
+            # Only delete the S3 object when no other MarcFile records share the key.
+            # A first-run full export and its paired full-content delta share an S3 key.
+            other_refs = session.execute(
+                select(func.count(MarcFile.id)).where(
+                    MarcFile.key == file_record.key,
+                    MarcFile.id != file_record.id,
+                )
+            ).scalar_one()
+            if other_refs == 0:
+                storage_service.delete(file_record.key)
             session.delete(file_record)
             session.commit()
