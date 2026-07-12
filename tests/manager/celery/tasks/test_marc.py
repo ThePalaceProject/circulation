@@ -1,9 +1,10 @@
 import datetime
-from unittest.mock import ANY, call, patch
+from unittest.mock import ANY, MagicMock, call, patch
 
 import pytest
 from botocore.exceptions import ClientError
 from pymarc import MARCReader
+from pytest import MonkeyPatch
 from sqlalchemy import select
 
 from palace.util.datetime_helpers import utc_now
@@ -408,6 +409,39 @@ class TestMarcExportCollection:
             data = s3_service_integration_fixture.get_object("public", file)
             for record in MARCReader(data):
                 assert record["003"].data in {"library1-org", "library2-org"}
+
+    def test_reset_race_after_finalize_check(
+        self,
+        db: DatabaseTransactionFixture,
+        marc_exporter_fixture: MarcExporterFixture,
+        marc_export_collection_fixture: MarcExportCollectionFixture,
+        monkeypatch: MonkeyPatch,
+    ):
+        """A configuration change landing between the finalize check and the
+        export's commit is detected after the commit and queues a reset."""
+        marc_export_collection_fixture.setup_mock_storage()
+        collection = marc_exporter_fixture.collection1
+        marc_export_collection_fixture.works(collection)
+
+        mock_delay = MagicMock()
+        monkeypatch.setattr(marc.marc_export_reset, "delay", mock_delay)
+
+        # The finalize check (one call per library) sees unchanged settings; the
+        # post-commit verification sees changed ones.
+        monkeypatch.setattr(
+            marc,
+            "_export_settings_changed",
+            MagicMock(side_effect=[False, False, True, True]),
+        )
+
+        marc_export_collection_fixture.export_collection(collection)
+
+        # A reset was queued for both libraries whose stale exports were recorded.
+        assert mock_delay.call_count == 2
+        assert {call_args.args[0] for call_args in mock_delay.call_args_list} == {
+            marc_exporter_fixture.library1.id,
+            marc_exporter_fixture.library2.id,
+        }
 
     def test_reset_race_library_disabled(
         self,

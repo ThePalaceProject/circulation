@@ -37,10 +37,10 @@ from palace.manager.sqlalchemy.util import create, get_one
 # LibraryInfo fields that change between runs without a configuration change.
 _VOLATILE_LIBRARY_INFO_FIELDS = frozenset({"last_updated", "needs_update"})
 
-# LibraryInfo tuple fields whose values are compared as unordered sets.
+# LibraryInfo tuple fields compared order-independently.
 # TODO: The `filtered_audiences` and `filtered_genres` library settings are
 #  compared below, but changing them does not yet queue a MARC export reset.
-_UNORDERED_LIBRARY_INFO_FIELDS = frozenset(
+_ORDER_INSENSITIVE_LIBRARY_INFO_FIELDS = frozenset(
     {"web_client_urls", "filtered_audiences", "filtered_genres"}
 )
 
@@ -128,12 +128,12 @@ def _export_settings_changed(snapshot: LibraryInfo, current: LibraryInfo) -> boo
     """Whether a library's export-affecting settings differ between two LibraryInfo.
 
     Ignores the fields that may change between runs without affecting the export
-    and compares the tuple fields as unordered sets of values.
+    and compares the tuple fields order-independently.
     """
 
     def comparable(info: LibraryInfo) -> dict[str, Any]:
         dumped = info.model_dump(exclude=set(_VOLATILE_LIBRARY_INFO_FIELDS))
-        for field in _UNORDERED_LIBRARY_INFO_FIELDS:
+        for field in _ORDER_INSENSITIVE_LIBRARY_INFO_FIELDS:
             dumped[field] = sorted(dumped[field])
         return dumped
 
@@ -177,12 +177,14 @@ def _finalize_uploads(
     collection_id: int,
     start_time: datetime.datetime,
     delta: bool,
-) -> list[LibraryInfo]:
+) -> tuple[list[LibraryInfo], list[LibraryInfo]]:
     """Complete the uploads and create their MarcFile records.
 
     Uploads for libraries whose configuration changed while the export was in
-    flight are discarded instead. Returns the current LibraryInfo for those
-    libraries, so the caller can re-queue a fresh full export for them.
+    flight are discarded instead. Returns two lists: the current LibraryInfo
+    for the discarded libraries, so the caller can re-queue a fresh full export
+    for them, and the snapshot LibraryInfo for the libraries whose records were
+    created, so the caller can re-verify them after the commit.
     """
     registry = task.services.integration_registry.catalog_services()
     current_infos = {
@@ -190,12 +192,12 @@ def _finalize_uploads(
         for info in MarcExporter.enabled_libraries(session, registry, collection_id)
     }
     drifted_libraries: list[LibraryInfo] = []
+    recorded_libraries: list[LibraryInfo] = []
     for library, upload in uploads.items():
         # Recording an upload after the library's configuration changed would
         # leave stale content behind, so discard it and let the caller re-queue
-        # a fresh full export.
-        # Note: There is a race condition window between the check here and the
-        # commit for the export.
+        # a fresh full export. A change landing between this check and the
+        # commit is caught by _verify_uploads_after_commit.
         current = current_infos.get(library.library_id)
         if _export_config_changed(session, collection_id, library, current):
             task.log.warning(
@@ -211,6 +213,7 @@ def _finalize_uploads(
             continue
 
         if upload.complete():
+            recorded_libraries.append(library)
             create(
                 session,
                 MarcFile,
@@ -241,7 +244,43 @@ def _finalize_uploads(
                 f"No upload for '{upload.context.s3_key}', "
                 f"because there were no records."
             )
-    return drifted_libraries
+    return drifted_libraries, recorded_libraries
+
+
+def _verify_uploads_after_commit(
+    task: Task,
+    collection_id: int,
+    recorded_libraries: list[LibraryInfo],
+) -> None:
+    """Detect a configuration change that landed between the finalize check and
+    the export's commit, and then queue a reset for any library affected.
+
+    Every reset trigger also changes the library's LibraryInfo, so comparing
+    settings after the commit closes the remaining race window. That is, a change
+    committed before this check is detected here, and a change committed after
+    it queues a reset task that will see (and delete) the records this export
+    just committed.
+    """
+    if not recorded_libraries:
+        return
+
+    with task.session() as session:
+        registry = task.services.integration_registry.catalog_services()
+        current_infos = {
+            info.library_id: info
+            for info in MarcExporter.enabled_libraries(session, registry, collection_id)
+        }
+
+    for library in recorded_libraries:
+        current = current_infos.get(library.library_id)
+        if current is None or _export_settings_changed(library, current):
+            task.log.warning(
+                f"MARC export configuration for library "
+                f"{library.library_short_name} ({library.library_id}) changed "
+                f"while the export was being recorded. Queueing a reset to "
+                f"discard the stale export."
+            )
+            marc_export_reset.delay(library.library_id)
 
 
 @shared_task(queue=QueueNames.default, bind=True)
@@ -349,13 +388,19 @@ def marc_export_collection(
 
             if no_more_works:
                 # Task is complete. Finalize the s3 uploads and create MarcFile records in DB.
-                drifted_libraries = _finalize_uploads(
+                drifted_libraries, recorded_libraries = _finalize_uploads(
                     task, session, uploads, collection_id, start_time, delta
                 )
                 task.log.info(
                     f"Finished generating MARC records for collection '{collection_name}' ({collection_id}) "
                     f"in {(utc_now() - start_time).seconds} seconds."
                 )
+
+        if no_more_works:
+            # The transaction has committed. Re-check the recorded libraries so
+            # that a configuration change landing between the finalize check and
+            # the commit cannot leave a stale export standing.
+            _verify_uploads_after_commit(task, collection_id, recorded_libraries)
 
     if no_more_works:
         if drifted_libraries:
@@ -446,7 +491,7 @@ def marc_export_reset(task: Task, library_id: int) -> None:
     Reset MARC export for a library so that the next export run behaves like a
     first run, producing both a new full export and a full-content delta.
     Deletes the MarcFile records and associated S3 objects for the library's
-    MARC-enabled collections, along with the corresponding S3 objects.
+    MARC-enabled collections.
 
     The records are deleted in a single transaction, so a failure cannot leave the
     reset half-applied. The S3 objects are then deleted best-effort: a failed

@@ -98,7 +98,11 @@ class MarcExporter(
     def _web_client_urls(
         session: Session, library: Library, url: str | None = None
     ) -> tuple[str, ...]:
-        """Find web client URLs configured by the registry for this library."""
+        """Find web client URLs configured by the registry for this library.
+
+        The result is de-duplicated: each distinct URL is exported once, even
+        when a registry-supplied URL matches the manually configured one.
+        """
         urls = [
             s.web_client
             for s in session.execute(
@@ -112,7 +116,7 @@ class MarcExporter(
         if url:
             urls.append(url)
 
-        return tuple(urls)
+        return tuple(dict.fromkeys(urls))
 
     @classmethod
     def _enabled_collections_and_libraries(
@@ -182,17 +186,6 @@ class MarcExporter(
                 IntegrationLibraryConfiguration.library == library,
                 Collection.export_marc_records == True,
             )
-        )
-
-    @staticmethod
-    def marc_enabled_collections(
-        session: Session, library: Library
-    ) -> list[Collection]:
-        """Return all MARC-export-enabled collections associated with this library."""
-        return (
-            session.execute(MarcExporter._marc_enabled_collections_query(library))
-            .scalars()
-            .all()
         )
 
     @staticmethod

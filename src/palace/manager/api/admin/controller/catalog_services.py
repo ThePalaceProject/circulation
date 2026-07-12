@@ -104,8 +104,8 @@ class CatalogServicesController(
                 )
 
             # Find libraries whose settings actually changed. A MARC export reset
-            # is queued for each after the transaction commits so that the next
-            # run produces a fresh full export along with a full-content delta.
+            # is queued for each so that the next run produces a fresh full
+            # export along with a full-content delta.
             reset_library_ids = [
                 lc.library_id
                 for lc in catalog_service.library_configurations
@@ -122,12 +122,16 @@ class CatalogServicesController(
             self._db.rollback()
             return e.problem_detail
 
-        # Commit before dispatching the resets so a later rollback can't leave a
-        # destructive reset running for a settings change that was never persisted.
+        # Dispatch the resets before committing: a failed enqueue then rolls the
+        # settings change back, and a retried save re-queues the reset. The
+        # reverse order could commit the settings and then lose a reset, leaving
+        # delta-only consumers with stale records indefinitely. If the commit
+        # fails after dispatch, the cost is only a spurious reset: the files are
+        # regenerated from unchanged settings by the next scheduled export run.
         if reset_library_ids:
-            self._db.commit()
             for library_id in reset_library_ids:
                 marc_export_reset.delay(library_id)
+            self._db.commit()
 
         return Response(str(catalog_service.id), response_code)
 

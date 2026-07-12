@@ -80,6 +80,11 @@ class TestMarcExporter:
             "http://web-client",
         )
 
+        # Duplicate URLs are collapsed; each distinct URL is exported once.
+        assert web_client_urls(url="http://web-client/registry") == (
+            "http://web-client/registry",
+        )
+
     def test__enabled_collections_and_libraries(
         self,
         db: DatabaseTransactionFixture,
@@ -634,31 +639,6 @@ class TestMarcExporter:
         # Library2 should have no filtering
         assert library2_info.filtered_audiences == ()
         assert library2_info.filtered_genres == ()
-
-    def test_marc_enabled_collections(
-        self,
-        db: DatabaseTransactionFixture,
-        marc_exporter_fixture: MarcExporterFixture,
-    ) -> None:
-        library1 = marc_exporter_fixture.library1
-
-        # No collections have export_marc_records enabled.
-        assert MarcExporter.marc_enabled_collections(db.session, library1) == []
-
-        # Enable collection1 (associated with library1) and collection3 (associated with library2 only).
-        marc_exporter_fixture.collection1.export_marc_records = True
-        marc_exporter_fixture.collection3.export_marc_records = True
-
-        result = MarcExporter.marc_enabled_collections(db.session, library1)
-        assert result == [marc_exporter_fixture.collection1]
-
-        # Enable collection2, which is also associated with library1.
-        marc_exporter_fixture.collection2.export_marc_records = True
-        result = MarcExporter.marc_enabled_collections(db.session, library1)
-        assert set(result) == {
-            marc_exporter_fixture.collection1,
-            marc_exporter_fixture.collection2,
-        }
 
     def test_files_for_reset(
         self,
