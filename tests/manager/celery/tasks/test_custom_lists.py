@@ -288,6 +288,53 @@ class TestUpdateCustomListEntries:
         )
         assert remaining == 0
 
+    def test_repopulate_parse_error_rolls_back_the_delete(
+        self,
+        db: DatabaseTransactionFixture,
+        redis_fixture: RedisFixture,
+        celery_fixture: CeleryFixture,
+        services_fixture: ServicesFixture,
+    ):
+        """A parse error after the REPOPULATE delete must leave the list intact.
+
+        In REPOPULATE mode the existing entries are bulk-deleted *before*
+        populate_query_pages parses and runs the query. A malformed query is
+        caught and swallowed so it does not abort the sweep -- but that swallow
+        must not commit the half-done work. This is safe only because the handler
+        sits outside the ``with task.transaction()`` block, so the exception
+        propagates out and rolls the transaction (delete included) back before
+        being caught. This test pins that invariant: move the catch inside the
+        transaction and the delete would commit, silently emptying the list.
+        """
+        custom_list = _make_auto_updating_list(db, status=CustomList.REPOPULATE)
+        work1 = db.work()
+        work2 = db.work()
+        custom_list.add_entry(work1.presentation_edition)
+        custom_list.add_entry(work2.presentation_edition)
+        db.session.flush()
+
+        with patch(
+            "palace.manager.celery.tasks.custom_lists.CustomListQueries"
+        ) as mock_queries:
+            mock_queries.populate_query_pages.side_effect = QueryParseException(
+                detail="Could not parse 'published' value '2025>01>01'."
+            )
+            # Swallowed, not raised -- one bad list must not abort the sweep.
+            custom_lists.update_custom_list_entries.delay(custom_list.id).wait()
+
+        db.session.expire_all()
+        remaining = (
+            db.session.query(CustomListEntry)
+            .filter(CustomListEntry.list_id == custom_list.id)
+            .count()
+        )
+        # The delete was rolled back: the last good entries survive ...
+        assert remaining == 2
+        # ... and the list stays in REPOPULATE so it retries once the query is fixed.
+        refreshed = db.session.get(CustomList, custom_list.id)
+        assert refreshed is not None
+        assert refreshed.auto_update_status == CustomList.REPOPULATE
+
     def test_updated_mode_injects_time_filter(
         self,
         db: DatabaseTransactionFixture,
