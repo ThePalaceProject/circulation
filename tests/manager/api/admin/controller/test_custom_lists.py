@@ -1196,6 +1196,25 @@ class TestCustomListsController:
                 "'query' key must be present as the root",
                 id="missing-query-root",
             ),
+            # JSON-serializable but wrongly-typed inputs. These once reached the
+            # parser's string operations and raised AttributeError/TypeError,
+            # which escaped the QueryParseException catch as a 500. They must now
+            # come back as a clean 400 like any other invalid query.
+            pytest.param(
+                {"query": {"key": "language", "value": 5}},
+                "Value for 'language' must be a string",
+                id="non-string-value",
+            ),
+            pytest.param(
+                {"query": {"key": ["title"], "value": "x"}},
+                "Query 'key' must be a string",
+                id="non-string-key",
+            ),
+            pytest.param(
+                {"query": "just a string"},
+                "Each query part must be an object",
+                id="query-part-not-object",
+            ),
         ],
     )
     def test_auto_update_query_must_be_a_valid_search_query(

@@ -1268,6 +1268,37 @@ class TestJSONQuery:
                 "Could not make sense of the query",
             ),
             ({"and": [], "or": []}, "A conjunction cannot have multiple parts"),
+            # Malformed but JSON-serializable shapes: before these were guarded
+            # they raised bare AttributeError/TypeError from deep in the parser,
+            # surfacing as a 500 rather than a validation error. See PP-4506.
+            pytest.param(
+                "foo", "Each query part must be an object", id="query-part-not-object"
+            ),
+            pytest.param(
+                {"and": "notalist"},
+                "'and' must be a list of sub-queries",
+                id="conjunction-not-a-list",
+            ),
+            pytest.param(
+                dict(key=["author"], value="name"),
+                "Query 'key' must be a string",
+                id="key-not-a-string",
+            ),
+            pytest.param(
+                dict(key="language", value=5),
+                "Value for 'language' must be a string",
+                id="transformed-value-not-a-string",
+            ),
+            pytest.param(
+                dict(key="published", value=20250101),
+                "Value for 'published' must be a string",
+                id="published-value-not-a-string",
+            ),
+            pytest.param(
+                dict(key="title", value=5, op="contains"),
+                "The 'contains' operator requires a string value",
+                id="contains-value-not-a-string",
+            ),
         ],
     )
     def test_errors(self, query, error_match):
@@ -1275,6 +1306,27 @@ class TestJSONQuery:
 
         with pytest.raises(QueryParseException, match=error_match):
             q.search_query  # fetch the property
+
+    @pytest.mark.parametrize(
+        "query",
+        [
+            # Numeric values remain legal for fields without a value transform;
+            # the type guards must not reject these. A range filter over a numeric
+            # field is how the custom-list entry sweep filters by availability.
+            pytest.param(
+                dict(key="target_age", value=18, op="gte"), id="numeric-range"
+            ),
+            pytest.param(
+                dict(
+                    key="licensepools.availability_time", value=1735689600.0, op="gte"
+                ),
+                id="float-timestamp-range",
+            ),
+        ],
+    )
+    def test_numeric_values_are_not_rejected(self, query):
+        # search_query must build without raising; the exact DSL is covered elsewhere.
+        assert self._jq(query).search_query is not None
 
     def test_regex_query(self):
         q = self._jq(self._leaf("title", "book", op="regex"))
