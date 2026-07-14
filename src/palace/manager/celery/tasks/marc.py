@@ -498,7 +498,9 @@ def marc_export_reset(task: Task, library_id: int) -> None:
     deletion orphans that object and logs an error, but allows the reset to continue.
 
     Repeated configuration changes can queue duplicate tasks. We don't guard
-    against that since the task is idempotent.
+    against that since the task is idempotent, even under concurrent duplicates:
+    the bulk delete matches no rows the other task already removed, and the S3
+    deletions tolerate missing objects.
     """
     storage_service = task.services.storage.public()
     with task.session() as session:
@@ -509,12 +511,12 @@ def marc_export_reset(task: Task, library_id: int) -> None:
             )
             return
 
-        keys: set[str] = set()
-        for file_record in MarcExporter.files_for_reset(session, library):
-            task.log.info(f"Deleting MARC export {file_record.key} ({file_record.id}).")
-            keys.add(file_record.key)
-            session.delete(file_record)
+        keys = MarcExporter.delete_files_for_reset(session, library)
         session.commit()
+        task.log.info(
+            f"Reset MARC export for library {library_id}. "
+            f"Deleted records for {len(keys)} file(s)."
+        )
 
         # Skip keys that other MarcFile records still reference.
         still_referenced = set(

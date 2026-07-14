@@ -5,7 +5,7 @@ from collections.abc import Generator, Iterable, Sequence
 
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session, aliased, raiseload, selectinload
-from sqlalchemy.sql import Select, select
+from sqlalchemy.sql import Select, delete, select
 
 from palace.util.datetime_helpers import utc_now
 from palace.util.log import LoggerMixin
@@ -189,22 +189,35 @@ class MarcExporter(
         )
 
     @staticmethod
-    def files_for_reset(session: Session, library: Library) -> Generator[MarcFile]:
-        """MarcFile records for a library's MARC-enabled collections.
+    def delete_files_for_reset(session: Session, library: Library) -> set[str]:
+        """Bulk-delete the MarcFile records for a library's MARC-enabled collections
+        and return the S3 keys of the deleted records. Does not commit.
 
         Deleting these records (and their S3 objects) causes the next export run
         to behave like a first run, producing both a full export and a
         full-content delta for delta-only consumers.
+
+        The bulk delete tolerates concurrent duplicate resets: rows another task
+        already deleted simply match nothing.
         """
         enabled_collection_ids = MarcExporter._marc_enabled_collections_query(
             library
         ).with_only_columns(Collection.id)
-        yield from session.execute(
-            select(MarcFile).where(
-                MarcFile.library == library,
-                MarcFile.collection_id.in_(enabled_collection_ids),
+        # A single DELETE ... RETURNING keeps the keys and the deleted rows in
+        # exact correspondence. A separate SELECT would leave a window where a
+        # concurrently committed record is deleted without its key being
+        # captured, orphaning its S3 object.
+        return set(
+            session.scalars(
+                delete(MarcFile)
+                .where(
+                    MarcFile.library == library,
+                    MarcFile.collection_id.in_(enabled_collection_ids),
+                )
+                .returning(MarcFile.key)
+                .execution_options(synchronize_session=False)
             )
-        ).scalars()
+        )
 
     @staticmethod
     def needs_reset_for_web_client_change(

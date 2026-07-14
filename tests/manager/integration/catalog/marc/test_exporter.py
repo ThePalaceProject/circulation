@@ -3,6 +3,7 @@ from functools import partial
 
 import pytest
 from freezegun import freeze_time
+from sqlalchemy import select
 from sqlalchemy.exc import InvalidRequestError
 
 from palace.util.datetime_helpers import datetime_utc, utc_now
@@ -640,7 +641,7 @@ class TestMarcExporter:
         assert library2_info.filtered_audiences == ()
         assert library2_info.filtered_genres == ()
 
-    def test_files_for_reset(
+    def test_delete_files_for_reset(
         self,
         db: DatabaseTransactionFixture,
         marc_exporter_fixture: MarcExporterFixture,
@@ -652,23 +653,32 @@ class TestMarcExporter:
         collection1.export_marc_records = True
         collection2.export_marc_records = True
 
-        # No records, nothing to reset.
-        assert list(MarcExporter.files_for_reset(db.session, library1)) == []
+        # No records, nothing to delete.
+        assert MarcExporter.delete_files_for_reset(db.session, library1) == set()
 
-        # Create MarcFile records for library1 across two collections.
-        file1 = marc_exporter_fixture.marc_file(
+        # Create MarcFile records for library1 across two collections, with a
+        # second record sharing the first record's key (a first-run pair).
+        key1 = marc_exporter_fixture.marc_file(
             library=library1, collection=collection1
+        ).key
+        marc_exporter_fixture.marc_file(
+            library=library1, collection=collection1, key=key1
         )
-        file2 = marc_exporter_fixture.marc_file(
+        key2 = marc_exporter_fixture.marc_file(
             library=library1, collection=collection2
+        ).key
+        # Record for library2 on collection1 must not be affected.
+        library2_file = marc_exporter_fixture.marc_file(
+            library=library2, collection=collection1
         )
-        # Record for library2 on collection1 must not be included.
-        marc_exporter_fixture.marc_file(library=library2, collection=collection1)
 
-        assert set(MarcExporter.files_for_reset(db.session, library1)) == {
-            file1,
-            file2,
+        # The shared key is returned once, and only library2's record survives.
+        assert MarcExporter.delete_files_for_reset(db.session, library1) == {
+            key1,
+            key2,
         }
+        remaining = db.session.execute(select(MarcFile)).scalars().all()
+        assert remaining == [library2_file]
 
     @pytest.mark.parametrize(
         "old_url, new_url, marc_configs, expected",
