@@ -48,7 +48,7 @@ dependencies = [
     "celery[redis,sqs,tblib]>=5.6.3,<6",
     "certifi",
     "click>=8.4.2,<9",
-    "croniter>=6.2.3,<7",
+    "croniter>=6.2.4,<7",
     "dependency-injector>=4.49.1,<5",
     "expiringdict==1.2.2",
     "feedparser==6.0.12",
