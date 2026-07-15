@@ -248,29 +248,29 @@ wheels = [
 
 [[package]]
 name = "boto3"
-version = "1.43.45"
+version = "1.43.46"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "botocore" },
     { name = "jmespath" },
     { name = "s3transfer" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/cb/c0/bcbe0a924ed89f8982a87727cd0f88a73397fa423a60df17ae76aa013514/boto3-1.43.45.tar.gz", hash = "sha256:65e0ae541a9948ac41b706d5c7165d96ebf155812562b6518b862be027ee7347", size = 112666, upload-time = "2026-07-09T19:30:06.944Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f2/e7/976bf3dfe0aa5d7f31bec2f2cf57c79641620c910a39bc843a237aa9592d/boto3-1.43.46.tar.gz", hash = "sha256:66c0d943b049a46a492ec4ec2ebe73c930b1842c7137bee83aad6d93e95d4d96", size = 112654, upload-time = "2026-07-10T19:32:12.498Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d0/cf/0d7d1e537d301cf0d079fa4a0765c9febf0eb74d65c115cababa6368c1b3/boto3-1.43.45-py3-none-any.whl", hash = "sha256:bb076647526c491ce75cab896543afcda5b81c97d3f8e8da08a033fc1ddb7429", size = 140031, upload-time = "2026-07-09T19:30:04.87Z" },
+    { url = "https://files.pythonhosted.org/packages/ef/1d/c52e66ff32ba7911664e6c4c2ac62e1c6d2d1e7550c7ac185d3f4b70a8a4/boto3-1.43.46-py3-none-any.whl", hash = "sha256:69453e2c1bcb9fd9806527ab99950cacfc2826cb0dce9a3a0414d19270c06c3c", size = 140031, upload-time = "2026-07-10T19:32:11.129Z" },
 ]
 
 [[package]]
 name = "boto3-stubs"
-version = "1.43.45"
+version = "1.43.46"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "botocore-stubs" },
     { name = "types-s3transfer" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/83/3c/b373a08039ec260a103709d58c226e5a85a2af859e7a010cea7b18105874/boto3_stubs-1.43.45.tar.gz", hash = "sha256:967d5d2bb9ac7e24f2ca8bf90f646c2de3ce5207e45723fb794f02d48fa26e48", size = 103212, upload-time = "2026-07-09T21:05:45.964Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/af/3e/eb6f0c4d2ed82a41e536f796e542a4d526152fa2fb90239224ceb1fc3cb0/boto3_stubs-1.43.46.tar.gz", hash = "sha256:7651e43d30855d4dd6a8da9549aa50be500eaa7301a9f1be8ad20791ce236f1c", size = 103242, upload-time = "2026-07-10T20:14:06.621Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/12/a0/bfe5ee5b62b42bbc3c138f56a64d0510f227c98d840f3fb9f4db3da476a6/boto3_stubs-1.43.45-py3-none-any.whl", hash = "sha256:696b4a92120ad2f8b53a125240af49522ae8eb84c8b73caa45a9d2df10963f8a", size = 70961, upload-time = "2026-07-09T21:05:41.849Z" },
+    { url = "https://files.pythonhosted.org/packages/4a/23/8ba4024bc8ba1a5045d31f9391d40750ebdf546274d6b2b1ccd08624505b/boto3_stubs-1.43.46-py3-none-any.whl", hash = "sha256:7ecd87a094e83bc3895d9a664e3aeb04840196f0c88a178e4d59d53c7bbb20c7", size = 70962, upload-time = "2026-07-10T20:14:02.952Z" },
 ]
 
 [package.optional-dependencies]
@@ -2243,7 +2243,7 @@ ci = [
     { name = "tox-uv", specifier = ">=1.35.2,<2" },
 ]
 dev = [
-    { name = "boto3-stubs", extras = ["boto3", "cloudwatch", "essential", "logs", "s3"], specifier = ">=1.43.45,<2" },
+    { name = "boto3-stubs", extras = ["boto3", "cloudwatch", "essential", "logs", "s3"], specifier = ">=1.43.46,<2" },
     { name = "freezegun", specifier = ">=1.5.0,<1.6" },
     { name = "google-api-python-client-stubs", specifier = ">=1.38.0,<2" },
     { name = "jinja2", specifier = ">=3.1.2,<4" },
