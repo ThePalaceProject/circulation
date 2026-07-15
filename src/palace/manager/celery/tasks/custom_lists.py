@@ -11,7 +11,8 @@ Pipeline (orchestrated via a chord):
    and reconciles the list's cached ``size``.  Uses ``task.replace()`` to spread
    pagination over multiple short task invocations.
 3. ``finalize_custom_list_entries_sweep``  — chord callback: releases the sweep-level
-   Redis lock after every per-list task has finished.
+   Redis lock after every per-list task has finished.  Registered as both the chord's
+   body and its error callback, so the lock is released even when a per-list task fails.
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ from palace.manager.celery.task import Task
 from palace.manager.celery.utils import ModelNotFoundError, load_from_id, signature_with
 from palace.manager.core.query.customlist import CustomListQueries
 from palace.manager.search.external_search import ExternalSearchIndex
+from palace.manager.search.query import QueryParseException
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.lock import RedisLock
 from palace.manager.service.redis.redis import Redis
@@ -109,7 +111,9 @@ def update_custom_list_entries_sweep(task: Task) -> None:
     A sweep-level Redis lock prevents a second beat-triggered run from
     overlapping with a sweep already in progress.  The lock is acquired here
     and released by ``finalize_custom_list_entries_sweep`` at the end of the
-    chord — so it genuinely covers the full fan-out.
+    chord — so it genuinely covers the full fan-out.  ``finalize`` is wired up
+    as both the chord's body and its error callback, so the lock is released
+    whether or not the per-list tasks all succeed.
     """
     redis = task.services.redis.client()
     lock_value = str(uuid4())
@@ -139,9 +143,19 @@ def update_custom_list_entries_sweep(task: Task) -> None:
         finalize_custom_list_entries_sweep.delay(lock_value=lock_value)
         return
 
+    # Celery runs a chord's body only if *every* header task succeeded. Attaching
+    # finalize as the body's error callback as well means the sweep lock is released
+    # on both paths: without it, one per-list task failing (a database outage, an
+    # OpenSearch transport error -- anything the per-list handler deliberately lets
+    # propagate) would leave the lock held for its full 2-hour TTL, silently skipping
+    # the next hourly sweeps for every list. Exactly one of the two runs, so the lock
+    # is released exactly once.
+    finalize = finalize_custom_list_entries_sweep.si(lock_value=lock_value)
+    finalize.on_error(finalize_custom_list_entries_sweep.si(lock_value=lock_value))
+
     chord(
         group([update_custom_list_entries.si(list_id) for list_id in list_ids]),
-        finalize_custom_list_entries_sweep.si(lock_value=lock_value),
+        finalize,
     ).delay()
 
 
@@ -350,18 +364,23 @@ def update_custom_list_entries(
                 f"Custom list {custom_list_id} not found; it may have been deleted. "
                 "Skipping."
             )
-        except RequestError:
+        except (RequestError, QueryParseException):
             # This task is a chord header, so an unhandled error aborts the whole
-            # sweep chord. A RequestError (OpenSearch 400) means *this* list's
-            # auto_update_query is malformed -- a list-specific problem, not an
-            # infrastructure failure -- so we skip it rather than let one bad query
-            # block the rest of the sweep.
+            # sweep chord. Both of these mean *this* list's auto_update_query is
+            # malformed -- a list-specific problem, not an infrastructure failure --
+            # so we skip it rather than let one bad query block the rest of the sweep.
             #
-            # A malformed query should not be reachable through normal use: the
-            # admin UI and circulation API validate queries before saving. Seeing
-            # one here therefore points to an upstream validation bug, so we log it
-            # as an exception (with traceback) to make it visible -- but we do not
-            # escalate to a task failure, since a single bad list shouldn't take
+            # The two arrive from different layers, and catching only one of them
+            # leaves the other to abort the sweep:
+            #   * QueryParseException is raised by our own JSONQuery parser, before
+            #     any request reaches OpenSearch (e.g. a `published` value that isn't
+            #     YYYY-MM-DD).
+            #   * RequestError is an OpenSearch 400, for a query that parses here but
+            #     that OpenSearch rejects.
+            #
+            # Either way the list is unusable until an admin fixes its query, so we
+            # log it as an exception (with traceback) to make it visible -- but we do
+            # not escalate to a task failure, since a single bad list shouldn't take
             # down the sweep.
             #
             # Infrastructure failures are deliberately NOT caught here: a
@@ -389,6 +408,10 @@ def finalize_custom_list_entries_sweep(
     Chord callback from ``update_custom_list_entries_sweep``.  It exists solely
     to release the sweep lock after every per-list ``update_custom_list_entries``
     task has finished, so the lock truly covers the full fan-out.
+
+    ``update_custom_list_entries_sweep`` registers this task as both the chord's
+    body and the body's error callback, since Celery skips the body entirely when
+    a header task fails.  Exactly one of the two invocations happens per sweep.
 
     :param lock_value: Sweep-lock random value from
         ``update_custom_list_entries_sweep``.  When provided, releases the lock.

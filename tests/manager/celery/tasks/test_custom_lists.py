@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+import time
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -16,6 +17,7 @@ from palace.manager.celery.tasks.custom_lists import (
     _entry_update_lock,
     _sweep_lock,
 )
+from palace.manager.search.query import QueryParseException
 from palace.manager.sqlalchemy.model.customlist import CustomList, CustomListEntry
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -41,6 +43,24 @@ def _make_auto_updating_list(
     if last_update is not None:
         custom_list.auto_update_last_update = last_update
     return custom_list
+
+
+def _wait_for_sweep_lock_release(
+    redis_fixture: RedisFixture, timeout: float = 10.0
+) -> None:
+    """Block until the sweep lock is free, or fail the test after ``timeout``.
+
+    The chord body (or its error callback) releases the lock on a worker thread,
+    after the sweep task that queued it has already returned.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        lock = _sweep_lock(redis_fixture.client, str(uuid4()))
+        if lock.acquire() is not False:
+            lock.release()
+            return
+        time.sleep(0.05)
+    pytest.fail(f"Sweep lock was not released within {timeout} seconds.")
 
 
 # ---------------------------------------------------------------------------
@@ -123,6 +143,61 @@ class TestUpdateCustomListEntriesSweep:
         # The chord callback signature must carry lock_value.
         chord_callback = mock_chord.call_args[0][1]
         assert chord_callback.kwargs.get("lock_value") is not None
+
+    def test_finalize_registered_as_chord_error_callback(
+        self,
+        db: DatabaseTransactionFixture,
+        redis_fixture: RedisFixture,
+        celery_fixture: CeleryFixture,
+    ):
+        """finalize is wired up as the chord body's error callback too.
+
+        Celery skips a chord's body when any header task fails, so without an
+        error callback a single failing per-list task would strand the sweep lock
+        until its 2-hour TTL expired.
+        """
+        _make_auto_updating_list(db)
+
+        with (
+            patch.object(custom_lists, "update_custom_list_entries"),
+            patch("palace.manager.celery.tasks.custom_lists.chord") as mock_chord,
+            patch("palace.manager.celery.tasks.custom_lists.group"),
+        ):
+            custom_lists.update_custom_list_entries_sweep.delay().wait()
+
+        chord_callback = mock_chord.call_args[0][1]
+        (errback,) = chord_callback.options["link_error"]
+        assert errback.task == custom_lists.finalize_custom_list_entries_sweep.name
+        # The errback must release the same lock the body would have released.
+        assert errback.kwargs["lock_value"] == chord_callback.kwargs["lock_value"]
+
+    def test_failing_per_list_task_still_releases_sweep_lock(
+        self,
+        db: DatabaseTransactionFixture,
+        redis_fixture: RedisFixture,
+        celery_fixture: CeleryFixture,
+        services_fixture: ServicesFixture,
+    ):
+        """End-to-end: a per-list task that fails must not strand the sweep lock.
+
+        Infrastructure errors are deliberately allowed to propagate out of
+        update_custom_list_entries so they trigger the unhandled-error alarm. That
+        failure aborts the chord body, so the lock has to come back via the error
+        callback instead.
+        """
+        _make_auto_updating_list(db, status=CustomList.INIT)
+
+        with patch(
+            "palace.manager.celery.tasks.custom_lists.CustomListQueries"
+        ) as mock_queries:
+            mock_queries.populate_query_pages.side_effect = SQLAlchemyError(
+                "database is down"
+            )
+            custom_lists.update_custom_list_entries_sweep.delay().wait()
+
+            # The chord header and its error callback run asynchronously, after the
+            # sweep task itself has returned. Poll until the lock comes back.
+            _wait_for_sweep_lock_release(redis_fixture)
 
     def test_sweep_lock_prevents_concurrent_sweeps(
         self,
@@ -212,6 +287,53 @@ class TestUpdateCustomListEntries:
             .count()
         )
         assert remaining == 0
+
+    def test_repopulate_parse_error_rolls_back_the_delete(
+        self,
+        db: DatabaseTransactionFixture,
+        redis_fixture: RedisFixture,
+        celery_fixture: CeleryFixture,
+        services_fixture: ServicesFixture,
+    ):
+        """A parse error after the REPOPULATE delete must leave the list intact.
+
+        In REPOPULATE mode the existing entries are bulk-deleted *before*
+        populate_query_pages parses and runs the query. A malformed query is
+        caught and swallowed so it does not abort the sweep -- but that swallow
+        must not commit the half-done work. This is safe only because the handler
+        sits outside the ``with task.transaction()`` block, so the exception
+        propagates out and rolls the transaction (delete included) back before
+        being caught. This test pins that invariant: move the catch inside the
+        transaction and the delete would commit, silently emptying the list.
+        """
+        custom_list = _make_auto_updating_list(db, status=CustomList.REPOPULATE)
+        work1 = db.work()
+        work2 = db.work()
+        custom_list.add_entry(work1.presentation_edition)
+        custom_list.add_entry(work2.presentation_edition)
+        db.session.flush()
+
+        with patch(
+            "palace.manager.celery.tasks.custom_lists.CustomListQueries"
+        ) as mock_queries:
+            mock_queries.populate_query_pages.side_effect = QueryParseException(
+                detail="Could not parse 'published' value '2025>01>01'."
+            )
+            # Swallowed, not raised -- one bad list must not abort the sweep.
+            custom_lists.update_custom_list_entries.delay(custom_list.id).wait()
+
+        db.session.expire_all()
+        remaining = (
+            db.session.query(CustomListEntry)
+            .filter(CustomListEntry.list_id == custom_list.id)
+            .count()
+        )
+        # The delete was rolled back: the last good entries survive ...
+        assert remaining == 2
+        # ... and the list stays in REPOPULATE so it retries once the query is fixed.
+        refreshed = db.session.get(CustomList, custom_list.id)
+        assert refreshed is not None
+        assert refreshed.auto_update_status == CustomList.REPOPULATE
 
     def test_updated_mode_injects_time_filter(
         self,
@@ -399,28 +521,46 @@ class TestUpdateCustomListEntries:
         # Should not raise.
         custom_lists.update_custom_list_entries.delay(nonexistent_id).wait()
 
+    @pytest.mark.parametrize(
+        "error",
+        [
+            pytest.param(
+                RequestError(400, "parsing_exception", {"error": "malformed query"}),
+                id="opensearch-400",
+            ),
+            pytest.param(
+                QueryParseException(
+                    detail="Could not parse 'published' value '2025>01>01'."
+                ),
+                id="json-query-parse",
+            ),
+        ],
+    )
     def test_malformed_query_logged_and_swallowed(
         self,
+        error: Exception,
         db: DatabaseTransactionFixture,
         redis_fixture: RedisFixture,
         celery_fixture: CeleryFixture,
         services_fixture: ServicesFixture,
     ):
-        """A RequestError (this list's query is malformed) is logged and skipped.
+        """A malformed auto_update_query for this list is logged and skipped.
 
         Because this task is a chord header, a propagated error would abort the
         whole sweep chord and hold the sweep lock until its TTL. A malformed
         query is a list-specific config problem, so the task must instead succeed
         (the chord proceeds and the per-list lock is released).
+
+        Both flavors must be caught: OpenSearch rejects some queries with a 400
+        (RequestError), while others are rejected by our own JSONQuery parser
+        before a request is ever sent (QueryParseException).
         """
         custom_list = _make_auto_updating_list(db, status=CustomList.INIT)
 
         with patch(
             "palace.manager.celery.tasks.custom_lists.CustomListQueries"
         ) as mock_queries:
-            mock_queries.populate_query_pages.side_effect = RequestError(
-                400, "parsing_exception", {"error": "malformed query"}
-            )
+            mock_queries.populate_query_pages.side_effect = error
             # Should not raise -- the error is caught, logged, and swallowed.
             custom_lists.update_custom_list_entries.delay(custom_list.id).wait()
 
