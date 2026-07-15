@@ -5,6 +5,7 @@ from palace.manager.sqlalchemy.model.identifier import (
     RecursiveEquivalencyCache,
 )
 from palace.manager.sqlalchemy.refresh_equivalents import (
+    _delete_cache_rows,
     _insert_cache_rows,
     add_identity_equivalents,
     process_identifier_ids,
@@ -121,6 +122,23 @@ class TestProcessIdentifierIds:
         assert recursive_equivalency_cache.cache_for(a.id) == {a.id, b.id}
         assert recursive_equivalency_cache.cache_for(b.id) == {a.id, b.id}
 
+    def test_no_chained_identifiers_is_noop(
+        self,
+        db: DatabaseTransactionFixture,
+    ) -> None:
+        # A non-empty set of identifier IDs that don't exist passes the empty
+        # check but yields no chains, so the function returns without touching
+        # the cache.
+        db.identifier()
+        db.session.flush()
+        before = db.session.query(RecursiveEquivalencyCache).count()
+
+        process_identifier_ids(db.session, frozenset([-1, -2]))
+        db.session.flush()
+
+        # Nothing was deleted or inserted.
+        assert db.session.query(RecursiveEquivalencyCache).count() == before
+
 
 class TestAddIdentityEquivalents:
     def test_adds_self_references(
@@ -236,6 +254,19 @@ class TestInsertCacheRows:
         }
 
 
+class TestDeleteCacheRows:
+    def test_empty_input(self, db: DatabaseTransactionFixture) -> None:
+        # An empty parent set is a no-op: no DELETE is issued, so existing rows
+        # (e.g. the creation listener's self-references) are left in place.
+        db.identifier()
+        db.session.flush()
+        before = db.session.query(RecursiveEquivalencyCache).count()
+
+        _delete_cache_rows(db.session, set())
+
+        assert db.session.query(RecursiveEquivalencyCache).count() == before
+
+
 class TestRefreshEquivalentIdentifiers:
     def test_full_refresh(
         self,
@@ -256,3 +287,18 @@ class TestRefreshEquivalentIdentifiers:
         assert recursive_equivalency_cache.cache_for(b.id) == {a.id, b.id}
         # c should have a self-reference.
         assert recursive_equivalency_cache.cache_for(c.id) == {c.id}
+
+    def test_no_equivalencies(
+        self,
+        db: DatabaseTransactionFixture,
+        recursive_equivalency_cache: RecursiveEquivalencyCacheFixture,
+    ) -> None:
+        # With no equivalencies at all, the chain computation is skipped and
+        # only the self-reference sweep runs.
+        a = db.identifier()
+        db.session.flush()
+        recursive_equivalency_cache.drop()
+
+        refresh_equivalent_identifiers(db.session)
+
+        assert recursive_equivalency_cache.cache_for(a.id) == {a.id}
