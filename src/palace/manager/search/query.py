@@ -4,6 +4,8 @@ import datetime
 import json
 import re
 from collections import defaultdict
+from collections.abc import Mapping, Sequence
+from typing import TypeAlias
 
 from attrs import define
 from opensearchpy.helpers.query import (
@@ -673,6 +675,20 @@ class Query(LoggerMixin):
         return hypotheses
 
 
+# A node in the JSON query language parsed by :class:`JSONQuery`. Recursive
+# because the tree nests arbitrarily deep, a node is one of:
+#   * the root wrapper ``{"query": <node>}``
+#   * a leaf ``{"key": str, "value": <scalar>, "op": str}`` — ``value`` is a
+#     string for most fields and numeric for range filters (see the numeric
+#     tower: ``float`` also admits ``int``/``bool``)
+#   * a conjunction ``{"and" | "or" | "not": [<node>, ...]}``
+# ``Mapping``/``Sequence`` (rather than ``dict``/``list``) are used so that the
+# covariant value type accepts narrower literals such as ``dict[str, str]``.
+JSONQueryDict: TypeAlias = Mapping[
+    str, "str | float | JSONQueryDict | Sequence[JSONQueryDict]"
+]
+
+
 class JSONQuery(Query):
     """An ES query created out of a JSON based query language
     Eg. { "query": { "and": [{"key": "title", "value": "book" }, {"key": "author", "value": "robert" }] } }
@@ -811,7 +827,7 @@ class JSONQuery(Query):
         "audience": ValueTransforms.audience,
     }
 
-    def __init__(self, query: str | dict, filter=None):
+    def __init__(self, query: str | JSONQueryDict, filter=None):
         if type(query) is str:
             try:
                 query = json.loads(query)
@@ -845,11 +861,10 @@ class JSONQuery(Query):
         if not query:
             return {}
 
-        # Every node must be an object. Without this guard a JSON-valid but
+        # Every query node must be a dict. Without this guard a JSON-valid but
         # ill-shaped node (e.g. a bare string from ``{"query": "foo"}``, or a
         # string where ``and``/``or`` expects a list of sub-queries) would reach
-        # ``query.keys()`` below and raise a bare ``AttributeError`` — surfacing
-        # as a 500 instead of a "this query is invalid" 400.
+        # ``query.keys()`` below.
         if not isinstance(query, dict):
             raise QueryParseException(
                 detail=f"Each query part must be an object, got "
@@ -875,6 +890,16 @@ class JSONQuery(Query):
     def _parse_json_leaf(self, query: dict) -> BaseQuery:
         """We have a leaf query, which means this becomes a keyword.term query"""
         op = query.get(self.QueryLeaf.OP, self.Operators.EQ)
+
+        # ``op not in self.Operators`` resolves through ``ValuesMeta.__contains__``,
+        # which tests membership against a ``set``. A non-hashable ``op`` (e.g. a
+        # JSON array or object) would raise a bare ``TypeError: unhashable type``
+        # rather than a validation error, so guard the type first.
+        if not isinstance(op, str):
+            raise QueryParseException(
+                detail=f"Query 'op' must be a string, got "
+                f"{type(op).__name__}: {op!r}"
+            )
 
         if op not in self.Operators:
             raise QueryParseException(detail=f"Unrecognized operator: {op}")

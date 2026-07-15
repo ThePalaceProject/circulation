@@ -1166,7 +1166,10 @@ class TestCustomListsController:
             [],
             id=None,
             auto_update=True,
-            auto_update_query={"foo": object()},
+            # A bare ``object()`` is deliberately not JSON serializable — the
+            # point of this test is the runtime ``json.dumps`` guard, so the
+            # value intentionally violates the JSONQueryDict value type.
+            auto_update_query={"foo": object()},  # type: ignore[dict-item]
         )
 
         assert isinstance(response, ProblemDetail)

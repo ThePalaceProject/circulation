@@ -34,7 +34,11 @@ from palace.manager.core.problem_details import INVALID_INPUT, METHOD_NOT_ALLOWE
 from palace.manager.core.query.customlist import CustomListQueries
 from palace.manager.feed.acquisition import OPDSAcquisitionFeed
 from palace.manager.feed.worklist.base import WorkList
-from palace.manager.search.query import JSONQuery, QueryParseException
+from palace.manager.search.query import (
+    JSONQuery,
+    JSONQueryDict,
+    QueryParseException,
+)
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.customlist import CustomList
 from palace.manager.sqlalchemy.model.datasource import DataSource
@@ -130,7 +134,7 @@ class CustomListsController(
         deleted_entries: list[dict[str, Any]] | None = None,
         id: int | None = None,
         auto_update: bool | None = None,
-        auto_update_query: dict[str, Any] | None = None,
+        auto_update_query: JSONQueryDict | None = None,
         auto_update_facets: dict[str, str] | None = None,
     ) -> ProblemDetail | Response:
         data_source = DataSource.lookup(self._db, DataSource.LIBRARY_STAFF)

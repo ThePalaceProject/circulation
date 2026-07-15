@@ -1299,6 +1299,11 @@ class TestJSONQuery:
                 "The 'contains' operator requires a string value",
                 id="contains-value-not-a-string",
             ),
+            pytest.param(
+                dict(key="title", value="x", op=[]),
+                "Query 'op' must be a string",
+                id="op-not-a-string",
+            ),
         ],
     )
     def test_errors(self, query, error_match):
