@@ -22,10 +22,6 @@ def upgrade() -> None:
     # the database lets the ORM omit the column from INSERTs (it previously
     # supplied a Python-side ``default=0``), so a follow-up release can drop the
     # column without breaking the still-running previous release's inserts.
-    #
-    # ``SET DEFAULT`` is a catalog-only change in Postgres: instant, no table
-    # rewrite. It is backwards-compatible because the previous release still
-    # explicitly writes ``size=0``, which simply overrides the new default.
     op.alter_column("lanes", "size", server_default=sa.text("0"))
 
 

@@ -114,17 +114,10 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
     priority: Mapped[int] = Column(Integer, index=True, nullable=False, default=0)
 
     # Deprecated: these cached size estimates are no longer populated or read.
-    # They are mapped as ``deferred`` so the ORM excludes them from its default
-    # SELECT (the read side), and this release must also stop writing them so a
-    # follow-up migration can drop the columns without breaking the still-running
-    # previous release.
-    #
-    # ``size`` is NOT NULL, so removing the Python-side ``default=0`` alone would
-    # make inserts fail the not-null constraint. Instead we move the default into
-    # the database as a ``server_default``: with no Python default set, SQLAlchemy
-    # omits the column from INSERTs entirely and Postgres fills in 0. That is what
-    # makes the eventual DROP write-safe. ``size_by_entrypoint`` is nullable with
-    # no default, so SQLAlchemy already omits it from INSERTs.
+    # The code that maintained them (update_size and the lane-size Celery tasks)
+    # has been removed; the columns remain mapped only so the model continues to
+    # match the database schema, and will be dropped in a follow-up migration.
+    # TODO: Drop these next release when it is safe to do so.
     size = deferred(Column(Integer, nullable=False, server_default=text("0")))
     size_by_entrypoint = deferred(Column(JSON, nullable=True))
 

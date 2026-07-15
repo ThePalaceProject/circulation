@@ -152,23 +152,17 @@ code stops using it. Removing a schema object is therefore a two-step process ac
 **"Stop using" an ORM column means stopping both reads _and_ writes.** SQLAlchemy eagerly includes every
 mapped column in its default `SELECT`, and eagerly emits any column that has a Python-side `default=` in every
 `INSERT`. So leaving a column mapped — even when no application code reads or assigns it — does **not** stop
-using it, and a later drop will break the still-running previous release. `test_model_definitions_match_ddl`
-passing does not catch this; it only checks that the model matches the schema, not that inserts avoid the
-column. To fully stop using a column in release 1, before dropping it in release 2:
+using it, and a later drop will break the still-running previous release. To fully stop using a column in
+release 1, before dropping it in release 2:
 
 - **Reads:** mark the column `deferred()` so it is excluded from the default `SELECT`.
 - **Writes:** remove any Python-side `default=`. If the column is `NOT NULL`, removing the Python default
   alone makes inserts fail the not-null constraint (SQLAlchemy sends no value and the database has none), so
-  first move the default into the database with a `server_default` via an `ALTER COLUMN ... SET DEFAULT`
-  migration — catalog-only in Postgres (instant, no rewrite) and backwards-compatible because N-1 still writes
-  the value explicitly, harmlessly overriding the default. With a `server_default` set and the Python
-  `default=` removed, SQLAlchemy omits the column from `INSERT`s and the database fills it in. A **nullable**
-  column with no default is already omitted from `INSERT`s, so it needs no write-side change.
+  first move the default into the database with a `server_default`. A **nullable** column with no default
+  is already omitted from `INSERT`s, so it needs no write-side change.
 
 Both the read-side (`deferred`) and write-side (`server_default`) changes are backwards-compatible, so they
-belong together in **release 1**; the drop is **release 2**. There is no ORM-only way to make the drop
-write-safe without this schema change: any attempt to stop emitting a `NOT NULL`/no-default column either
-keeps emitting it (drop still breaks) or fails inserts immediately.
+belong together in **release 1**; the drop is **release 2**.
 
 The same constraint applies in reverse when adding required schema: a new non-nullable column must first be
 added as nullable, or with a **server default** so the database fills it in for rows written by N-1 code (which
