@@ -4,6 +4,8 @@ import datetime
 import json
 import re
 from collections import defaultdict
+from collections.abc import Mapping, Sequence
+from typing import TypeAlias
 
 from attrs import define
 from opensearchpy.helpers.query import (
@@ -673,6 +675,20 @@ class Query(LoggerMixin):
         return hypotheses
 
 
+# A node in the JSON query language parsed by :class:`JSONQuery`. Recursive
+# because the tree nests arbitrarily deep, a node is one of:
+#   * the root wrapper ``{"query": <node>}``
+#   * a leaf ``{"key": str, "value": <scalar>, "op": str}`` — ``value`` is a
+#     string for most fields and numeric for range filters (see the numeric
+#     tower: ``float`` also admits ``int``/``bool``)
+#   * a conjunction ``{"and" | "or" | "not": [<node>, ...]}``
+# ``Mapping``/``Sequence`` (rather than ``dict``/``list``) are used so that the
+# covariant value type accepts narrower literals such as ``dict[str, str]``.
+JSONQueryDict: TypeAlias = Mapping[
+    str, "str | float | JSONQueryDict | Sequence[JSONQueryDict]"
+]
+
+
 class JSONQuery(Query):
     """An ES query created out of a JSON based query language
     Eg. { "query": { "and": [{"key": "title", "value": "book" }, {"key": "author", "value": "robert" }] } }
@@ -811,7 +827,7 @@ class JSONQuery(Query):
         "audience": ValueTransforms.audience,
     }
 
-    def __init__(self, query: str | dict, filter=None):
+    def __init__(self, query: str | JSONQueryDict, filter=None):
         if type(query) is str:
             try:
                 query = json.loads(query)
@@ -845,6 +861,16 @@ class JSONQuery(Query):
         if not query:
             return {}
 
+        # Every query node must be a dict. Without this guard a JSON-valid but
+        # ill-shaped node (e.g. a bare string from ``{"query": "foo"}``, or a
+        # string where ``and``/``or`` expects a list of sub-queries) would reach
+        # ``query.keys()`` below.
+        if not isinstance(query, dict):
+            raise QueryParseException(
+                detail=f"Each query part must be an object, got "
+                f"{type(query).__name__}: {query!r}"
+            )
+
         # This is minimal set of leaf keys, op is optional
         leaves = {self.QueryLeaf.KEY, self.QueryLeaf.VALUE}
 
@@ -865,19 +891,53 @@ class JSONQuery(Query):
         """We have a leaf query, which means this becomes a keyword.term query"""
         op = query.get(self.QueryLeaf.OP, self.Operators.EQ)
 
+        # ``op not in self.Operators`` resolves through ``ValuesMeta.__contains__``,
+        # which tests membership against a ``set``. A non-hashable ``op`` (e.g. a
+        # JSON array or object) would raise a bare ``TypeError: unhashable type``
+        # rather than a validation error, so guard the type first.
+        if not isinstance(op, str):
+            raise QueryParseException(
+                detail=f"Query 'op' must be a string, got "
+                f"{type(op).__name__}: {op!r}"
+            )
+
         if op not in self.Operators:
             raise QueryParseException(detail=f"Unrecognized operator: {op}")
 
         old_key = query[self.QueryLeaf.KEY]
         value = query[self.QueryLeaf.VALUE]
 
-        # In case values need to be transformed
+        # ``key`` is used for dict lookups (VALUE_TRANSORMS, FIELD_MAPPING) and
+        # string concatenation below, so a non-string (e.g. a list) would raise
+        # ``TypeError: unhashable type`` rather than a validation error.
+        if not isinstance(old_key, str):
+            raise QueryParseException(
+                detail=f"Query 'key' must be a string, got "
+                f"{type(old_key).__name__}: {old_key!r}"
+            )
+
+        # In case values need to be transformed. Every transform expects a
+        # string (``published`` a date, ``language`` a name, etc.); a non-string
+        # would raise a bare ``AttributeError`` inside the transform. Numeric
+        # values remain legal for fields without a transform (e.g. a range
+        # filter on ``licensepools.availability_time``), so this only constrains
+        # the transformed keys.
         if old_key in self.VALUE_TRANSORMS:
+            if not isinstance(value, str):
+                raise QueryParseException(
+                    detail=f"Value for '{old_key}' must be a string, got "
+                    f"{type(value).__name__}: {value!r}"
+                )
             value = self.VALUE_TRANSORMS[old_key](value)
 
         # The contains/regex operators are a regex match
         # So we must replace special operators where encountered
         if op in {self.Operators.CONTAINS, self.Operators.REGEX}:
+            if not isinstance(value, str):
+                raise QueryParseException(
+                    detail=f"The '{op}' operator requires a string value, got "
+                    f"{type(value).__name__}: {value!r}"
+                )
             value = value.translate(self.RESERVED_CHARS_MAP)
 
         key = self.FIELD_TRANSFORMS.get(
@@ -935,6 +995,14 @@ class JSONQuery(Query):
             )
 
         join = list(query.keys())[0]
+        # A conjunction joins a list of sub-queries. A non-list (e.g. a string)
+        # would otherwise be iterated element-wise — a string would be walked
+        # character by character — producing a confusing error; reject it here.
+        if not isinstance(query[join], list):
+            raise QueryParseException(
+                detail=f"'{join}' must be a list of sub-queries, got "
+                f"{type(query[join]).__name__}: {query[join]!r}"
+            )
         to_join = []
         for query_part in query[join]:
             q = self._parse_json_query(query_part)
