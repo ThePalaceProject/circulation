@@ -41,9 +41,9 @@ class TestSummaryEvaluator:
         assert s3 == self._best(s1, s2, s3)
 
     def test_generic_marketing_copy_loses_to_on_topic_summary(self):
-        # The generic blurb names none of the recurring characters, so it
-        # covers none of the top words and is not chosen.
-        generic = "A sweeping tale of love and loss. A must-read."
+        # The generic blurb shares no vocabulary with the other descriptions, so
+        # it covers none of the recurring words and is not chosen.
+        generic = "A sweeping tale of romance and loss. A must-read."
         on_topic = (
             "Elizabeth Bennet clashes with the proud Mr. Darcy in a comedy of "
             "manners about marriage."
