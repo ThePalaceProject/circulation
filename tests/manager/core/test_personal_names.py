@@ -21,7 +21,7 @@ class TestNameConversions:
         unchanged("Bitshifter, Bob")
         unchanged("Prince")
         unchanged("Pope Francis")
-        unchanged("Heliodorus (bp. of Tricca.)")
+        unchanged("Heliodorus (bp. of Tricca)")
         unchanged("谢新源 (Xie Xinyuan)")
         unchanged("Alfred, Lord Tennyson")
         unchanged("Bob, The Grand Duke of Awesomeness")
@@ -57,6 +57,14 @@ class TestNameConversions:
 
         sort_name = m("John Doe, M.D.")
         assert "Doe, John MD" == sort_name
+
+        # Parenthesized professional suffixes are treated as suffixes (nameparser
+        # >= 1.3.0), matching how the comma-separated forms above are handled,
+        # rather than being appended as a parenthetical nickname.
+        assert "Doe, John PhD" == m("John Doe (Ph.D.)")
+        assert "Jones, Bob MD" == m("Bob Jones (M.D.)")
+        assert "Jones, Bob MBA" == m("Bob Jones (MBA)")
+        assert "Doe, John Jr." == m("John Doe (Jr.)")
 
         # corporate names are unchanged
         unchanged("Church of Jesus Christ of Latter-day Saints")
