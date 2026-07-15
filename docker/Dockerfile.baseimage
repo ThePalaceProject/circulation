@@ -74,11 +74,6 @@ COPY --chown=palace:palace packages/palace-opds/pyproject.toml /var/www/circulat
 RUN uv sync --frozen --no-dev --no-install-workspace && \
     SIMPLIFIED_ENVIRONMENT=/var/www/circulation/environment.sh && \
     echo "if [ -f $SIMPLIFIED_ENVIRONMENT ]; then source $SIMPLIFIED_ENVIRONMENT; fi" >> env/bin/activate && \
-    . env/bin/activate && \
-    python3 -m textblob.download_corpora lite && \
-    mv /root/nltk_data /usr/lib/ && \
-    find /usr/lib/nltk_data -name *.zip -delete && \
-    rm -Rf /root/.cache && \
     rm pyproject.toml && \
     rm uv.lock && \
     rm -rf packages && \

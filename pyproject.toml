@@ -96,7 +96,6 @@ dependencies = [
     "simpleeval>=1.0.3,<2",
     "sqlalchemy[mypy]>=1.4.54,<2",
     "tenacity>=9.0.0,<10",
-    "textblob==0.20.0",
     "types-pyopenssl>=24.0.0.20240130,<25",
     "types-pyyaml>=6.0.12.20260518,<7",
     "unicodecsv==0.14.1",  # this is used, but can probably be removed on py3
@@ -354,7 +353,6 @@ module = [
     "palace.manager._version",
     "pyld",
     "simpleeval",
-    "textblob.*",
     "unicodecsv",
     "uwsgi",
     "wcag_contrast_ratio",

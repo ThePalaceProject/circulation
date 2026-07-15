@@ -1,8 +1,5 @@
 """Test the code that evaluates the quality of summaries."""
 
-from textblob import TextBlob
-from textblob.exceptions import MissingCorpusError
-
 from palace.manager.util.summary import SummaryEvaluator
 
 
@@ -25,17 +22,34 @@ class TestSummaryEvaluator:
         assert s2 == self._best(s1, s2)
 
     def test_shorter_is_better(self):
-        s1 = "A very long sentence."
-        s2 = "Tiny sentence."
-        assert s2 == self._best(s1, s2)
+        # The two summaries have identical word coverage, sentence count, and
+        # language profile, so only their length differs -- the shorter one is
+        # preferred.
+        s1 = "The White Rabbit and the Mock Turtle meet Alice."
+        s2 = (
+            "The White Rabbit and the Mock Turtle meet Alice, "
+            "the White Rabbit and the Mock Turtle."
+        )
+        assert s1 == self._best(s1, s2)
 
-    def test_noun_phrase_coverage_is_important(self):
+    def test_word_coverage_is_important(self):
+        # All three summaries are a single sentence, but s3 mentions more of
+        # the words that recur across the summaries, so it is preferred.
         s1 = "The story of Alice and the White Rabbit."
         s2 = "The story of Alice and the Mock Turtle."
         s3 = "Alice meets the Mock Turtle and the White Rabbit."
-        # s3 is longer, and they're all one sentence, but s3 mentions
-        # three noun phrases instead of two.
         assert s3 == self._best(s1, s2, s3)
+
+    def test_generic_marketing_copy_loses_to_on_topic_summary(self):
+        # The generic blurb names none of the recurring characters, so it
+        # covers none of the top words and is not chosen.
+        generic = "A sweeping tale of love and loss. A must-read."
+        on_topic = (
+            "Elizabeth Bennet clashes with the proud Mr. Darcy in a comedy of "
+            "manners about marriage."
+        )
+        second = "Elizabeth Bennet and Mr. Darcy overcome pride to find love."
+        assert generic != self._best(generic, on_topic, second)
 
     def test_non_english_is_penalized(self):
         """If description text appears not to be in English, it is rated down
@@ -48,8 +62,9 @@ class TestSummaryEvaluator:
         evaluator.ready()
 
         dutch_no_language_penalty = evaluator.score(dutch, apply_language_penalty=False)
-
         dutch_language_penalty = evaluator.score(dutch, apply_language_penalty=True)
+
+        assert dutch_language_penalty < dutch_no_language_penalty
 
     def test_english_is_not_penalized(self):
         """If description text appears to be in English, it is not rated down
@@ -65,21 +80,5 @@ class TestSummaryEvaluator:
         english_no_language_penalty = evaluator.score(
             english, apply_language_penalty=False
         )
-
         english_language_penalty = evaluator.score(english, apply_language_penalty=True)
         assert english_language_penalty == english_no_language_penalty
-
-    def test_missing_corpus_error_ignored(self):
-        class AlwaysErrorBlob(TextBlob):
-            @property
-            def noun_phrases(self):
-                raise MissingCorpusError()
-
-        evaluator = SummaryEvaluator()
-        assert evaluator._nltk_installed == True
-
-        summary = "Yes, this is a summary."
-        evaluator.add(summary, parser=AlwaysErrorBlob)
-        evaluator.add("And another", parser=AlwaysErrorBlob)
-        assert evaluator._nltk_installed == False
-        assert 1 == evaluator.score(summary)
