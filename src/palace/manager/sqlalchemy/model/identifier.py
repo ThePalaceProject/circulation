@@ -1121,8 +1121,8 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
         to form an overall quality score.
         We need to evaluate summaries from a set of Identifiers
         (typically those associated with a single work) because we
-        need to see which noun phrases are most frequently used to
-        describe the underlying work.
+        need to see which content words are most frequently used to
+        describe the underlying work (its consensus vocabulary).
         :param privileged_data_sources: If present, a summary from one
         of these data source will be instantly chosen, short-circuiting the
         decision process. Data sources are in order of priority.

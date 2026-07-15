@@ -1,22 +1,19 @@
-import logging
 import re
 from collections import Counter
 from re import Pattern
 
-from textblob import TextBlob
-from textblob.exceptions import MissingCorpusError
-
 from palace.manager.util import Bigrams, english_bigrams
+from palace.manager.util.stopwords import ENGLISH_STOPWORDS
 
 
 class SummaryEvaluator:
     """Evaluate summaries of a book to find a usable summary.
 
-    A usable summary will have good coverage of the popular noun
-    phrases found across all summaries of the book, will have an
-    approximate length of four sentences (this is customizable), and
-    will not mention words that indicate it's a summary of a specific
-    edition of the book.
+    A usable summary will have good coverage of the words used across all
+    summaries of the book, weighted toward the words that recur most (a proxy
+    for being on-topic rather than generic marketing copy), will have an
+    approximate length of four sentences (this is customizable), and will not
+    mention words that indicate it's a summary of a specific edition of the book.
 
     All else being equal, a shorter summary is better.
 
@@ -54,54 +51,98 @@ class SummaryEvaluator:
         re.compile("This is"),
     }
 
-    _nltk_installed = True
-    log = logging.getLogger("Summary Evaluator")
+    # Splits text into candidate word tokens. A token must start with a letter
+    # and may contain apostrophes thereafter (so contractions like "don't"
+    # survive while numbers, punctuation, and apostrophe-only runs like "'''"
+    # are dropped).
+    _word_re = re.compile(r"[a-z][a-z']*")
+
+    # Matches a run of sentence-terminating punctuation followed by whitespace
+    # or the end of the string. Used as a lightweight sentence counter in place
+    # of a full NLP tokenizer.
+    _sentence_end_re = re.compile(r"[.!?]+(?=\s|$)")
+
+    # "Shorter is better" is only a tie-breaker, so we express it as a bounded
+    # nudge. The nudge cannot exceed this value.
+    length_nudge: float = 0.05
+    # Characters at which the nudge reaches half of ``length_nudge``.
+    length_half_life: int = 1000
 
     def __init__(
         self,
         optimal_number_of_sentences: int = 4,
-        noun_phrases_to_consider: int = 10,
         bad_phrases: set[str] | None = None,
     ) -> None:
         self.optimal_number_of_sentences = optimal_number_of_sentences
         self.summaries: list[str] = []
-        self.noun_phrases: Counter[str] = Counter()
-        self.blobs: dict[str, TextBlob] = {}
-        self.scores: dict[str, float] = {}
-        self.noun_phrases_to_consider = float(noun_phrases_to_consider)
-        self.top_noun_phrases: set[str] | None = None
+        # Maps each summary to its set of content words.
+        self.word_sets: dict[str, set[str]] = {}
+        # Counts, for each content word, the number of summaries it appears in.
+        self.content_words: Counter[str] = Counter()
+        # The sum of every content word's weight, i.e. the maximum coverage score
+        # a summary could earn. ``None`` until ``ready()`` computes it.
+        self.total_word_weight: float | None = None
         if bad_phrases is None:
             self.bad_phrases = self.default_bad_phrases
         else:
             self.bad_phrases = bad_phrases
 
-    def add(self, summary: str | bytes, parser: type[TextBlob] | None = None) -> None:
-        parser_class = parser or TextBlob
+    @staticmethod
+    def _word_weight(document_frequency: int) -> int:
+        """Weight a content word by how many summaries it appears in.
+
+        The weight is the square of the document frequency, so words shared
+        across many summaries dominate the score while incidental words still
+        contribute a little.
+        """
+        return document_frequency * document_frequency
+
+    @staticmethod
+    def _content_words(text: str) -> set[str]:
+        """Return the set of meaningful (non-stopword) words in ``text``.
+
+        We use a set rather than a list so that a single summary repeating a word
+        cannot inflate that word's importance -- each word counts once per summary.
+        """
+        return {
+            word
+            for word in SummaryEvaluator._word_re.findall(text.lower())
+            if len(word) > 2 and word not in ENGLISH_STOPWORDS
+        }
+
+    @staticmethod
+    def _count_sentences(text: str) -> int:
+        """Approximate the number of sentences in ``text``.
+
+        This is a heuristic (it can be fooled by abbreviations like "Mr.").
+        """
+        return max(1, len(SummaryEvaluator._sentence_end_re.findall(text.strip())))
+
+    def add(self, summary: str | bytes) -> None:
         if isinstance(summary, bytes):
             summary = summary.decode("utf8")
-        if summary in self.blobs:
+        if summary in self.word_sets:
             # We already evaluated this summary. Don't count it more than once
             return
-        blob = parser_class(summary)
-        self.blobs[summary] = blob
+        words = self._content_words(summary)
+        self.word_sets[summary] = words
         self.summaries.append(summary)
-
-        if self._nltk_installed:
-            try:
-                for phrase in blob.noun_phrases:
-                    self.noun_phrases[phrase] = self.noun_phrases[phrase] + 1
-            except MissingCorpusError as e:
-                self._nltk_installed = False
-                self.log.error("Summary cannot be evaluated: NLTK not installed %r" % e)
+        for word in words:
+            self.content_words[word] += 1
 
     def ready(self) -> None:
-        """We are done adding to the corpus and ready to start evaluating."""
-        self.top_noun_phrases = {
-            k
-            for k, v in self.noun_phrases.most_common(
-                int(self.noun_phrases_to_consider)
-            )
-        }
+        """We are done adding to the corpus and ready to start evaluating.
+
+        The words that characterize a work are the ones that recur across its
+        summaries, so each content word is weighted by its recurrence (see
+        :meth:`_word_weight`). We precompute the total available weight here so
+        that :meth:`score` can express each summary's coverage as a fraction of
+        it. This is what lets an on-topic summary outrank generic marketing copy,
+        which shares little vocabulary with the work's other descriptions.
+        """
+        self.total_word_weight = sum(
+            self._word_weight(count) for count in self.content_words.values()
+        )
 
     def best_choice(self) -> tuple[str, float] | tuple[None, None]:
         c = self.best_choices(1)
@@ -119,31 +160,27 @@ class SummaryEvaluator:
 
     def score(self, summary: str | bytes, apply_language_penalty: bool = True) -> float:
         """Score a summary relative to our current view of the dataset."""
-        if not self._nltk_installed:
-            # Without NLTK, there's no need to evaluate the score.
-            return 1
-
         if isinstance(summary, bytes):
             summary = summary.decode("utf8")
-        if summary in self.scores:
-            return self.scores[summary]
-        score = 1.0
-        blob = self.blobs[summary]
 
-        if self.top_noun_phrases is None:
+        if self.total_word_weight is None:
             self.ready()
-        top_noun_phrases = self.top_noun_phrases or set()
-        top_noun_phrases_used = len(
-            [p for p in top_noun_phrases if p in blob.noun_phrases]
-        )
-        score = 1 * (top_noun_phrases_used / self.noun_phrases_to_consider)
+        if self.total_word_weight:
+            words = self.word_sets.get(summary)
+            if words is None:
+                words = self._content_words(summary)
+            # Coverage: the share of the corpus's total (recurrence-weighted)
+            # vocabulary that this summary accounts for. A word the summary does
+            # not contain, or that never appeared in the corpus, contributes 0.
+            covered = sum(self._word_weight(self.content_words[w]) for w in words)
+            score = covered / self.total_word_weight
+        else:
+            # No summary contained any content words, so there is nothing to
+            # measure against. Start from a neutral score and let the penalties
+            # below -- length, bad phrases, and non-English text -- decide.
+            score = 1.0
 
-        try:
-            sentences = len(blob.sentences)
-        except Exception as e:
-            # Can't parse into sentences for whatever reason.
-            # Make a really bad guess.
-            sentences = summary.count(". ") + 1
+        sentences = self._count_sentences(summary)
         off_from_optimal: int | float = abs(
             sentences - self.optimal_number_of_sentences
         )
@@ -174,5 +211,9 @@ class SummaryEvaluator:
             )
             if language_difference > 1:
                 score *= 0.5 ** (language_difference - 1)
+
+        # All else being equal, prefer a shorter summary.
+        saturation = len(summary) / (len(summary) + self.length_half_life)
+        score *= 1 - self.length_nudge * saturation
 
         return score
