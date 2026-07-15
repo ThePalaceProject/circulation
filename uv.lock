@@ -996,16 +996,16 @@ wheels = [
 
 [[package]]
 name = "google-api-python-client-stubs"
-version = "1.38.0"
+version = "1.39.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "google-api-python-client" },
     { name = "types-httplib2" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f7/b7/e0f48d07fc9d2d1a7dec5df9a5926a0f1da269bd08b4b055ae912e70541c/google_api_python_client_stubs-1.38.0.tar.gz", hash = "sha256:ff5e962800d05482e39e09b4d7266e2a790475783625192823a3aca60a544bd5", size = 2820560, upload-time = "2026-07-05T07:24:52.417Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/63/32/3a9e402d11eb3de332f19a1c13ab3e980477e6eb66f5455b4466f970f509/google_api_python_client_stubs-1.39.0.tar.gz", hash = "sha256:c5af3e779011cc3447e0ab89c72159351da7495692201d08a0d23e6b7b67c097", size = 2824288, upload-time = "2026-07-11T14:39:26.704Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c1/cc/b7ce0fdf310716767485016c2ea8ee05cbb030e0f76849e4476a9d8451bd/google_api_python_client_stubs-1.38.0-py3-none-any.whl", hash = "sha256:04b2a2b43509da20b7b4cead4b19ed4cffb9055f9f1d9f92e01db0c48e8ab57a", size = 3821050, upload-time = "2026-07-05T07:24:50.619Z" },
+    { url = "https://files.pythonhosted.org/packages/8c/06/cb836ee82714932bebd7ac7a0189c0b87463f45ecc796cacd20eb80f981c/google_api_python_client_stubs-1.39.0-py3-none-any.whl", hash = "sha256:eedef91ce51cf7a83ac861608dbfee5b995f9d7e89bbe4d1dad334cb8b6a8326", size = 3825947, upload-time = "2026-07-11T14:39:25.137Z" },
 ]
 
 [[package]]
@@ -2245,7 +2245,7 @@ ci = [
 dev = [
     { name = "boto3-stubs", extras = ["boto3", "cloudwatch", "essential", "logs", "s3"], specifier = ">=1.43.46,<2" },
     { name = "freezegun", specifier = ">=1.5.0,<1.6" },
-    { name = "google-api-python-client-stubs", specifier = ">=1.38.0,<2" },
+    { name = "google-api-python-client-stubs", specifier = ">=1.39.0,<2" },
     { name = "jinja2", specifier = ">=3.1.2,<4" },
     { name = "mypy", specifier = ">=2.2.0,<3" },
     { name = "pyfakefs", specifier = ">=6.2.0,<7" },
