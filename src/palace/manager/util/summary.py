@@ -63,15 +63,9 @@ class SummaryEvaluator:
     _sentence_end_re = re.compile(r"[.!?]+(?=\s|$)")
 
     # "Shorter is better" is only a tie-breaker, so we express it as a bounded
-    # nudge: length maps to a multiplier in ``[1 - length_nudge, 1]`` rather
-    # than the old unbounded ``1 / (1 + len / n)`` that kept shrinking toward
-    # zero. ``length_nudge`` is the most a long summary can be scaled down (5%),
-    # small enough that it only decides between summaries whose word-coverage and
-    # other signals are already within a few percent -- it cannot overturn a
-    # meaningful coverage difference.
+    # nudge. The nudge cannot exceed this value.
     length_nudge: float = 0.05
-    # Characters at which the nudge reaches half of ``length_nudge``. Sets how
-    # quickly the (bounded) preference ramps in; it does not change the cap.
+    # Characters at which the nudge reaches half of ``length_nudge``.
     length_half_life: int = 1000
 
     def __init__(
@@ -99,10 +93,7 @@ class SummaryEvaluator:
 
         The weight is the square of the document frequency, so words shared
         across many summaries dominate the score while incidental words still
-        contribute a little. Squaring (rather than a hard "appears in >= 2
-        summaries" cut-off) keeps the coverage signal meaningful even when a
-        work has only two candidate descriptions -- where every shared word is
-        trivially present in both, so a binary consensus set cannot discriminate.
+        contribute a little.
         """
         return document_frequency * document_frequency
 
@@ -123,9 +114,7 @@ class SummaryEvaluator:
     def _count_sentences(text: str) -> int:
         """Approximate the number of sentences in ``text``.
 
-        This is a heuristic (it can be fooled by abbreviations like "Mr.") that
-        replaces the NLP sentence tokenizer we used to rely on. A summary always
-        counts as at least one sentence.
+        This is a heuristic (it can be fooled by abbreviations like "Mr.").
         """
         return max(1, len(SummaryEvaluator._sentence_end_re.findall(text.strip())))
 
@@ -223,11 +212,7 @@ class SummaryEvaluator:
             if language_difference > 1:
                 score *= 0.5 ** (language_difference - 1)
 
-        # All else being equal, prefer a shorter summary. This is a bounded
-        # tie-breaker: ``saturation`` grows from 0 toward 1 with length, so the
-        # multiplier stays within ``[1 - length_nudge, 1]`` no matter how long
-        # the summary is (~0.976x at 1000 chars, ~0.963x at 3000, never below
-        # 0.95x). See ``length_nudge`` for why this can only break ties.
+        # All else being equal, prefer a shorter summary.
         saturation = len(summary) / (len(summary) + self.length_half_life)
         score *= 1 - self.length_nudge * saturation
 

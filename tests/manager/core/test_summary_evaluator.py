@@ -70,13 +70,7 @@ class TestSummaryEvaluator:
     def test_length_nudge_is_bounded(self):
         # The length preference is a bounded nudge, not an unbounded penalty:
         # however long a summary is, the length term scales its score by at most
-        # ``length_nudge`` (i.e. never below ``1 - length_nudge``). This pins the
-        # property that keeps length from ever overriding word coverage.
-        #
-        # Isolate the length term: four sentences (the optimal count) zeroes the
-        # sentence penalty, "cat" carries no bad phrase, and disabling the
-        # language penalty removes the only other factor -- so the score is
-        # exactly the length multiplier.
+        # ``length_nudge`` (i.e. never below ``1 - length_nudge``).
         huge = "One cat. Two cats. Three cats. Four cats." + " cat" * 20000
         evaluator = SummaryEvaluator()
         evaluator.add(huge)
@@ -87,12 +81,7 @@ class TestSummaryEvaluator:
 
     def test_two_candidates_still_rank_by_vocabulary(self):
         # A work with exactly two descriptions must still get a meaningful
-        # coverage signal. A binary "appears in >= 2 summaries" consensus set is
-        # inert here -- every shared word is trivially in both candidates -- so a
-        # generic blurb could win purely by being shorter. The recurrence-weighted
-        # coverage instead rewards the description that carries more of the work's
-        # vocabulary. Both summaries are a single sentence so the sentence-count
-        # penalty is equal and coverage is what decides.
+        # coverage signal.
         generic = "A sweeping tale of love and loss."
         on_topic = (
             "Elizabeth Bennet clashes with proud Darcy about marriage and manners."
