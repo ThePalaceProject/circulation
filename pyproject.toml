@@ -82,7 +82,7 @@ dependencies = [
     "pydantic-xml>=2.21.0,<3",
     "pydantic[email]>=2.13.4,<3",
     "pyinstrument>=5.0,<6",
-    "PyJWT>=2.8,<3",
+    "PyJWT>=2.13,<3",
     "PyLD==3.0.0",
     "pymarc==5.4.0",
     "pyOpenSSL>=26.0.0,<27",
