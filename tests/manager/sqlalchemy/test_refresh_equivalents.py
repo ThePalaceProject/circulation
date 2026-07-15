@@ -152,6 +152,27 @@ class TestAddIdentityEquivalents:
         # No duplicate rows should be added.
         assert after == before
 
+    def test_sweeps_across_multiple_partitions(
+        self,
+        db: DatabaseTransactionFixture,
+        recursive_equivalency_cache: RecursiveEquivalencyCacheFixture,
+    ) -> None:
+        # With more missing identifiers than one yield_per partition, the sweep
+        # inserts self-references while the streaming cursor is still open and
+        # spans several partitions. A batch_size of 2 over 5 identifiers forces
+        # at least three partitions, exercising the interleaved-insert path.
+        identifiers = [db.identifier() for _ in range(5)]
+        db.session.flush()
+        recursive_equivalency_cache.drop()
+
+        add_identity_equivalents(db.session, batch_size=2)
+        db.session.flush()
+
+        for identifier in identifiers:
+            assert recursive_equivalency_cache.cache_for(identifier.id) == {
+                identifier.id
+            }
+
 
 class TestInsertCacheRows:
     def test_skips_existing_rows(
@@ -184,6 +205,35 @@ class TestInsertCacheRows:
     def test_empty_input(self, db: DatabaseTransactionFixture) -> None:
         _insert_cache_rows(db.session, [])
         assert db.session.query(RecursiveEquivalencyCache).count() == 0
+
+    def test_batches_across_multiple_chunks(
+        self,
+        db: DatabaseTransactionFixture,
+        recursive_equivalency_cache: RecursiveEquivalencyCacheFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        # More rows than a single INSERT chunk must all be inserted, across
+        # multiple statements. Shrink the chunk size so a handful of rows spans
+        # several chunks.
+        monkeypatch.setattr(
+            "palace.manager.sqlalchemy.refresh_equivalents.INSERT_CHUNK_SIZE", 2
+        )
+        parent = db.identifier()
+        others = [db.identifier() for _ in range(5)]
+        db.session.flush()
+        recursive_equivalency_cache.drop()
+
+        rows = [
+            {"parent_identifier_id": parent.id, "identifier_id": identifier.id}
+            for identifier in [parent, *others]
+        ]
+        _insert_cache_rows(db.session, rows)
+        db.session.flush()
+
+        assert recursive_equivalency_cache.cache_for(parent.id) == {
+            parent.id,
+            *(identifier.id for identifier in others),
+        }
 
 
 class TestRefreshEquivalentIdentifiers:
