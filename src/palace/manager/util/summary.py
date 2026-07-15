@@ -5,9 +5,10 @@ from re import Pattern
 from palace.manager.util import Bigrams, english_bigrams
 from palace.manager.util.stopwords import ENGLISH_STOPWORDS
 
-# Splits text into candidate word tokens (letters and apostrophes only, so
-# numbers and punctuation are dropped).
-_WORD_RE = re.compile(r"[a-z']+")
+# Splits text into candidate word tokens. A token must start with a letter and
+# may contain apostrophes thereafter (so contractions like "don't" survive while
+# numbers, punctuation, and apostrophe-only runs like "'''" are dropped).
+_WORD_RE = re.compile(r"[a-z][a-z']*")
 
 # Matches a run of sentence-terminating punctuation followed by whitespace or
 # the end of the string. Used as a lightweight sentence counter in place of a
@@ -41,11 +42,11 @@ def _count_sentences(text: str) -> int:
 class SummaryEvaluator:
     """Evaluate summaries of a book to find a usable summary.
 
-    A usable summary will have good coverage of the words most commonly used
-    across all summaries of the book (a proxy for being on-topic rather than
-    generic marketing copy), will have an approximate length of four sentences
-    (this is customizable), and will not mention words that indicate it's a
-    summary of a specific edition of the book.
+    A usable summary will have good coverage of the words used across all
+    summaries of the book, weighted toward the words that recur most (a proxy
+    for being on-topic rather than generic marketing copy), will have an
+    approximate length of four sentences (this is customizable), and will not
+    mention words that indicate it's a summary of a specific edition of the book.
 
     All else being equal, a shorter summary is better.
 
@@ -86,11 +87,10 @@ class SummaryEvaluator:
     # "Shorter is better" is only a tie-breaker, so we express it as a bounded
     # nudge: length maps to a multiplier in ``[1 - length_nudge, 1]`` rather
     # than the old unbounded ``1 / (1 + len / n)`` that kept shrinking toward
-    # zero. ``length_nudge`` is the most a long summary can be scaled down (5%).
-    # Keeping it below the smallest meaningful word-coverage step -- one word
-    # out of at most ``top_words_to_consider`` (>= 10%) -- guarantees length can
-    # never overturn a genuine coverage difference; it only decides between
-    # summaries whose other signals are already within a few percent.
+    # zero. ``length_nudge`` is the most a long summary can be scaled down (5%),
+    # small enough that it only decides between summaries whose word-coverage and
+    # other signals are already within a few percent -- it cannot overturn a
+    # meaningful coverage difference.
     length_nudge: float = 0.05
     # Characters at which the nudge reaches half of ``length_nudge``. Sets how
     # quickly the (bounded) preference ramps in; it does not change the cap.
@@ -99,7 +99,6 @@ class SummaryEvaluator:
     def __init__(
         self,
         optimal_number_of_sentences: int = 4,
-        top_words_to_consider: int = 10,
         bad_phrases: set[str] | None = None,
     ) -> None:
         self.optimal_number_of_sentences = optimal_number_of_sentences
@@ -108,12 +107,26 @@ class SummaryEvaluator:
         self.word_sets: dict[str, set[str]] = {}
         # Counts, for each content word, the number of summaries it appears in.
         self.content_words: Counter[str] = Counter()
-        self.top_words_to_consider = top_words_to_consider
-        self.top_words: set[str] | None = None
+        # The sum of every content word's weight, i.e. the maximum coverage score
+        # a summary could earn. ``None`` until ``ready()`` computes it.
+        self.total_word_weight: float | None = None
         if bad_phrases is None:
             self.bad_phrases = self.default_bad_phrases
         else:
             self.bad_phrases = bad_phrases
+
+    @staticmethod
+    def _word_weight(document_frequency: int) -> int:
+        """Weight a content word by how many summaries it appears in.
+
+        The weight is the square of the document frequency, so words shared
+        across many summaries dominate the score while incidental words still
+        contribute a little. Squaring (rather than a hard "appears in >= 2
+        summaries" cut-off) keeps the coverage signal meaningful even when a
+        work has only two candidate descriptions -- where every shared word is
+        trivially present in both, so a binary consensus set cannot discriminate.
+        """
+        return document_frequency * document_frequency
 
     def add(self, summary: str | bytes) -> None:
         if isinstance(summary, bytes):
@@ -131,17 +144,15 @@ class SummaryEvaluator:
         """We are done adding to the corpus and ready to start evaluating.
 
         The words that characterize a work are the ones that recur across its
-        summaries (its consensus vocabulary), so we only keep words appearing in
-        at least two summaries. This is what lets an on-topic summary outrank
-        generic marketing copy, which rarely shares vocabulary with the others.
+        summaries, so each content word is weighted by its recurrence (see
+        :meth:`_word_weight`). We precompute the total available weight here so
+        that :meth:`score` can express each summary's coverage as a fraction of
+        it. This is what lets an on-topic summary outrank generic marketing copy,
+        which shares little vocabulary with the work's other descriptions.
         """
-        self.top_words = {
-            word
-            for word, count in self.content_words.most_common(
-                self.top_words_to_consider
-            )
-            if count >= 2
-        }
+        self.total_word_weight = sum(
+            self._word_weight(count) for count in self.content_words.values()
+        )
 
     def best_choice(self) -> tuple[str, float] | tuple[None, None]:
         c = self.best_choices(1)
@@ -162,18 +173,20 @@ class SummaryEvaluator:
         if isinstance(summary, bytes):
             summary = summary.decode("utf8")
 
-        if self.top_words is None:
+        if self.total_word_weight is None:
             self.ready()
-        top_words = self.top_words or set()
-        if top_words:
+        if self.total_word_weight:
             words = self.word_sets.get(summary)
             if words is None:
                 words = _content_words(summary)
-            top_words_used = len([w for w in top_words if w in words])
-            score = top_words_used / len(top_words)
+            # Coverage: the share of the corpus's total (recurrence-weighted)
+            # vocabulary that this summary accounts for. A word the summary does
+            # not contain, or that never appeared in the corpus, contributes 0.
+            covered = sum(self._word_weight(self.content_words[w]) for w in words)
+            score = covered / self.total_word_weight
         else:
-            # There is no consensus vocabulary to measure against (e.g. only one
-            # summary exists). Start from a neutral score and let the penalties
+            # No summary contained any content words, so there is nothing to
+            # measure against. Start from a neutral score and let the penalties
             # below -- length, bad phrases, and non-English text -- decide.
             score = 1.0
 

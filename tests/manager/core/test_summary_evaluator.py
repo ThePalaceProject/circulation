@@ -85,6 +85,30 @@ class TestSummaryEvaluator:
         score = evaluator.score(huge, apply_language_penalty=False)
         assert 1 - evaluator.length_nudge <= score < 1.0  # ...yet still bounded
 
+    def test_two_candidates_still_rank_by_vocabulary(self):
+        # A work with exactly two descriptions must still get a meaningful
+        # coverage signal. A binary "appears in >= 2 summaries" consensus set is
+        # inert here -- every shared word is trivially in both candidates -- so a
+        # generic blurb could win purely by being shorter. The recurrence-weighted
+        # coverage instead rewards the description that carries more of the work's
+        # vocabulary. Both summaries are a single sentence so the sentence-count
+        # penalty is equal and coverage is what decides.
+        generic = "A sweeping tale of love and loss."
+        on_topic = (
+            "Elizabeth Bennet clashes with proud Darcy about marriage and manners."
+        )
+        assert on_topic == self._best(generic, on_topic)
+
+    def test_summary_with_no_content_words_is_neutral(self):
+        # If nothing in the corpus has content words (only stopwords/short
+        # tokens), there is nothing to measure coverage against, so scoring
+        # starts from a neutral 1.0 rather than dividing by zero.
+        evaluator = SummaryEvaluator()
+        evaluator.add("It is on us to go by.")  # all stopwords / <= 2 chars
+        evaluator.ready()
+        assert evaluator.total_word_weight == 0
+        assert evaluator.score("It is on us to go by.") > 0
+
     def test_bytes_summaries_are_decoded(self):
         # Summaries may arrive as bytes; they should be decoded and ranked just
         # like str summaries.
@@ -155,9 +179,9 @@ class TestSummaryEvaluator:
         # bytes just like add().
         evaluator = SummaryEvaluator()
         evaluator.add("Alice meets the White Rabbit and the Mock Turtle.")
-        assert evaluator.top_words is None
+        assert evaluator.total_word_weight is None
         score = evaluator.score(b"Alice and the White Rabbit.")
-        assert evaluator.top_words is not None
+        assert evaluator.total_word_weight is not None
         assert score > 0
 
     def test_regex_bad_patterns_and_dashes_are_penalized(self):
