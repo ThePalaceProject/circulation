@@ -34,18 +34,10 @@ def _insert_cache_rows(session: Session, rows: Iterable[dict[str, int]]) -> None
     Insert (parent_identifier_id, identifier_id) rows into the cache.
 
     Rows that already exist are skipped rather than raising a unique violation.
-    We are not the only writer of this table: the ``Identifier`` creation
-    listener inserts self-reference rows from webapp transactions, and a
-    redelivered Celery task can run a second refresh chain concurrently with the
-    first. Because every parent's rows are deleted and recomputed from the same
-    source data, a row a concurrent transaction commits under us holds the same
-    value we were about to write, so ignoring the conflict converges on the
-    correct chain instead of aborting the whole batch.
 
     Rows are inserted in a stable ``(parent_identifier_id, identifier_id)``
-    order so that two transactions inserting overlapping keys acquire the
-    unique-index entry locks in the same order, which keeps them from
-    deadlocking against each other.
+    order so that two transactions inserting overlapping keys don't
+    deadlock against each other.
     """
     ordered = sorted(
         rows, key=lambda row: (row["parent_identifier_id"], row["identifier_id"])
@@ -111,10 +103,7 @@ def process_identifier_ids(session: Session, identifier_ids: frozenset[int]) -> 
         return
 
     # Delete the old cache entries for every affected parent, then insert the
-    # fresh ones. The delete is a single statement, so its row locks are taken
-    # in the index's scan order — the same for any concurrent refresh — and the
-    # inserts are ordered by :func:`_insert_cache_rows`, so overlapping refreshes
-    # acquire locks consistently rather than deadlocking.
+    # fresh ones.
     _delete_cache_rows(session, {parent_id for _, parent_id in chained_identifiers})
     _insert_cache_rows(
         session,
