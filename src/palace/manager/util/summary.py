@@ -5,39 +5,6 @@ from re import Pattern
 from palace.manager.util import Bigrams, english_bigrams
 from palace.manager.util.stopwords import ENGLISH_STOPWORDS
 
-# Splits text into candidate word tokens. A token must start with a letter and
-# may contain apostrophes thereafter (so contractions like "don't" survive while
-# numbers, punctuation, and apostrophe-only runs like "'''" are dropped).
-_WORD_RE = re.compile(r"[a-z][a-z']*")
-
-# Matches a run of sentence-terminating punctuation followed by whitespace or
-# the end of the string. Used as a lightweight sentence counter in place of a
-# full NLP tokenizer.
-_SENTENCE_END = re.compile(r"[.!?]+(?=\s|$)")
-
-
-def _content_words(text: str) -> set[str]:
-    """Return the set of meaningful (non-stopword) words in ``text``.
-
-    We use a set rather than a list so that a single summary repeating a word
-    cannot inflate that word's importance -- each word counts once per summary.
-    """
-    return {
-        word
-        for word in _WORD_RE.findall(text.lower())
-        if len(word) > 2 and word not in ENGLISH_STOPWORDS
-    }
-
-
-def _count_sentences(text: str) -> int:
-    """Approximate the number of sentences in ``text``.
-
-    This is a heuristic (it can be fooled by abbreviations like "Mr.") that
-    replaces the NLP sentence tokenizer we used to rely on. A summary always
-    counts as at least one sentence.
-    """
-    return max(1, len(_SENTENCE_END.findall(text.strip())))
-
 
 class SummaryEvaluator:
     """Evaluate summaries of a book to find a usable summary.
@@ -84,6 +51,17 @@ class SummaryEvaluator:
         re.compile("This is"),
     }
 
+    # Splits text into candidate word tokens. A token must start with a letter
+    # and may contain apostrophes thereafter (so contractions like "don't"
+    # survive while numbers, punctuation, and apostrophe-only runs like "'''"
+    # are dropped).
+    _word_re = re.compile(r"[a-z][a-z']*")
+
+    # Matches a run of sentence-terminating punctuation followed by whitespace
+    # or the end of the string. Used as a lightweight sentence counter in place
+    # of a full NLP tokenizer.
+    _sentence_end_re = re.compile(r"[.!?]+(?=\s|$)")
+
     # "Shorter is better" is only a tie-breaker, so we express it as a bounded
     # nudge: length maps to a multiplier in ``[1 - length_nudge, 1]`` rather
     # than the old unbounded ``1 / (1 + len / n)`` that kept shrinking toward
@@ -128,13 +106,36 @@ class SummaryEvaluator:
         """
         return document_frequency * document_frequency
 
+    @staticmethod
+    def _content_words(text: str) -> set[str]:
+        """Return the set of meaningful (non-stopword) words in ``text``.
+
+        We use a set rather than a list so that a single summary repeating a word
+        cannot inflate that word's importance -- each word counts once per summary.
+        """
+        return {
+            word
+            for word in SummaryEvaluator._word_re.findall(text.lower())
+            if len(word) > 2 and word not in ENGLISH_STOPWORDS
+        }
+
+    @staticmethod
+    def _count_sentences(text: str) -> int:
+        """Approximate the number of sentences in ``text``.
+
+        This is a heuristic (it can be fooled by abbreviations like "Mr.") that
+        replaces the NLP sentence tokenizer we used to rely on. A summary always
+        counts as at least one sentence.
+        """
+        return max(1, len(SummaryEvaluator._sentence_end_re.findall(text.strip())))
+
     def add(self, summary: str | bytes) -> None:
         if isinstance(summary, bytes):
             summary = summary.decode("utf8")
         if summary in self.word_sets:
             # We already evaluated this summary. Don't count it more than once
             return
-        words = _content_words(summary)
+        words = self._content_words(summary)
         self.word_sets[summary] = words
         self.summaries.append(summary)
         for word in words:
@@ -178,7 +179,7 @@ class SummaryEvaluator:
         if self.total_word_weight:
             words = self.word_sets.get(summary)
             if words is None:
-                words = _content_words(summary)
+                words = self._content_words(summary)
             # Coverage: the share of the corpus's total (recurrence-weighted)
             # vocabulary that this summary accounts for. A word the summary does
             # not contain, or that never appeared in the corpus, contributes 0.
@@ -190,7 +191,7 @@ class SummaryEvaluator:
             # below -- length, bad phrases, and non-English text -- decide.
             score = 1.0
 
-        sentences = _count_sentences(summary)
+        sentences = self._count_sentences(summary)
         off_from_optimal: int | float = abs(
             sentences - self.optimal_number_of_sentences
         )
