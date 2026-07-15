@@ -13,11 +13,13 @@ from sqlalchemy import (
     Unicode,
     UniqueConstraint,
     or_,
+    text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, INT4RANGE, JSON
 from sqlalchemy.ext.associationproxy import association_proxy
 from sqlalchemy.orm import (
     Mapped,
+    deferred,
     relationship,
 )
 from sqlalchemy.orm.session import Session
@@ -115,8 +117,9 @@ class Lane(Base, DatabaseBackedWorkList, HierarchyWorkList):
     # The code that maintained them (update_size and the lane-size Celery tasks)
     # has been removed; the columns remain mapped only so the model continues to
     # match the database schema, and will be dropped in a follow-up migration.
-    size: Mapped[int] = Column(Integer, nullable=False, default=0)
-    size_by_entrypoint = Column(JSON, nullable=True)
+    # TODO: Drop these next release when it is safe to do so.
+    size = deferred(Column(Integer, nullable=False, server_default=text("0")))
+    size_by_entrypoint = deferred(Column(JSON, nullable=True))
 
     # A lane may have one parent lane and many sublanes.
     sublanes: Mapped[list[Lane]] = relationship(
