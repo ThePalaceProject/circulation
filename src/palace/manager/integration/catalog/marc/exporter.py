@@ -4,8 +4,8 @@ import datetime
 from collections.abc import Generator, Iterable, Sequence
 
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import select
 from sqlalchemy.orm import Session, aliased, raiseload, selectinload
+from sqlalchemy.sql import Select, delete, select
 
 from palace.util.datetime_helpers import utc_now
 from palace.util.log import LoggerMixin
@@ -37,6 +37,9 @@ from palace.manager.sqlalchemy.model.licensing import (
 )
 from palace.manager.sqlalchemy.model.marcfile import MarcFile
 from palace.manager.sqlalchemy.model.work import Work, WorkGenre
+
+# Sentinel timestamp used as `since` on a full-content delta MarcFile record.
+MARC_EPOCH = datetime.datetime(1900, 1, 1, tzinfo=datetime.UTC)
 
 
 class LibraryInfo(BaseModel):
@@ -95,7 +98,11 @@ class MarcExporter(
     def _web_client_urls(
         session: Session, library: Library, url: str | None = None
     ) -> tuple[str, ...]:
-        """Find web client URLs configured by the registry for this library."""
+        """Find web client URLs configured by the registry for this library.
+
+        The result is de-duplicated: each distinct URL is exported once, even
+        when a registry-supplied URL matches the manually configured one.
+        """
         urls = [
             s.web_client
             for s in session.execute(
@@ -109,7 +116,7 @@ class MarcExporter(
         if url:
             urls.append(url)
 
-        return tuple(urls)
+        return tuple(dict.fromkeys(urls))
 
     @classmethod
     def _enabled_collections_and_libraries(
@@ -167,6 +174,95 @@ class MarcExporter(
         ).first()
 
         return last_updated_file.created if last_updated_file else None
+
+    @staticmethod
+    def _marc_enabled_collections_query(library: Library) -> Select:
+        """Query selecting the MARC-export-enabled collections associated with a library."""
+        return (
+            select(Collection)
+            .join(Collection.integration_configuration)
+            .join(IntegrationConfiguration.library_configurations)
+            .where(
+                IntegrationLibraryConfiguration.library == library,
+                Collection.export_marc_records == True,
+            )
+        )
+
+    @staticmethod
+    def delete_files_for_reset(session: Session, library: Library) -> set[str]:
+        """Bulk-delete the MarcFile records for a library's MARC-enabled collections
+        and return the S3 keys of the deleted records. Does not commit.
+
+        Deleting these records (and their S3 objects) causes the next export run
+        to behave like a first run, producing both a full export and a
+        full-content delta for delta-only consumers.
+
+        The bulk delete tolerates concurrent duplicate resets: rows another task
+        already deleted simply match nothing.
+        """
+        enabled_collection_ids = MarcExporter._marc_enabled_collections_query(
+            library
+        ).with_only_columns(Collection.id)
+        # A single DELETE ... RETURNING keeps the keys and the deleted rows in
+        # exact correspondence. A separate SELECT would leave a window where a
+        # concurrently committed record is deleted without its key being
+        # captured, orphaning its S3 object.
+        return set(
+            session.scalars(
+                delete(MarcFile)
+                .where(
+                    MarcFile.library == library,
+                    MarcFile.collection_id.in_(enabled_collection_ids),
+                )
+                .returning(MarcFile.key)
+                .execution_options(synchronize_session=False)
+            )
+        )
+
+    @staticmethod
+    def needs_reset_for_web_client_change(
+        session: Session,
+        registry: CatalogServicesRegistry,
+        library: Library,
+        old_url: str | None,
+        new_url: str | None,
+    ) -> bool:
+        """Whether a registry web-client URL change affects the library's MARC output.
+
+        The exported set of web client URLs is every registry-supplied URL plus
+        the manual web_client_url of each MARC library configuration (see
+        _web_client_urls). A change cannot affect that set when both the old and
+        new URLs are already covered by the manual URLs (or absent), so no reset
+        is needed in that case.
+        """
+        marc_integrations = registry.configurations_query(MarcExporter).subquery()
+        marc_library_configs = (
+            session.execute(
+                select(IntegrationLibraryConfiguration)
+                .join(
+                    marc_integrations,
+                    IntegrationLibraryConfiguration.parent_id == marc_integrations.c.id,
+                )
+                .where(IntegrationLibraryConfiguration.library == library)
+            )
+            .scalars()
+            .all()
+        )
+
+        # A library with no MARC exporter configuration exports nothing, so no
+        # URL change can affect its output.
+        if not marc_library_configs:
+            return False
+
+        marc_manual_urls = {
+            MarcExporter.library_settings_load(row).web_client_url
+            for row in marc_library_configs
+        }
+
+        def covered(url: str | None) -> bool:
+            return url is None or url in marc_manual_urls
+
+        return not (covered(old_url) and covered(new_url))
 
     @classmethod
     def enabled_collections(

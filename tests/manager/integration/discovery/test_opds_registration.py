@@ -5,7 +5,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import ANY, MagicMock
 
 import pytest
 from Crypto.Cipher import PKCS1_OAEP
@@ -18,8 +18,13 @@ from palace.manager.api.problem_details import (
     REMOTE_INTEGRATION_FAILED,
     SHARED_SECRET_DECRYPTION_ERROR,
 )
+from palace.manager.celery.tasks.marc import (
+    MARC_EXPORT_RESET_COOLDOWN_SECONDS,
+    marc_export_reset,
+)
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.problem_details import INTEGRATION_ERROR, INVALID_INPUT
+from palace.manager.integration.catalog.marc.exporter import MarcExporter
 from palace.manager.integration.discovery.opds_registration import (
     OpdsRegistrationService,
 )
@@ -664,6 +669,11 @@ class TestOpdsRegistrationService:
         encryptor = MagicMock()
 
         reg = MagicMock(spec=DiscoveryServiceRegistration)
+        # A mock isn't a mapped ORM object, so keep the MARC-export reset path
+        # (which needs the registration's session) from being taken. That path
+        # is covered separately with real registrations in
+        # test__process_registration_result_resets_marc_on_web_client_change.
+        reg.library = None
 
         # Result must be a dictionary.
         with pytest.raises(ProblemDetailException) as excinfo:
@@ -716,6 +726,74 @@ class TestOpdsRegistrationService:
             m(reg, catalog, encryptor, stage)
 
         assert SHARED_SECRET_DECRYPTION_ERROR == excinfo.value.problem_detail
+
+    @pytest.mark.parametrize(
+        "existing_web_client, catalog_web_client, needs_reset, expect_delay",
+        [
+            pytest.param(None, "http://new-url", True, True, id="none-to-url"),
+            pytest.param(
+                "http://old-url", "http://new-url", True, True, id="url-changed"
+            ),
+            pytest.param(
+                "http://old-url",
+                "http://new-url",
+                False,
+                False,
+                id="url-changed-no-reset-needed",
+            ),
+            pytest.param(
+                "http://same-url", "http://same-url", True, False, id="url-unchanged"
+            ),
+            pytest.param(None, None, True, False, id="both-none"),
+        ],
+    )
+    def test__process_registration_result_resets_marc_on_web_client_change(
+        self,
+        remote_registry_fixture: RemoteRegistryFixture,
+        monkeypatch: MonkeyPatch,
+        existing_web_client: str | None,
+        catalog_web_client: str | None,
+        needs_reset: bool,
+        expect_delay: bool,
+    ):
+        mock_needs_reset = MagicMock(return_value=needs_reset)
+        monkeypatch.setattr(
+            MarcExporter, "needs_reset_for_web_client_change", mock_needs_reset
+        )
+        mock_apply_async = MagicMock()
+        monkeypatch.setattr(marc_export_reset, "apply_async", mock_apply_async)
+
+        registration = remote_registry_fixture.create_registration()
+        registration.web_client = existing_web_client
+
+        catalog: dict[str, Any] = {}
+        if catalog_web_client is not None:
+            catalog["links"] = [
+                {"href": catalog_web_client, "rel": "self", "type": "text/html"}
+            ]
+
+        m = remote_registry_fixture.registry._process_registration_result
+        m(registration, catalog, MagicMock(), RegistrationStage.TESTING)
+
+        # The reset check is only consulted when the web client URL changed.
+        if existing_web_client != catalog_web_client:
+            mock_needs_reset.assert_called_once_with(
+                remote_registry_fixture.db.session,
+                ANY,
+                registration.library,
+                old_url=existing_web_client,
+                new_url=catalog_web_client,
+            )
+        else:
+            mock_needs_reset.assert_not_called()
+
+        if expect_delay:
+            mock_apply_async.assert_called_once_with(
+                (registration.library_id,),
+                countdown=MARC_EXPORT_RESET_COOLDOWN_SECONDS,
+            )
+        else:
+            mock_apply_async.assert_not_called()
 
 
 class TestLibraryRegistrationScript:

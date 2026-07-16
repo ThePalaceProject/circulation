@@ -1,15 +1,17 @@
 import datetime
-from unittest.mock import ANY, call, patch
+from unittest.mock import ANY, MagicMock, call, patch
 
 import pytest
+from botocore.exceptions import ClientError
 from pymarc import MARCReader
+from pytest import MonkeyPatch
 from sqlalchemy import select
 
 from palace.util.datetime_helpers import utc_now
 
 from palace.manager.celery.tasks import marc
 from palace.manager.celery.tasks.marc import marc_export_collection_lock
-from palace.manager.integration.catalog.marc.exporter import MarcExporter
+from palace.manager.integration.catalog.marc.exporter import MARC_EPOCH, MarcExporter
 from palace.manager.integration.catalog.marc.uploader import MarcUploadManager
 from palace.manager.service.redis.models.lock import LockNotAcquired, RedisLock
 from palace.manager.sqlalchemy.model.collection import Collection
@@ -238,8 +240,15 @@ class TestMarcExportCollection:
         assert len(uploaded_files) == 2
 
         # Verify that the expected number of marc files were created in the database.
+        # A first-run full export creates both a full record and a full-content delta
+        # (MARC_EPOCH) pointing to the same S3 object; 2 libraries → 4 records, 2 S3 objects.
         marc_files = marc_export_collection_fixture.marc_files()
-        assert len(marc_files) == 2
+        assert len(marc_files) == 4
+        full_files = [mf for mf in marc_files if mf.since is None]
+        epoch_delta_files = [mf for mf in marc_files if mf.since == MARC_EPOCH]
+        assert len(full_files) == 2
+        assert len(epoch_delta_files) == 2
+        assert {mf.key for mf in full_files} == {mf.key for mf in epoch_delta_files}
         filenames = [marc_file.key for marc_file in marc_files]
 
         # Verify that the uploaded files are the expected ones.
@@ -265,7 +274,7 @@ class TestMarcExportCollection:
 
         # Because no works have been updated since the last run, no delta exports are generated
         marc_files = marc_export_collection_fixture.marc_files()
-        assert len(marc_files) == 2
+        assert len(marc_files) == 4
 
         # Update a couple works last_updated_time
         updated_works = [works[0], works[1]]
@@ -274,9 +283,9 @@ class TestMarcExportCollection:
 
         marc_export_collection_fixture.export_collection(collection, delta=True)
 
-        # Now we generate marc files
+        # Now we generate marc files (4 from the first full run + 2 new delta records).
         marc_files = marc_export_collection_fixture.marc_files()
-        assert len(marc_files) == 4
+        assert len(marc_files) == 6
         delta_marc_files = [
             marc_file
             for marc_file in marc_files
@@ -303,6 +312,184 @@ class TestMarcExportCollection:
 
             # Make sure records have the correct status
             assert all(record.leader.record_status == "c" for record in records)
+
+        # A subsequent full export creates only full records. The epoch delta
+        # pair is a first-run behavior and must not repeat.
+        marc_export_collection_fixture.export_collection(collection)
+        marc_files = marc_export_collection_fixture.marc_files()
+        assert len(marc_files) == 8
+        assert len([mf for mf in marc_files if mf.since == MARC_EPOCH]) == 2
+
+    @pytest.mark.parametrize(
+        "delta", [pytest.param(False, id="full"), pytest.param(True, id="delta")]
+    )
+    def test_reset_race(
+        self,
+        db: DatabaseTransactionFixture,
+        marc_exporter_fixture: MarcExporterFixture,
+        s3_service_integration_fixture: S3ServiceIntegrationFixture,
+        marc_export_collection_fixture: MarcExportCollectionFixture,
+        delta: bool,
+    ):
+        """An export whose records were reset mid-flight is discarded and re-run."""
+        marc_export_collection_fixture.setup_minio_storage()
+        collection = marc_exporter_fixture.collection1
+        assert collection.id is not None
+        marc_export_collection_fixture.works(collection)
+
+        # Craft the raced state: the scheduling-time snapshot says the libraries
+        # have prior exports, but no MarcFile records exist by completion time
+        # (as if marc_export_reset ran while the export was in flight).
+        libraries = MarcExporter.enabled_libraries(
+            db.session, marc_exporter_fixture.registry, collection.id
+        )
+        stale_libraries = [
+            info.model_copy(
+                update={"last_updated": utc_now() - datetime.timedelta(days=2)}
+            )
+            for info in libraries
+        ]
+        marc.marc_export_collection.delay(
+            collection.id,
+            collection_name=collection.name,
+            batch_size=5,
+            start_time=marc_export_collection_fixture.start_time,
+            libraries=stale_libraries,
+            delta=delta,
+        ).wait()
+
+        # The stale uploads were discarded and a fresh full export ran, creating
+        # the first-run full + epoch-delta pair for each library.
+        marc_files = marc_export_collection_fixture.marc_files()
+        assert len(marc_files) == 4
+        assert len([mf for mf in marc_files if mf.since is None]) == 2
+        assert len([mf for mf in marc_files if mf.since == MARC_EPOCH]) == 2
+
+        # Only the fresh exports' objects exist in storage.
+        uploaded = s3_service_integration_fixture.list_objects("public")
+        assert set(uploaded) == {mf.key for mf in marc_files}
+
+    def test_reset_race_first_run_settings_drift(
+        self,
+        db: DatabaseTransactionFixture,
+        marc_exporter_fixture: MarcExporterFixture,
+        s3_service_integration_fixture: S3ServiceIntegrationFixture,
+        marc_export_collection_fixture: MarcExportCollectionFixture,
+    ):
+        """A settings change during a first-run export (which the record-count
+        check can't see) is caught by the settings-drift check and re-run."""
+        marc_export_collection_fixture.setup_minio_storage()
+        collection = marc_exporter_fixture.collection1
+        assert collection.id is not None
+        marc_export_collection_fixture.works(collection)
+
+        # The export runs with a settings snapshot that no longer matches the
+        # current configuration (as if the settings changed mid-flight).
+        libraries = MarcExporter.enabled_libraries(
+            db.session, marc_exporter_fixture.registry, collection.id
+        )
+        stale_libraries = [
+            info.model_copy(update={"organization_code": "stale-org"})
+            for info in libraries
+        ]
+        marc.marc_export_collection.delay(
+            collection.id,
+            collection_name=collection.name,
+            batch_size=5,
+            start_time=marc_export_collection_fixture.start_time,
+            libraries=stale_libraries,
+        ).wait()
+
+        # The stale uploads were discarded and the re-run used current settings.
+        marc_files = marc_export_collection_fixture.marc_files()
+        assert len(marc_files) == 4
+        uploaded = s3_service_integration_fixture.list_objects("public")
+        assert set(uploaded) == {mf.key for mf in marc_files}
+        for file in uploaded:
+            data = s3_service_integration_fixture.get_object("public", file)
+            for record in MARCReader(data):
+                assert record["003"].data in {"library1-org", "library2-org"}
+
+    def test_reset_race_after_finalize_check(
+        self,
+        db: DatabaseTransactionFixture,
+        marc_exporter_fixture: MarcExporterFixture,
+        marc_export_collection_fixture: MarcExportCollectionFixture,
+        monkeypatch: MonkeyPatch,
+    ):
+        """A configuration change landing between the finalize check and the
+        export's commit is detected after the commit and queues a reset."""
+        marc_export_collection_fixture.setup_mock_storage()
+        collection = marc_exporter_fixture.collection1
+        marc_export_collection_fixture.works(collection)
+
+        mock_delay = MagicMock()
+        monkeypatch.setattr(marc.marc_export_reset, "delay", mock_delay)
+
+        # The finalize check (one call per library) sees unchanged settings; the
+        # post-commit verification sees changed ones.
+        monkeypatch.setattr(
+            marc,
+            "_export_settings_changed",
+            MagicMock(side_effect=[False, False, True, True]),
+        )
+
+        marc_export_collection_fixture.export_collection(collection)
+
+        # A reset was queued for both libraries whose stale exports were recorded.
+        assert mock_delay.call_count == 2
+        assert {call_args.args[0] for call_args in mock_delay.call_args_list} == {
+            marc_exporter_fixture.library1.id,
+            marc_exporter_fixture.library2.id,
+        }
+
+    def test_reset_race_library_disabled(
+        self,
+        db: DatabaseTransactionFixture,
+        marc_exporter_fixture: MarcExporterFixture,
+        s3_service_integration_fixture: S3ServiceIntegrationFixture,
+        marc_export_collection_fixture: MarcExportCollectionFixture,
+    ):
+        """A raced library that is no longer MARC-enabled is discarded without a re-run."""
+        marc_export_collection_fixture.setup_minio_storage()
+        collection = marc_exporter_fixture.collection1
+        assert collection.id is not None
+        marc_export_collection_fixture.works(collection)
+
+        libraries = MarcExporter.enabled_libraries(
+            db.session, marc_exporter_fixture.registry, collection.id
+        )
+        stale_libraries = [
+            info.model_copy(
+                update={"last_updated": utc_now() - datetime.timedelta(days=2)}
+            )
+            for info in libraries
+        ]
+
+        # Remove library2's MARC exporter configuration mid-flight.
+        assert marc_exporter_fixture.marc_integration is not None
+        lc = marc_exporter_fixture.marc_integration.for_library(
+            marc_exporter_fixture.library2
+        )
+        assert lc is not None
+        db.session.delete(lc)
+
+        marc.marc_export_collection.delay(
+            collection.id,
+            collection_name=collection.name,
+            batch_size=5,
+            start_time=marc_export_collection_fixture.start_time,
+            libraries=stale_libraries,
+        ).wait()
+
+        # Library1 was re-run (first-run pair); library2 was discarded silently.
+        marc_files = marc_export_collection_fixture.marc_files()
+        assert {mf.library_id for mf in marc_files} == {
+            marc_exporter_fixture.library1.id
+        }
+        assert len(marc_files) == 2
+        uploaded = s3_service_integration_fixture.list_objects("public")
+        assert set(uploaded) == {mf.key for mf in marc_files}
 
     def test_collection_no_works(
         self,
@@ -374,3 +561,111 @@ def test_marc_export_cleanup(
     [not_deleted] = db.session.execute(select(MarcFile)).scalars().all()
     assert not_deleted.id == not_deleted_id
     assert mock_s3.deleted == deleted_keys
+
+
+def test_marc_export_cleanup_shared_key(
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+    s3_service_fixture: S3ServiceFixture,
+    marc_exporter_fixture: MarcExporterFixture,
+    services_fixture: ServicesFixture,
+):
+    """S3 object shared by two MarcFile records is deleted only once, not twice."""
+    marc_exporter_fixture.configure_export()
+    mock_s3 = s3_service_fixture.mock_service()
+    services_fixture.services.storage.public.override(mock_s3)
+
+    shared_key = db.fresh_str()
+
+    # Simulate a first-run pair: full record + MARC_EPOCH delta sharing the same S3 key.
+    # Both belong to a collection not in the MARC-enabled set so they are cleaned up via
+    # the "disabled pair" branch of files_for_cleanup.
+    other_collection = db.collection()
+    marc_exporter_fixture.marc_file(
+        key=shared_key,
+        collection=other_collection,
+        library=marc_exporter_fixture.library1,
+    )
+    marc_exporter_fixture.marc_file(
+        key=shared_key,
+        collection=other_collection,
+        library=marc_exporter_fixture.library1,
+        since=MARC_EPOCH,
+    )
+
+    marc.marc_export_cleanup.delay(batch_size=100).wait()
+
+    # Both MarcFile records removed from the database.
+    remaining = db.session.execute(select(MarcFile)).scalars().all()
+    assert all(mf.key != shared_key for mf in remaining)
+
+    # S3 object deleted exactly once despite two records sharing the key.
+    assert mock_s3.deleted.count(shared_key) == 1
+
+
+def test_marc_export_reset(
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+    s3_service_fixture: S3ServiceFixture,
+    marc_exporter_fixture: MarcExporterFixture,
+    services_fixture: ServicesFixture,
+):
+    marc_exporter_fixture.configure_export()
+    mock_s3 = s3_service_fixture.mock_service()
+    services_fixture.services.storage.public.override(mock_s3)
+
+    library1 = marc_exporter_fixture.library1
+    library2 = marc_exporter_fixture.library2
+    assert library1.id is not None
+
+    # A nonexistent library is a no-op.
+    marc.marc_export_reset.delay(library_id=-1).wait()
+
+    # First-run pair for library1 / collection1 sharing one S3 object, plus a
+    # record in another collection. Library2's record must not be affected.
+    shared_key = db.fresh_str()
+    marc_exporter_fixture.marc_file(key=shared_key)
+    marc_exporter_fixture.marc_file(key=shared_key, since=MARC_EPOCH)
+    collection2_key = marc_exporter_fixture.marc_file(
+        collection=marc_exporter_fixture.collection2
+    ).key
+    library2_file = marc_exporter_fixture.marc_file(library=library2)
+
+    marc.marc_export_reset.delay(library_id=library1.id).wait()
+
+    # Only library2's record remains.
+    remaining = db.session.execute(select(MarcFile)).scalars().all()
+    assert remaining == [library2_file]
+
+    # The shared S3 object was deleted exactly once; the other object once.
+    assert mock_s3.deleted.count(shared_key) == 1
+    assert mock_s3.deleted.count(collection2_key) == 1
+
+
+def test_marc_export_reset_s3_failure(
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+    s3_service_fixture: S3ServiceFixture,
+    marc_exporter_fixture: MarcExporterFixture,
+    services_fixture: ServicesFixture,
+):
+    """A failed S3 deletion orphans the object but never leaves the reset half-applied."""
+    marc_exporter_fixture.configure_export()
+    mock_s3 = s3_service_fixture.mock_service()
+    services_fixture.services.storage.public.override(mock_s3)
+
+    library1 = marc_exporter_fixture.library1
+    assert library1.id is not None
+
+    marc_exporter_fixture.marc_file()
+    marc_exporter_fixture.marc_file(collection=marc_exporter_fixture.collection2)
+
+    with patch.object(
+        mock_s3,
+        "delete",
+        side_effect=ClientError({"Error": {}}, "DeleteObject"),
+    ):
+        marc.marc_export_reset.delay(library_id=library1.id).wait()
+
+    # All MarcFile records were deleted despite the S3 failures.
+    assert db.session.execute(select(MarcFile)).scalars().all() == []

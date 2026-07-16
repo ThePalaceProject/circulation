@@ -3,6 +3,7 @@ from functools import partial
 
 import pytest
 from freezegun import freeze_time
+from sqlalchemy import select
 from sqlalchemy.exc import InvalidRequestError
 
 from palace.util.datetime_helpers import datetime_utc, utc_now
@@ -10,9 +11,13 @@ from palace.util.datetime_helpers import datetime_utc, utc_now
 from palace.manager.core.classifier import Classifier
 from palace.manager.integration.catalog.marc.exporter import LibraryInfo, MarcExporter
 from palace.manager.integration.catalog.marc.settings import MarcExporterLibrarySettings
+from palace.manager.integration.goals import Goals
 from palace.manager.sqlalchemy.model.classification import Genre
 from palace.manager.sqlalchemy.model.discovery_service_registration import (
     DiscoveryServiceRegistration,
+)
+from palace.manager.sqlalchemy.model.integration import (
+    IntegrationLibraryConfiguration,
 )
 from palace.manager.sqlalchemy.model.marcfile import MarcFile
 from palace.manager.sqlalchemy.model.work import WorkGenre
@@ -74,6 +79,11 @@ class TestMarcExporter:
         assert web_client_urls(url="http://web-client") == (
             "http://web-client/registry",
             "http://web-client",
+        )
+
+        # Duplicate URLs are collapsed; each distinct URL is exported once.
+        assert web_client_urls(url="http://web-client/registry") == (
+            "http://web-client/registry",
         )
 
     def test__enabled_collections_and_libraries(
@@ -630,3 +640,150 @@ class TestMarcExporter:
         # Library2 should have no filtering
         assert library2_info.filtered_audiences == ()
         assert library2_info.filtered_genres == ()
+
+    def test_delete_files_for_reset(
+        self,
+        db: DatabaseTransactionFixture,
+        marc_exporter_fixture: MarcExporterFixture,
+    ) -> None:
+        library1 = marc_exporter_fixture.library1
+        library2 = marc_exporter_fixture.library2
+        collection1 = marc_exporter_fixture.collection1
+        collection2 = marc_exporter_fixture.collection2
+        collection1.export_marc_records = True
+        collection2.export_marc_records = True
+
+        # No records, nothing to delete.
+        assert MarcExporter.delete_files_for_reset(db.session, library1) == set()
+
+        # Create MarcFile records for library1 across two collections, with a
+        # second record sharing the first record's key (a first-run pair).
+        key1 = marc_exporter_fixture.marc_file(
+            library=library1, collection=collection1
+        ).key
+        marc_exporter_fixture.marc_file(
+            library=library1, collection=collection1, key=key1
+        )
+        key2 = marc_exporter_fixture.marc_file(
+            library=library1, collection=collection2
+        ).key
+        # Record for library2 on collection1 must not be affected.
+        library2_file = marc_exporter_fixture.marc_file(
+            library=library2, collection=collection1
+        )
+
+        # The shared key is returned once, and only library2's record survives.
+        assert MarcExporter.delete_files_for_reset(db.session, library1) == {
+            key1,
+            key2,
+        }
+        remaining = db.session.execute(select(MarcFile)).scalars().all()
+        assert remaining == [library2_file]
+
+    @pytest.mark.parametrize(
+        "old_url, new_url, marc_configs, expected",
+        [
+            pytest.param(
+                "http://old", "http://new", (None,), True, id="url-change-no-manual"
+            ),
+            pytest.param(None, "http://new", (None,), True, id="url-added"),
+            pytest.param("http://old", None, (None,), True, id="url-removed"),
+            pytest.param(
+                None,
+                "http://manual",
+                ("http://manual",),
+                False,
+                id="added-url-covered-by-manual",
+            ),
+            pytest.param(
+                "http://old",
+                "http://manual",
+                ("http://manual",),
+                True,
+                id="old-url-not-covered",
+            ),
+            pytest.param(
+                "http://manual",
+                None,
+                ("http://manual",),
+                False,
+                id="removed-url-covered-by-manual",
+            ),
+            pytest.param(
+                "http://manual1",
+                "http://manual2",
+                ("http://manual1", "http://manual2"),
+                False,
+                id="both-urls-covered-by-manual",
+            ),
+            pytest.param(
+                "http://old", "http://new", (), False, id="no-marc-configuration"
+            ),
+        ],
+    )
+    def test_needs_reset_for_web_client_change(
+        self,
+        db: DatabaseTransactionFixture,
+        marc_exporter_fixture: MarcExporterFixture,
+        old_url: str | None,
+        new_url: str | None,
+        marc_configs: tuple[str | None, ...],
+        expected: bool,
+    ) -> None:
+        """Each marc_configs entry is a MARC library configuration's manual
+        web_client_url (None for a configuration without one); an empty tuple
+        means the library has no MARC exporter configuration at all."""
+        library1 = marc_exporter_fixture.library1
+
+        for idx, manual_url in enumerate(marc_configs):
+            marc_integration = db.integration_configuration(
+                MarcExporter, Goals.CATALOG_GOAL, name=f"MARC Exporter {idx}"
+            )
+            db.integration_library_configuration(
+                marc_integration,
+                library1,
+                MarcExporterLibrarySettings(web_client_url=manual_url),
+            )
+
+        assert (
+            MarcExporter.needs_reset_for_web_client_change(
+                db.session,
+                marc_exporter_fixture.registry,
+                library1,
+                old_url=old_url,
+                new_url=new_url,
+            )
+            == expected
+        )
+
+    def test_needs_reset_for_web_client_change_other_protocol(
+        self,
+        db: DatabaseTransactionFixture,
+        marc_exporter_fixture: MarcExporterFixture,
+    ) -> None:
+        """A matching URL on a non-MARC catalog integration doesn't count as covered."""
+        library1 = marc_exporter_fixture.library1
+        marc_integration = db.integration_configuration(
+            MarcExporter, Goals.CATALOG_GOAL, name="MARC Exporter"
+        )
+        db.integration_library_configuration(marc_integration, library1)
+        other = db.integration_configuration(
+            "fake protocol", Goals.CATALOG_GOAL, name="other"
+        )
+        # Created directly: the db fixture helper resolves the protocol through
+        # the registry, which doesn't know "fake protocol".
+        other_lc, _ = create(
+            db.session,
+            IntegrationLibraryConfiguration,
+            parent=other,
+            library=library1,
+        )
+        other_lc.settings_dict = {"web_client_url": "http://manual"}
+
+        assert MarcExporter.needs_reset_for_web_client_change(
+            db.session,
+            marc_exporter_fixture.registry,
+            library1,
+            old_url=None,
+            new_url="http://manual",
+        )

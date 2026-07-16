@@ -43,6 +43,9 @@ class MarcExporterFixture:
         self.collection2.associated_libraries = [self.library1]
         self.collection3.associated_libraries = [self.library2]
 
+        # Set by configure_export().
+        self.marc_integration: IntegrationConfiguration | None = None
+
     def integration(self) -> IntegrationConfiguration:
         return self._db.integration_configuration(
             MarcExporter, Goals.CATALOG_GOAL, name="MARC Exporter"
@@ -65,6 +68,7 @@ class MarcExporterFixture:
 
     def configure_export(self) -> None:
         marc_integration = self.integration()
+        self.marc_integration = marc_integration
         self._db.integration_library_configuration(
             marc_integration,
             self.library1,

@@ -8,7 +8,12 @@ from palace.manager.api.admin.controller.integration_settings import (
 )
 from palace.manager.api.admin.form_data import ProcessFormData
 from palace.manager.api.admin.problem_details import MULTIPLE_SERVICES_FOR_LIBRARY
+from palace.manager.celery.tasks.marc import (
+    MARC_EXPORT_RESET_COOLDOWN_SECONDS,
+    marc_export_reset,
+)
 from palace.manager.integration.catalog.marc.exporter import MarcExporter
+from palace.manager.integration.catalog.marc.settings import MarcExporterLibrarySettings
 from palace.manager.integration.goals import Goals
 from palace.manager.integration.settings import BaseSettings
 from palace.manager.sqlalchemy.listeners import site_configuration_has_changed
@@ -87,11 +92,31 @@ class CatalogServicesController(
             validated_settings = ProcessFormData.get_settings(settings_class, form_data)
             catalog_service.settings_dict = validated_settings.model_dump()
 
+            # Capture current library settings so we can detect changes after the
+            # update.
+            old_library_settings: dict[int, MarcExporterLibrarySettings] = {
+                lc.library_id: impl_cls.library_settings_load(lc)
+                for lc in catalog_service.library_configurations
+                if lc.library_id is not None
+            }
+
             # Update library settings
             if libraries_data:
                 self.process_libraries(
                     catalog_service, libraries_data, impl_cls.library_settings_class()
                 )
+
+            # Find libraries whose settings actually changed. A MARC export reset
+            # is queued for each so that the next run produces a fresh full
+            # export along with a full-content delta.
+            reset_library_ids = [
+                lc.library_id
+                for lc in catalog_service.library_configurations
+                if lc.library_id is not None
+                and lc.library_id in old_library_settings
+                and impl_cls.library_settings_load(lc)
+                != old_library_settings[lc.library_id]
+            ]
 
             # Trigger a site configuration change
             site_configuration_has_changed(self._db)
@@ -99,6 +124,17 @@ class CatalogServicesController(
         except ProblemDetailException as e:
             self._db.rollback()
             return e.problem_detail
+
+        # Dispatch the resets before the request transaction commits: a failed
+        # enqueue then fails the request and rolls the settings change back, so
+        # a retried save re-queues the reset. The reverse order could commit the
+        # settings and then lose a reset, leaving delta-only consumers with
+        # stale records indefinitely. The task cooldown keeps a reset from
+        # running before the transaction commits.
+        for library_id in reset_library_ids:
+            marc_export_reset.apply_async(
+                (library_id,), countdown=MARC_EXPORT_RESET_COOLDOWN_SECONDS
+            )
 
         return Response(str(catalog_service.id), response_code)
 

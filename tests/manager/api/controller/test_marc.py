@@ -9,7 +9,7 @@ from flask import Response
 from palace.util.datetime_helpers import utc_now
 
 from palace.manager.api.controller.marc import MARCRecordController
-from palace.manager.integration.catalog.marc.exporter import MarcExporter
+from palace.manager.integration.catalog.marc.exporter import MARC_EPOCH, MarcExporter
 from palace.manager.integration.goals import Goals
 from palace.manager.service.integration_registry.catalog_services import (
     CatalogServicesRegistry,
@@ -244,6 +244,8 @@ class TestMARCRecordController:
         marc_record_controller_fixture.file(
             key="delta_2", created=yesterday, since=last_week
         )
+        # A first-run full-content delta shares the full export's S3 object.
+        marc_record_controller_fixture.file(key="full", created=now, since=MARC_EPOCH)
 
         response = marc_record_controller_fixture.controller.download_page()
         html = marc_record_controller_fixture.get_response_html(response)
@@ -265,6 +267,14 @@ class TestMARCRecordController:
             % (last_week.strftime("%B %-d, %Y"), yesterday.strftime("%B %-d, %Y"))
             in html
         )
+        # The full-content delta is labeled distinctly rather than as a
+        # date range starting at the MARC_EPOCH sentinel.
+        assert (
+            '<a href="http://s3.url/full">Full content as of %s</a>'
+            % now.strftime("%B %-d, %Y")
+            in html
+        )
+        assert "1900" not in html
 
     def test_download_page_with_exporter_but_no_collection(
         self, marc_record_controller_fixture: MARCRecordControllerFixture

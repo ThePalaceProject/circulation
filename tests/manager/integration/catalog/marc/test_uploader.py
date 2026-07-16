@@ -1,10 +1,11 @@
 from functools import partial
 from io import BytesIO
 from tempfile import TemporaryFile
-from unittest.mock import create_autospec
+from unittest.mock import create_autospec, patch
 from uuid import UUID, uuid4
 
 import pytest
+from botocore.exceptions import ClientError
 
 from palace.util.datetime_helpers import datetime_utc
 
@@ -146,6 +147,25 @@ class TestMarcUploadManager:
 
         # calling abort again is a no-op
         uploader.abort()
+
+        # A failed abort is logged and swallowed, and the upload stays unfinalized.
+        uploader = marc_upload_manager_fixture.create_uploader()
+        uploader.begin_upload()
+        with patch.object(
+            marc_upload_manager_fixture.mock_s3_service,
+            "multipart_abort",
+            side_effect=ClientError({"Error": {}}, "AbortMultipartUpload"),
+        ):
+            uploader.abort()
+        assert not uploader.finalized
+
+        # A later call can retry the abort and succeed.
+        uploader.abort()
+        assert uploader.finalized
+        assert (
+            uploader.context.s3_key
+            in marc_upload_manager_fixture.mock_s3_service.aborted
+        )
 
     def test_complete(self, marc_upload_manager_fixture: MarcUploadManagerFixture):
         # If the upload hasn't started, the upload isn't aborted, but it is finalized
