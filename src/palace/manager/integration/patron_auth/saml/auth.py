@@ -19,7 +19,7 @@ from palace.manager.integration.patron_auth.saml.configuration.service_provider 
 from palace.manager.integration.patron_auth.saml.metadata.parser import (
     SAMLSubjectParser,
 )
-from palace.manager.util.problem_detail import ProblemDetail as pd
+from palace.manager.util.problem_detail import ProblemDetail, ProblemDetail as pd
 
 if TYPE_CHECKING:
     import sqlalchemy.orm.session
@@ -177,20 +177,26 @@ class SAMLAuthenticationManager:
         """
         return self._configuration
 
-    def start_authentication(self, db, idp_entity_id, return_to_url):
+    def start_authentication(
+        self,
+        db: sqlalchemy.orm.session.Session,
+        idp_entity_id: str,
+        return_to_url: str,
+        force_authn: bool = False,
+    ) -> str | ProblemDetail:
         """Start the SAML authentication workflow by sending a AuthnRequest to the IdP.
 
         :param db: Database session
-        :type db: sqlalchemy.orm.session.Session
 
         :param idp_entity_id: IdP's entityID
-        :type idp_entity_id: string
 
         :param return_to_url: URL which will the user agent will be redirected to after authentication
-        :type return_to_url: string
 
-        :return: Redirection URL
-        :rtype: string
+        :param force_authn: Whether to set ForceAuthn="true" on the AuthnRequest,
+            telling the IdP to re-authenticate the user even if they have an
+            existing session (SAML 2.0 Core 3.4.1)
+
+        :return: Redirection URL, or a ProblemDetail on error
         """
         self._logger.info(
             "Started authentication workflow for IdP '{}' (redirection URL = '{}')".format(
@@ -200,7 +206,7 @@ class SAMLAuthenticationManager:
 
         try:
             auth = self._get_auth_object(db, idp_entity_id)
-            redirect_url = auth.login(return_to_url)
+            redirect_url = auth.login(return_to_url, force_authn=force_authn)
 
             if self._logger.isEnabledFor(logging.DEBUG):
                 self._logger.debug(f"SAML request: {auth.get_last_request_xml()}")
@@ -281,7 +287,7 @@ class SAMLAuthenticationManager:
         name_id: SAMLNameID,
         sp_slo_callback_url: str,
         relay_state: str,
-    ) -> str | pd:
+    ) -> str | ProblemDetail:
         """Initiate SP-Initiated SAML SLO by sending a LogoutRequest to the IdP.
 
         :param db: Database session

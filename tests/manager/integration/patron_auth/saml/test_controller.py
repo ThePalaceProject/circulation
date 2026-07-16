@@ -7,6 +7,7 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 import pytest
 from flask import request
 from lxml import etree
+from werkzeug import Response as wkResponse
 
 from palace.manager.api.authentication.base import PatronData
 from palace.manager.api.authenticator import Authenticator
@@ -191,26 +192,22 @@ class TestSAMLController:
     def test_saml_authentication_redirect(
         self,
         controller_fixture: ControllerFixture,
-        provider_name,
-        idp_entity_id,
-        redirect_uri,
-        expected_problem,
-        expected_relay_state,
-    ):
+        provider_name: str | None,
+        idp_entity_id: str | None,
+        redirect_uri: str | None,
+        expected_problem: ProblemDetail | None,
+        expected_relay_state: str | None,
+    ) -> None:
         """Make sure that SAMLController.saml_authentication_redirect creates a correct RelayState or
         returns a correct ProblemDetail object in the case of any error.
 
         :param provider_name: Name of the authentication provider which should be passed as a request parameter
-        :type provider_name: str
 
         :param idp_entity_id: Identity Provider's ID which should be passed as a request parameter
-        :type idp_entity_id: str
 
         :param expected_problem: (Optional) Expected ProblemDetail object describing the error occurred (if any)
-        :type expected_problem: Optional[ProblemDetail]
 
         :param expected_relay_state: (Optional) String containing the expected RelayState value
-        :type expected_relay_state: Optional[str]
         """
         # Arrange
         expected_authentication_redirect_uri = "https://idp.circulationmanager.org"
@@ -262,6 +259,7 @@ class TestSAMLController:
                 assert isinstance(result, ProblemDetail)
                 assert result.response == expected_problem.response
             else:
+                assert isinstance(result, wkResponse)
                 assert 302 == result.status_code
                 assert expected_authentication_redirect_uri == result.headers.get(
                     "Location"
@@ -271,6 +269,101 @@ class TestSAMLController:
                     controller_fixture.db.session,
                     idp_entity_id,
                     expected_relay_state,
+                    force_authn=False,
+                )
+
+    @pytest.mark.parametrize(
+        "force_authn, expected_force_authn, expected_invalid",
+        [
+            pytest.param(None, False, False, id="without-force-authn"),
+            pytest.param("true", True, False, id="with-force-authn-true"),
+            pytest.param("false", False, False, id="with-force-authn-false"),
+            pytest.param("TRUE", None, True, id="with-invalid-force-authn-uppercase"),
+            pytest.param("1", None, True, id="with-invalid-force-authn-numeric"),
+            pytest.param("", None, True, id="with-invalid-force-authn-empty"),
+        ],
+    )
+    def test_saml_authentication_redirect_force_authn(
+        self,
+        controller_fixture: ControllerFixture,
+        force_authn: str | None,
+        expected_force_authn: bool | None,
+        expected_invalid: bool,
+    ) -> None:
+        """Make sure that the optional force_authn parameter is validated and
+        passed through to SAMLAuthenticationManager.start_authentication, and
+        that invalid values redirect back to the client with an error.
+        """
+        # Arrange
+        expected_authentication_redirect_uri = "https://idp.circulationmanager.org"
+        client_redirect_uri = "http://localhost"
+        authentication_manager = create_autospec(spec=SAMLAuthenticationManager)
+        authentication_manager.start_authentication = MagicMock(
+            return_value=expected_authentication_redirect_uri
+        )
+        provider = create_autospec(spec=SAMLWebSSOAuthenticationProvider)
+        provider.label = MagicMock(
+            return_value=SAMLWebSSOAuthenticationProvider.label()
+        )
+        provider.get_authentication_manager = MagicMock(
+            return_value=authentication_manager
+        )
+        provider.library = MagicMock(
+            return_value=controller_fixture.db.default_library()
+        )
+        authenticator = Authenticator(
+            controller_fixture.db.session,
+            controller_fixture.db.session.query(Library),
+        )
+
+        authenticator.library_authenticators["default"].register_saml_provider(provider)
+
+        controller = SAMLController(controller_fixture.app.manager, authenticator)
+        params = {
+            SAMLController.PROVIDER_NAME: SAMLWebSSOAuthenticationProvider.label(),
+            SAMLController.IDP_ENTITY_ID: IDENTITY_PROVIDERS[0].entity_id,
+            SAMLController.REDIRECT_URI: client_redirect_uri,
+        }
+
+        if force_authn is not None:
+            params[SAMLController.FORCE_AUTHN] = force_authn
+
+        query = urlencode(params)
+
+        with controller_fixture.app.test_request_context("/saml_authenticate?" + query):
+            request.library = controller_fixture.db.default_library()  # type: ignore[attr-defined]
+
+            # Act
+            result = controller.saml_authentication_redirect(
+                request.args, controller_fixture.db.session
+            )
+
+            # Assert
+            assert isinstance(result, wkResponse)
+            assert 302 == result.status_code
+            location = result.headers.get("Location")
+
+            if expected_invalid:
+                # The patron is redirected back to the client with the error
+                # encoded in the query string.
+                authentication_manager.start_authentication.assert_not_called()
+                assert location is not None
+                location_parse_result = urlsplit(location)
+                location_params = parse_qs(location_parse_result.query)
+                error = json.loads(location_params[SAMLController.ERROR][0])
+                assert error["type"] == SAML_INVALID_REQUEST.uri
+                # The static detail message must not reflect the submitted value.
+                assert (
+                    error["detail"]
+                    == 'Invalid force_authn value; expected "true" or "false"'
+                )
+            else:
+                assert expected_authentication_redirect_uri == location
+                assert (
+                    authentication_manager.start_authentication.call_args.kwargs[
+                        "force_authn"
+                    ]
+                    == expected_force_authn
                 )
 
     @pytest.mark.parametrize(
