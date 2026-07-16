@@ -18,7 +18,10 @@ from palace.manager.api.problem_details import (
     REMOTE_INTEGRATION_FAILED,
     SHARED_SECRET_DECRYPTION_ERROR,
 )
-from palace.manager.celery.tasks.marc import marc_export_reset
+from palace.manager.celery.tasks.marc import (
+    MARC_EXPORT_RESET_COOLDOWN_SECONDS,
+    marc_export_reset,
+)
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.problem_details import INTEGRATION_ERROR, INVALID_INPUT
 from palace.manager.integration.catalog.marc.exporter import MarcExporter
@@ -757,8 +760,8 @@ class TestOpdsRegistrationService:
         monkeypatch.setattr(
             MarcExporter, "needs_reset_for_web_client_change", mock_needs_reset
         )
-        mock_delay = MagicMock()
-        monkeypatch.setattr(marc_export_reset, "delay", mock_delay)
+        mock_apply_async = MagicMock()
+        monkeypatch.setattr(marc_export_reset, "apply_async", mock_apply_async)
 
         registration = remote_registry_fixture.create_registration()
         registration.web_client = existing_web_client
@@ -785,9 +788,12 @@ class TestOpdsRegistrationService:
             mock_needs_reset.assert_not_called()
 
         if expect_delay:
-            mock_delay.assert_called_once_with(registration.library_id)
+            mock_apply_async.assert_called_once_with(
+                (registration.library_id,),
+                countdown=MARC_EXPORT_RESET_COOLDOWN_SECONDS,
+            )
         else:
-            mock_delay.assert_not_called()
+            mock_apply_async.assert_not_called()
 
 
 class TestLibraryRegistrationScript:

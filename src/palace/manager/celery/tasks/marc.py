@@ -2,7 +2,6 @@ import datetime
 import uuid
 from contextlib import ExitStack
 from tempfile import TemporaryFile
-from typing import Any
 
 from botocore.exceptions import BotoCoreError, ClientError
 from celery import shared_task
@@ -33,16 +32,14 @@ from palace.manager.sqlalchemy.model.identifier import (
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.marcfile import MarcFile
 from palace.manager.sqlalchemy.util import create, get_one
+from palace.manager.util.json import json_canonical
 
 # LibraryInfo fields that change between runs without a configuration change.
 _VOLATILE_LIBRARY_INFO_FIELDS = frozenset({"last_updated", "needs_update"})
 
-# LibraryInfo tuple fields compared order-independently.
-# TODO: The `filtered_audiences` and `filtered_genres` library settings are
-#  compared below, but changing them does not yet queue a MARC export reset.
-_ORDER_INSENSITIVE_LIBRARY_INFO_FIELDS = frozenset(
-    {"web_client_urls", "filtered_audiences", "filtered_genres"}
-)
+# Cooldown before a queued marc_export_reset runs, so that it cannot run before
+# the transaction that dispatched it commits.
+MARC_EXPORT_RESET_COOLDOWN_SECONDS = 30
 
 
 @shared_task(queue=QueueNames.default, bind=True)
@@ -124,18 +121,19 @@ def marc_export_collection_lock(
     )
 
 
+# TODO: The `filtered_audiences` and `filtered_genres` library settings are
+#  compared below, but changing them does not yet queue a MARC export reset.
 def _export_settings_changed(snapshot: LibraryInfo, current: LibraryInfo) -> bool:
     """Whether a library's export-affecting settings differ between two LibraryInfo.
 
     Ignores the fields that may change between runs without affecting the export
-    and compares the tuple fields order-independently.
+    and compares the remaining fields order-independently.
     """
 
-    def comparable(info: LibraryInfo) -> dict[str, Any]:
-        dumped = info.model_dump(exclude=set(_VOLATILE_LIBRARY_INFO_FIELDS))
-        for field in _ORDER_INSENSITIVE_LIBRARY_INFO_FIELDS:
-            dumped[field] = sorted(dumped[field])
-        return dumped
+    def comparable(info: LibraryInfo) -> str:
+        return json_canonical(
+            info.model_dump(exclude=set(_VOLATILE_LIBRARY_INFO_FIELDS))
+        )
 
     return comparable(snapshot) != comparable(current)
 

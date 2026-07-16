@@ -8,7 +8,10 @@ from palace.manager.api.admin.controller.integration_settings import (
 )
 from palace.manager.api.admin.form_data import ProcessFormData
 from palace.manager.api.admin.problem_details import MULTIPLE_SERVICES_FOR_LIBRARY
-from palace.manager.celery.tasks.marc import marc_export_reset
+from palace.manager.celery.tasks.marc import (
+    MARC_EXPORT_RESET_COOLDOWN_SECONDS,
+    marc_export_reset,
+)
 from palace.manager.integration.catalog.marc.exporter import MarcExporter
 from palace.manager.integration.catalog.marc.settings import MarcExporterLibrarySettings
 from palace.manager.integration.goals import Goals
@@ -122,16 +125,16 @@ class CatalogServicesController(
             self._db.rollback()
             return e.problem_detail
 
-        # Dispatch the resets before committing: a failed enqueue then rolls the
-        # settings change back, and a retried save re-queues the reset. The
-        # reverse order could commit the settings and then lose a reset, leaving
-        # delta-only consumers with stale records indefinitely. If the commit
-        # fails after dispatch, the cost is only a spurious reset: the files are
-        # regenerated from unchanged settings by the next scheduled export run.
-        if reset_library_ids:
-            for library_id in reset_library_ids:
-                marc_export_reset.delay(library_id)
-            self._db.commit()
+        # Dispatch the resets before the request transaction commits: a failed
+        # enqueue then fails the request and rolls the settings change back, so
+        # a retried save re-queues the reset. The reverse order could commit the
+        # settings and then lose a reset, leaving delta-only consumers with
+        # stale records indefinitely. The task cooldown keeps a reset from
+        # running before the transaction commits.
+        for library_id in reset_library_ids:
+            marc_export_reset.apply_async(
+                (library_id,), countdown=MARC_EXPORT_RESET_COOLDOWN_SECONDS
+            )
 
         return Response(str(catalog_service.id), response_code)
 

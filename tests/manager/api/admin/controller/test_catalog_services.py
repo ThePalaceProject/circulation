@@ -21,7 +21,10 @@ from palace.manager.api.admin.problem_details import (
     NO_PROTOCOL_FOR_NEW_SERVICE,
     UNKNOWN_PROTOCOL,
 )
-from palace.manager.celery.tasks.marc import marc_export_reset
+from palace.manager.celery.tasks.marc import (
+    MARC_EXPORT_RESET_COOLDOWN_SECONDS,
+    marc_export_reset,
+)
 from palace.manager.integration.catalog.marc.exporter import MarcExporter
 from palace.manager.integration.catalog.marc.settings import MarcExporterLibrarySettings
 from palace.manager.integration.goals import Goals
@@ -340,8 +343,8 @@ class TestCatalogServicesController:
         legacy: bool,
         expect_reset: bool,
     ):
-        mock_delay = MagicMock()
-        monkeypatch.setattr(marc_export_reset, "delay", mock_delay)
+        mock_apply_async = MagicMock()
+        monkeypatch.setattr(marc_export_reset, "apply_async", mock_apply_async)
 
         library = db.default_library()
         service = db.integration_configuration(
@@ -393,9 +396,11 @@ class TestCatalogServicesController:
             assert isinstance(response, Response)
 
         if expect_reset:
-            mock_delay.assert_called_once_with(library.id)
+            mock_apply_async.assert_called_once_with(
+                (library.id,), countdown=MARC_EXPORT_RESET_COOLDOWN_SECONDS
+            )
         else:
-            mock_delay.assert_not_called()
+            mock_apply_async.assert_not_called()
 
     def test_catalog_services_post_no_reset_for_new_library(
         self,
@@ -405,8 +410,8 @@ class TestCatalogServicesController:
         monkeypatch: MonkeyPatch,
     ):
         """Adding a new library to a service does not trigger a reset (no prior records)."""
-        mock_delay = MagicMock()
-        monkeypatch.setattr(marc_export_reset, "delay", mock_delay)
+        mock_apply_async = MagicMock()
+        monkeypatch.setattr(marc_export_reset, "apply_async", mock_apply_async)
 
         service = db.integration_configuration(
             MarcExporter, Goals.CATALOG_GOAL, name="marc"
@@ -436,4 +441,4 @@ class TestCatalogServicesController:
             response = controller.process_catalog_services()
             assert isinstance(response, Response)
 
-        mock_delay.assert_not_called()
+        mock_apply_async.assert_not_called()
