@@ -94,13 +94,22 @@ class TestSAMLAuthenticationManager:
             ),
         ],
     )
+    @pytest.mark.parametrize(
+        "force_authn, expected_force_authn_attribute",
+        [
+            pytest.param(False, None, id="without-force-authn"),
+            pytest.param(True, "true", id="with-force-authn"),
+        ],
+    )
     def test_start_authentication(
         self,
         controller_fixture: ControllerFixture,
         create_mock_onelogin_configuration: Callable[..., SAMLOneLoginConfiguration],
-        service_provider,
-        identity_providers,
-    ):
+        service_provider: SAMLServiceProviderMetadata,
+        identity_providers: list[SAMLIdentityProviderMetadata],
+        force_authn: bool,
+        expected_force_authn_attribute: str | None,
+    ) -> None:
         onelogin_configuration = create_mock_onelogin_configuration(
             service_provider, identity_providers
         )
@@ -111,9 +120,13 @@ class TestSAMLAuthenticationManager:
 
         with controller_fixture.app.test_request_context("/"):
             result = authentication_manager.start_authentication(
-                controller_fixture.db.session, saml_strings.IDP_1_ENTITY_ID, ""
+                controller_fixture.db.session,
+                saml_strings.IDP_1_ENTITY_ID,
+                "",
+                force_authn=force_authn,
             )
 
+            assert isinstance(result, str)
             query_items = parse_qs(urlsplit(result).query)
             saml_request = query_items["SAMLRequest"][0]
             decoded_saml_request = OneLogin_Saml2_Utils.decode_base64_and_inflate(
@@ -138,6 +151,8 @@ class TestSAMLAuthenticationManager:
 
             sso_url = saml_request_dom.get("Destination")
             assert sso_url == IDENTITY_PROVIDERS[0].sso_service.url
+
+            assert saml_request_dom.get("ForceAuthn") == expected_force_authn_attribute
 
             name_id_policy_nodes = OneLogin_Saml2_XML.query(
                 saml_request_dom, "./samlp:NameIDPolicy"

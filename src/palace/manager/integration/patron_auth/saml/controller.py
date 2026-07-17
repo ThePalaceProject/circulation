@@ -16,7 +16,7 @@ from flask import Request, Response, redirect, request as flask_request, url_for
 from flask_babel import lazy_gettext as _
 from lxml import etree
 from werkzeug import Response as wkResponse
-from werkzeug.datastructures import ImmutableMultiDict
+from werkzeug.datastructures import MultiDict
 
 from palace.manager.api.util.flask import get_request_library
 from palace.manager.integration.patron_auth.constants import LOGOUT_REDIRECT_QUERY_PARAM
@@ -69,6 +69,9 @@ class SAMLController:
     ACCESS_TOKEN = "access_token"
     PATRON_INFO = "patron_info"
     LOGOUT_STATUS = "logout_status"
+    FORCE_AUTHN = "force_authn"
+
+    VALID_FORCE_AUTHN_VALUES: ClassVar[frozenset[str]] = frozenset({"true", "false"})
 
     _SITE_WIDE_METADATA_CACHE_KEY: ClassVar[str | None] = None
     _sp_metadata_cache: ClassVar[dict[str | None, str | None]] = {}
@@ -273,21 +276,26 @@ class SAMLController:
         """
         return redirect(self._error_uri(redirect_uri, problem_detail))
 
-    def saml_authentication_redirect(self, params, db):
+    def saml_authentication_redirect(
+        self,
+        params: MultiDict[str, str],
+        db: sqlalchemy.orm.session.Session,
+    ) -> wkResponse | ProblemDetail:
         """Redirects an unauthenticated patron to the authentication URL of the
         appropriate SAML IdP.
         Over on that other site, the patron will authenticate and be
         redirected back to the circulation manager, ending up in
         saml_authentication_callback.
 
-        :param params: Query parameters
-        :type params: Dict
+        :param params: Query parameters. In addition to the required `provider`,
+            `idp_entity_id`, and `redirect_uri` parameters, an optional
+            `force_authn` parameter ("true" or "false") may be supplied to
+            request that the IdP re-authenticate the patron even if the patron
+            has an existing IdP session.
 
         :param db: Database session
-        :type db: sqlalchemy.orm.session.Session
 
-        :return: Redirection response
-        :rtype: Response
+        :return: Redirection response, or a ProblemDetail on error
         """
         provider_name = self._get_request_parameter(params, self.PROVIDER_NAME)
         if isinstance(provider_name, ProblemDetail):
@@ -300,6 +308,22 @@ class SAMLController:
         redirect_uri = self._get_request_parameter(params, self.REDIRECT_URI)
         if isinstance(redirect_uri, ProblemDetail):
             return redirect_uri
+
+        # Optional parameter. Clients pass force_authn=true to request that the
+        # IdP re-authenticate the patron even if the patron has an existing IdP
+        # session, e.g. a session for an account from a different tenant.
+        force_authn = params.get(self.FORCE_AUTHN)
+        if force_authn is not None and force_authn not in self.VALID_FORCE_AUTHN_VALUES:
+            return self._redirect_with_error(
+                redirect_uri,
+                SAML_INVALID_REQUEST.detailed(
+                    _(
+                        'Invalid %(name)s value; expected "true" or "false"',
+                        name=self.FORCE_AUTHN,
+                    )
+                ),
+            )
+        force_authn_requested = force_authn == "true"
 
         provider = self._authenticator.saml_provider_lookup(provider_name)
         if isinstance(provider, ProblemDetail):
@@ -334,7 +358,7 @@ class SAMLController:
             },
         )
         redirect_uri = authentication_manager.start_authentication(
-            db, idp_entity_id, relay_state
+            db, idp_entity_id, relay_state, force_authn=force_authn_requested
         )
         if isinstance(redirect_uri, ProblemDetail):
             return redirect_uri
@@ -425,7 +449,7 @@ class SAMLController:
 
     def saml_logout_redirect(
         self,
-        params: ImmutableMultiDict[str, str],
+        params: MultiDict[str, str],
         db: sqlalchemy.orm.session.Session,
     ) -> wkResponse | ProblemDetail:
         """Initiate SP-Initiated SAML SLO.
