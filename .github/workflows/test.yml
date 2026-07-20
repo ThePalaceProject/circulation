@@ -35,7 +35,7 @@ jobs:
         run: sudo ethtool -K eth0 tx off rx off
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -95,7 +95,7 @@ jobs:
         run: sudo ethtool -K eth0 tx off rx off
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
