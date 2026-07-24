@@ -88,7 +88,7 @@ class TestOIDCAuthenticationManagerInit:
             pytest.param(False, id="pkce-disabled"),
         ],
     )
-    def test_use_pkce_property(self, create_oidc_settings, use_pkce: bool):
+    def test_use_pkce_property(self, create_oidc_settings, use_pkce: bool) -> None:
         """Test that use_pkce reflects the configured settings value."""
         settings = create_oidc_settings(use_pkce=use_pkce)
         manager = OIDCAuthenticationManager(settings=settings)

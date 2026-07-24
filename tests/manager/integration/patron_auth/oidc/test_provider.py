@@ -21,6 +21,9 @@ from palace.manager.integration.patron_auth.oidc.configuration.model import (
     OIDCAuthLibrarySettings,
     OIDCAuthSettings,
 )
+from palace.manager.integration.patron_auth.oidc.credential import (
+    OIDCCredentialManager,
+)
 from palace.manager.integration.patron_auth.oidc.provider import (
     OIDC_CANNOT_DETERMINE_PATRON,
     OIDC_FILTER_EVALUATION_ERROR,
@@ -60,6 +63,15 @@ class TestOIDCAuthenticationProvider:
 
     def test_identifies_individuals(self, oidc_provider):
         assert oidc_provider.identifies_individuals is True
+
+    def test_patron_id_claim(self, oidc_provider: OIDCAuthenticationProvider) -> None:
+        assert oidc_provider.patron_id_claim == oidc_provider._settings.patron_id_claim
+
+    def test_credential_manager(
+        self, oidc_provider: OIDCAuthenticationProvider
+    ) -> None:
+        assert isinstance(oidc_provider.credential_manager, OIDCCredentialManager)
+        assert oidc_provider.credential_manager is oidc_provider._credential_manager
 
     def test_get_credential_from_header_with_bearer_token(self, oidc_provider):
         auth = MagicMock()
