@@ -285,6 +285,52 @@ class TestOIDCCredentialManager:
         else:
             assert "refresh_token" not in token_data
 
+    @pytest.mark.parametrize(
+        "token_type,data_source_name",
+        [
+            pytest.param(
+                OIDCCredentialManager.TOKEN_TYPE,
+                OIDCCredentialManager.TOKEN_DATA_SOURCE_NAME,
+                id="default-names",
+            ),
+            pytest.param("Custom token", "CustomProvider", id="custom-names"),
+        ],
+    )
+    def test_create_oidc_token_with_configured_names(
+        self,
+        db: DatabaseTransactionFixture,
+        mock_patron,
+        sample_id_token_claims,
+        token_type: str,
+        data_source_name: str,
+    ):
+        """Test that configured token type and data source flow through create and lookup."""
+        manager = OIDCCredentialManager(
+            token_type=token_type, data_source_name=data_source_name
+        )
+
+        credential = manager.create_oidc_token(
+            db.session,
+            mock_patron,
+            sample_id_token_claims,
+            "test-access-token",
+        )
+        db.session.commit()
+
+        assert credential.type == token_type
+        assert credential.data_source.name == data_source_name
+
+        found_by_patron = manager.lookup_oidc_token_by_patron(db.session, mock_patron)
+        assert found_by_patron is not None
+        assert found_by_patron.id == credential.id
+
+        assert credential.credential is not None
+        found_by_value = manager.lookup_oidc_token_by_value(
+            db.session, credential.credential, mock_patron.library_id
+        )
+        assert found_by_value is not None
+        assert found_by_value.id == credential.id
+
     def test_lookup_oidc_token_by_patron_found(
         self,
         manager,

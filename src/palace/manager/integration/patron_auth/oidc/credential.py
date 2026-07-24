@@ -43,15 +43,30 @@ class OIDCCredentialManager(LoggerMixin):
     TOKEN_TYPE = "OIDC token"
     TOKEN_DATA_SOURCE_NAME = "OIDC"
 
+    def __init__(
+        self,
+        token_type: str = TOKEN_TYPE,
+        data_source_name: str = TOKEN_DATA_SOURCE_NAME,
+    ) -> None:
+        """Initialize the credential manager.
+
+        The defaults suit the generic OIDC provider. Other providers built on
+        the same machinery can pass distinct values so their credentials do
+        not collide with OIDC ones.
+
+        :param token_type: Value stored as ``Credential.type``
+        :param data_source_name: Name of the ``DataSource`` owning the credentials
+        """
+        self._token_type = token_type
+        self._data_source_name = data_source_name
+
     def _get_token_data_source(self, db: Session) -> DataSource:
         """Get or create the data source for OIDC credentials.
 
         :param db: Database session
         :return: DataSource for OIDC credentials
         """
-        datasource, _ = get_one_or_create(
-            db, DataSource, name=self.TOKEN_DATA_SOURCE_NAME
-        )
+        datasource, _ = get_one_or_create(db, DataSource, name=self._data_source_name)
         return datasource
 
     @staticmethod
@@ -171,7 +186,7 @@ class OIDCCredentialManager(LoggerMixin):
         )
 
         oidc_credential, is_new = Credential.temporary_token_create(
-            db, data_source, self.TOKEN_TYPE, patron, session_lifetime, token_value
+            db, data_source, self._token_type, patron, session_lifetime, token_value
         )
 
         return oidc_credential
@@ -189,8 +204,8 @@ class OIDCCredentialManager(LoggerMixin):
 
         credential = Credential.lookup_by_patron(
             db,
-            self.TOKEN_DATA_SOURCE_NAME,
-            self.TOKEN_TYPE,
+            self._data_source_name,
+            self._token_type,
             patron,
             allow_persistent_token=False,
             auto_create_datasource=True,
@@ -227,7 +242,7 @@ class OIDCCredentialManager(LoggerMixin):
         credential = Credential.lookup_by_token(
             db,
             self._get_token_data_source(db),
-            self.TOKEN_TYPE,
+            self._token_type,
             token_value,
             constraint=credential_constraint,
         )
@@ -395,7 +410,7 @@ class OIDCCredentialManager(LoggerMixin):
             db.query(Credential)
             .filter(
                 Credential.patron_id == patron_id,
-                Credential.type == self.TOKEN_TYPE,
+                Credential.type == self._token_type,
             )
             .all()
         )
