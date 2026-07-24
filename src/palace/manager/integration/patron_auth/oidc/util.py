@@ -105,11 +105,11 @@ class OIDCUtility(LoggerMixin):
     ) -> dict[str, Any] | None:
         """Retrieve token-related data from Redis cache.
 
-        Generic method for retrieving PKCE, logout state, or other token data.
+        Generic method for retrieving logout state or other token data.
 
         :param key_prefix: Cache key prefix (e.g., LOGOUT_STATE_KEY_PREFIX)
         :param state_token: State token used as cache key
-        :param data_type: Description for logging (e.g., "PKCE", "logout state")
+        :param data_type: Description for logging (e.g., "logout state")
         :param delete: Whether to delete the entry after retrieval (one-time use)
         :return: Dictionary with token data, or None if not found
         :raises OIDCUtilityError: If Redis client is not available

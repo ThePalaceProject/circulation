@@ -65,9 +65,6 @@ from palace.manager.util.opds_writer import OPDSFeed
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 
 if TYPE_CHECKING:
-    # These are used only in type annotations on BaseOIDCAuthenticationProvider.
-    # Importing them at runtime would create an import cycle, since the OIDC
-    # modules import this module for the base class.
     from palace.manager.api.authentication.base import PatronData
     from palace.manager.integration.patron_auth.oidc.auth import (
         OIDCAuthenticationManager,
@@ -985,8 +982,8 @@ class BaseOIDCAuthenticationProvider[
 ):
     """Base class for OIDC authentication providers.
 
-    The abstract members below are the contract OIDCController relies on:
-    every provider registered through the OIDC dispatch path must supply
+    The abstract members below are the contract OIDCController relies on.
+    Every provider registered through the OIDC dispatch path must supply
     them. Keeping the contract here lets the controller work with any
     OIDC-family provider without reaching into implementation details.
     """

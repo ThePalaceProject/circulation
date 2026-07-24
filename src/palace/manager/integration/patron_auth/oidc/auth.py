@@ -50,7 +50,7 @@ class OIDCRefreshTokenError(OIDCAuthenticationError):
 class OIDCConnectionSettings(Protocol):
     """The connection attributes OIDCAuthenticationManager reads from its settings.
 
-    Read-only properties keep the contract structural: it is satisfied both by
+    Read-only properties keep the contract structural. It is satisfied both by
     the admin-configured OIDCAuthSettings model and by any plain object with
     these attributes (for example, a provider-specific configuration with
     fixed endpoints).
