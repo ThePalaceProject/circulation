@@ -12,7 +12,8 @@ This module provides the core OIDC authentication flow management including:
 from __future__ import annotations
 
 import json
-from typing import Any, cast
+from collections.abc import Sequence
+from typing import Any, Protocol, cast
 from urllib.parse import urlencode
 
 from pydantic import HttpUrl
@@ -21,9 +22,6 @@ from requests import RequestException
 from palace.util.exceptions import BasePalaceException
 from palace.util.log import LoggerMixin
 
-from palace.manager.integration.patron_auth.oidc.configuration.model import (
-    OIDCAuthSettings,
-)
 from palace.manager.integration.patron_auth.oidc.util import (
     OIDCDiscoveryError,
     OIDCUtility,
@@ -49,6 +47,62 @@ class OIDCRefreshTokenError(OIDCAuthenticationError):
     """Raised when token refresh fails."""
 
 
+class OIDCConnectionSettings(Protocol):
+    """The connection attributes OIDCAuthenticationManager reads from its settings.
+
+    Read-only properties keep the contract structural: it is satisfied both by
+    the admin-configured OIDCAuthSettings model and by any plain object with
+    these attributes (for example, a provider-specific configuration with
+    fixed endpoints).
+
+    Either ``issuer_url`` (discovery mode) or the individual endpoint fields
+    (manual mode) must be populated, matching the validation performed by
+    OIDCAuthSettings.
+    """
+
+    @property
+    def issuer_url(self) -> HttpUrl | None: ...
+
+    @property
+    def issuer(self) -> str | None: ...
+
+    @property
+    def authorization_endpoint(self) -> HttpUrl | None: ...
+
+    @property
+    def token_endpoint(self) -> HttpUrl | None: ...
+
+    @property
+    def jwks_uri(self) -> HttpUrl | None: ...
+
+    @property
+    def userinfo_endpoint(self) -> HttpUrl | None: ...
+
+    @property
+    def end_session_endpoint(self) -> HttpUrl | None: ...
+
+    @property
+    def revocation_endpoint(self) -> HttpUrl | None: ...
+
+    @property
+    def client_id(self) -> str: ...
+
+    @property
+    def client_secret(self) -> str: ...
+
+    @property
+    def scopes(self) -> Sequence[str]: ...
+
+    @property
+    def use_pkce(self) -> bool: ...
+
+    @property
+    def token_endpoint_auth_method(self) -> str: ...
+
+    @property
+    def access_type(self) -> str: ...
+
+
 class OIDCAuthenticationManager(LoggerMixin):
     """Manages OIDC authentication flow.
 
@@ -62,13 +116,13 @@ class OIDCAuthenticationManager(LoggerMixin):
 
     def __init__(
         self,
-        settings: OIDCAuthSettings,
+        settings: OIDCConnectionSettings,
         redis_client: Redis | None = None,
         secret_key: str | None = None,
     ):
         """Initialize OIDC authentication manager.
 
-        :param settings: OIDC authentication settings
+        :param settings: Connection settings for the OIDC provider
         :param redis_client: Optional Redis client for caching
         :param secret_key: Secret key for state generation (required for auth flow)
         """
@@ -78,6 +132,11 @@ class OIDCAuthenticationManager(LoggerMixin):
         self._utility = OIDCUtility(redis_client)
         self._validator = OIDCTokenValidator()
         self._metadata: dict[str, Any] | None = None
+
+    @property
+    def use_pkce(self) -> bool:
+        """Whether the authorization flow should use PKCE."""
+        return self._settings.use_pkce
 
     def _extract_error_detail_from_response(
         self, exception: RequestNetworkException
