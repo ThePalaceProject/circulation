@@ -7,10 +7,11 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Generator, Sequence
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 from flask import url_for
 from flask_babel import lazy_gettext as _
+from pydantic import HttpUrl
 from sqlalchemy.orm import Session
 from werkzeug.datastructures import Authorization
 
@@ -155,6 +156,119 @@ def evaluate_patron_filters(
         raise ProblemDetailException(problem_detail=OIDC_NO_ACCESS_ERROR)
 
 
+class OIDCAuthLinkSettings(Protocol):
+    """Display attributes for the authenticate link in an authentication document."""
+
+    @property
+    def auth_link_display_name(self) -> str | None: ...
+
+    @property
+    def auth_link_description(self) -> str | None: ...
+
+    @property
+    def auth_link_logo_url(self) -> HttpUrl | None: ...
+
+    @property
+    def auth_link_information_url(self) -> HttpUrl | None: ...
+
+    @property
+    def auth_link_privacy_statement_url(self) -> HttpUrl | None: ...
+
+
+def build_authenticate_link(
+    settings: OIDCAuthLinkSettings, label: str, authenticate_url: str
+) -> AuthenticateLink:
+    """Build an authentication link for an authentication entry.
+
+    :param settings: Display attributes for the link
+    :param label: Provider label, used when no display name is configured
+    :param authenticate_url: URL the client follows to start authentication
+    """
+    display_name = settings.auth_link_display_name or label
+    description = settings.auth_link_description or display_name
+
+    information_urls: list[LocalizedValue] = []
+    if settings.auth_link_information_url:
+        information_urls = [
+            LocalizedValue(value=str(settings.auth_link_information_url), language="en")
+        ]
+    privacy_statement_urls: list[LocalizedValue] = []
+    if settings.auth_link_privacy_statement_url:
+        privacy_statement_urls = [
+            LocalizedValue(
+                value=str(settings.auth_link_privacy_statement_url),
+                language="en",
+            )
+        ]
+    logo_urls: list[LocalizedValue] = []
+    if settings.auth_link_logo_url:
+        logo_urls = [
+            LocalizedValue(value=str(settings.auth_link_logo_url), language="en")
+        ]
+
+    return AuthenticateLink(
+        rel="authenticate",
+        href=authenticate_url,
+        display_names=[LocalizedValue(value=display_name, language="en")],
+        descriptions=[LocalizedValue(value=description, language="en")],
+        information_urls=information_urls,
+        privacy_statement_urls=privacy_statement_urls,
+        logo_urls=logo_urls,
+    )
+
+
+def build_oidc_authentication_document(
+    settings: OIDCAuthLinkSettings,
+    *,
+    flow_type: str,
+    label: str,
+    library_short_name: str,
+    supports_logout: bool,
+) -> PalaceAuthentication:
+    """Build an `authentication` entry suitable for an authentication document.
+
+    The authenticate and logout links point at the shared OIDC routes, which
+    dispatch to the right provider by its label. Any provider registered on
+    the OIDC path can therefore use this builder, passing its own flow type
+    and label and omitting the logout link when logout is unsupported.
+
+    :param settings: Display attributes for the authenticate link
+    :param flow_type: Authentication flow type URI advertised to clients
+    :param label: Provider label, used for route dispatch and as the description
+    :param library_short_name: Library the entry is generated for
+    :param supports_logout: Whether to include a templated logout link
+    :return: Authentication entry
+    """
+    authenticate_url = url_for(
+        "oidc_authenticate",
+        _external=True,
+        library_short_name=library_short_name,
+        provider=label,
+    )
+    links: list[Link] = [build_authenticate_link(settings, label, authenticate_url)]
+
+    if supports_logout:
+        logout_url = url_for(
+            "oidc_logout",
+            _external=True,
+            library_short_name=library_short_name,
+            provider=label,
+        )
+        links.append(
+            Link(
+                rel="logout",
+                href=f"{logout_url}{{&{LOGOUT_REDIRECT_QUERY_PARAM}}}",
+                templated=True,
+            )
+        )
+
+    return PalaceAuthentication(
+        type=flow_type,
+        description=label,
+        links=links,
+    )
+
+
 class OIDCAuthenticationProvider(
     BaseOIDCAuthenticationProvider[OIDCAuthSettings, OIDCAuthLibrarySettings]
 ):
@@ -235,44 +349,6 @@ class OIDCAuthenticationProvider(
             return auth.token
         return None
 
-    def _create_authentication_link(self, authenticate_url: str) -> AuthenticateLink:
-        """Build an authentication link for an authentication entry."""
-        display_name = self._settings.auth_link_display_name or self.label()
-        description = self._settings.auth_link_description or display_name
-
-        information_urls: list[LocalizedValue] = []
-        if self._settings.auth_link_information_url:
-            information_urls = [
-                LocalizedValue(
-                    value=str(self._settings.auth_link_information_url), language="en"
-                )
-            ]
-        privacy_statement_urls: list[LocalizedValue] = []
-        if self._settings.auth_link_privacy_statement_url:
-            privacy_statement_urls = [
-                LocalizedValue(
-                    value=str(self._settings.auth_link_privacy_statement_url),
-                    language="en",
-                )
-            ]
-        logo_urls: list[LocalizedValue] = []
-        if self._settings.auth_link_logo_url:
-            logo_urls = [
-                LocalizedValue(
-                    value=str(self._settings.auth_link_logo_url), language="en"
-                )
-            ]
-
-        return AuthenticateLink(
-            rel="authenticate",
-            href=authenticate_url,
-            display_names=[LocalizedValue(value=display_name, language="en")],
-            descriptions=[LocalizedValue(value=description, language="en")],
-            information_urls=information_urls,
-            privacy_statement_urls=privacy_statement_urls,
-            logo_urls=logo_urls,
-        )
-
     def _authentication_flow_document(self, db: Session) -> PalaceAuthentication:
         """Build an `authentication` entry suitable for an authentication document.
 
@@ -283,34 +359,12 @@ class OIDCAuthenticationProvider(
         if not library:
             raise PalaceValueError("Library not found")
 
-        authenticate_url = url_for(
-            "oidc_authenticate",
-            _external=True,
+        return build_oidc_authentication_document(
+            self._settings,
+            flow_type=self.flow_type,
+            label=self.label(),
             library_short_name=library.short_name,
-            provider=self.label(),
-        )
-        links: list[Link] = [self._create_authentication_link(authenticate_url)]
-
-        auth_manager = self.get_authentication_manager()
-        if auth_manager.supports_logout():
-            logout_url = url_for(
-                "oidc_logout",
-                _external=True,
-                library_short_name=library.short_name,
-                provider=self.label(),
-            )
-            links.append(
-                Link(
-                    rel="logout",
-                    href=f"{logout_url}{{&{LOGOUT_REDIRECT_QUERY_PARAM}}}",
-                    templated=True,
-                )
-            )
-
-        return PalaceAuthentication(
-            type=self.flow_type,
-            description=self.label(),
-            links=links,
+            supports_logout=self.get_authentication_manager().supports_logout(),
         )
 
     def _run_self_tests(self, db: Session) -> Generator[SelfTestResult]:
