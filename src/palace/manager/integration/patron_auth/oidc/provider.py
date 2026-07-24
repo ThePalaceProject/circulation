@@ -5,7 +5,8 @@ This module provides the OIDC authentication provider implementation for patron 
 
 from __future__ import annotations
 
-from collections.abc import Generator
+import logging
+from collections.abc import Generator, Sequence
 from typing import TYPE_CHECKING, Any
 
 from flask import url_for
@@ -37,6 +38,7 @@ from palace.manager.integration.patron_auth.oidc.util import (
 )
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.credential import Credential
+from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.filter import FilterExpression, FilterExpressionError
 from palace.manager.util.problem_detail import (
@@ -86,6 +88,71 @@ OIDC_FILTER_EVALUATION_ERROR = pd(
     title=_("Filter expression error."),
     detail=_("OIDC patron filter expression could not be evaluated."),
 )
+
+
+def evaluate_patron_filters(
+    expressions: Sequence[tuple[str, str]],
+    context: dict[str, Any],
+    *,
+    library: Library,
+    claim_names: Sequence[str],
+    log: logging.Logger | logging.LoggerAdapter[logging.Logger],
+) -> None:
+    """Evaluate labeled filter expressions as an authorization check.
+
+    Every expression must evaluate to True for access to be granted. All
+    expressions are always evaluated so that a single log entry can report
+    every failing level at once. Callers assemble the evaluation context,
+    which lets providers expose whatever data their filters operate on.
+
+    :param expressions: (label, expression) pairs to evaluate
+    :param context: Evaluation context passed to each expression
+    :param library: Library the patron is authenticating against (for logging)
+    :param claim_names: Claim names included in denial log entries
+    :param log: Logger to record evaluation results with
+    :raises ProblemDetailException: if the patron is denied access or an expression errors
+    """
+    failing: list[str] = []
+    eval_errors: list[FilterExpressionError] = []
+    for label, expression in expressions:
+        try:
+            result = FilterExpression(expression).evaluate(context)
+        except FilterExpressionError as exc:
+            log.error(
+                "Filter [%s] evaluation error for library %s (%s): %s",
+                label,
+                library.name,
+                library.short_name,
+                exc,
+            )
+            failing.append(label)
+            eval_errors.append(exc)
+            continue
+        log.info(
+            "Filter [%s] %s for library %s (%s)",
+            label,
+            "passed" if result else "failed",
+            library.name,
+            library.short_name,
+        )
+        if not result:
+            failing.append(label)
+
+    if failing:
+        log.warning(
+            "Access denied for library %s (%s): filter(s) failed: %s; claim names=%s",
+            library.name,
+            library.short_name,
+            ", ".join(failing),
+            claim_names,
+        )
+        if eval_errors:
+            raise ProblemDetailException(
+                problem_detail=OIDC_FILTER_EVALUATION_ERROR.detailed(
+                    "; ".join(str(e) for e in eval_errors)
+                )
+            ) from eval_errors[0]
+        raise ProblemDetailException(problem_detail=OIDC_NO_ACCESS_ERROR)
 
 
 class OIDCAuthenticationProvider(
@@ -425,47 +492,13 @@ class OIDCAuthenticationProvider(
             },
         }
 
-        failing: list[str] = []
-        eval_errors: list[FilterExpressionError] = []
-        for label, expression in labeled_expressions:
-            try:
-                result = FilterExpression(expression).evaluate(context)
-            except FilterExpressionError as exc:
-                self.log.error(
-                    "Filter [%s] evaluation error for library %s (%s): %s",
-                    label,
-                    library.name,
-                    library.short_name,
-                    exc,
-                )
-                failing.append(label)
-                eval_errors.append(exc)
-                continue
-            self.log.info(
-                "Filter [%s] %s for library %s (%s)",
-                label,
-                "passed" if result else "failed",
-                library.name,
-                library.short_name,
-            )
-            if not result:
-                failing.append(label)
-
-        if failing:
-            self.log.warning(
-                "Access denied for library %s (%s): filter(s) failed: %s; claim names=%s",
-                library.name,
-                library.short_name,
-                ", ".join(failing),
-                id_token_claim_names,
-            )
-            if eval_errors:
-                raise ProblemDetailException(
-                    problem_detail=OIDC_FILTER_EVALUATION_ERROR.detailed(
-                        "; ".join(str(e) for e in eval_errors)
-                    )
-                ) from eval_errors[0]
-            raise ProblemDetailException(problem_detail=OIDC_NO_ACCESS_ERROR)
+        evaluate_patron_filters(
+            labeled_expressions,
+            context,
+            library=library,
+            claim_names=id_token_claim_names,
+            log=self.log,
+        )
 
     def oidc_callback(
         self,

@@ -28,6 +28,7 @@ from palace.manager.integration.patron_auth.oidc.provider import (
     OIDC_NO_ACCESS_ERROR,
     OIDC_TOKEN_EXPIRED,
     OIDCAuthenticationProvider,
+    evaluate_patron_filters,
 )
 from palace.manager.integration.patron_auth.oidc.util import (
     OIDCDiscoveryError,
@@ -779,6 +780,58 @@ class TestOIDCAuthenticationProvider:
         detail = str(exc_info.value.problem_detail.detail)
         assert "; " in detail
         assert len([r for r in caplog.records if r.levelno == logging.ERROR]) == 2
+
+    @pytest.mark.parametrize(
+        "expressions,expected_uri",
+        [
+            pytest.param(
+                [("integration", "claims['role'] == 'student'")],
+                None,
+                id="passing-expression",
+            ),
+            pytest.param(
+                [
+                    ("integration", "claims['role'] == 'student'"),
+                    ("library", "claims['role'] == 'teacher'"),
+                ],
+                OIDC_NO_ACCESS_ERROR.uri,
+                id="failing-expression",
+            ),
+            pytest.param(
+                [("integration", "claims.no_such_attr == 'x'")],
+                OIDC_FILTER_EVALUATION_ERROR.uri,
+                id="evaluation-error",
+            ),
+        ],
+    )
+    def test_evaluate_patron_filters(
+        self,
+        db: DatabaseTransactionFixture,
+        expressions: list[tuple[str, str]],
+        expected_uri: str | None,
+    ) -> None:
+        """evaluate_patron_filters grants access only when every expression passes."""
+        claims = {"role": "student"}
+        context = {"claims": claims}
+        library = db.default_library()
+
+        context_manager = (
+            pytest.raises(ProblemDetailException)
+            if expected_uri is not None
+            else nullcontext()
+        )
+        with context_manager as exc_info:
+            evaluate_patron_filters(
+                expressions,
+                context,
+                library=library,
+                claim_names=list(claims.keys()),
+                log=logging.getLogger(__name__),
+            )
+
+        if expected_uri is not None:
+            assert exc_info is not None
+            assert exc_info.value.problem_detail.uri == expected_uri
 
     def test_filter_claims_library_not_found(
         self,
