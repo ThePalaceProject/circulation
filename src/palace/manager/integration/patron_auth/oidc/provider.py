@@ -136,6 +136,16 @@ class OIDCAuthenticationProvider(
         """Indicate whether this provider identifies individual patrons."""
         return True
 
+    @property
+    def patron_id_claim(self) -> str:
+        """Name of the ID token claim used to identify the patron."""
+        return self._settings.patron_id_claim
+
+    @property
+    def credential_manager(self) -> OIDCCredentialManager:
+        """Credential manager storing this provider's tokens."""
+        return self._credential_manager
+
     @classmethod
     def settings_class(cls) -> type[OIDCAuthSettings]:
         """Return the settings class for this provider."""

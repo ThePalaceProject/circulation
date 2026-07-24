@@ -247,7 +247,7 @@ class OIDCController(LoggerMixin):
         }
 
         code_challenge = None
-        if provider._settings.use_pkce:
+        if authentication_manager.use_pkce:
             code_verifier, code_challenge = utility.generate_pkce()
             state_data["code_verifier"] = code_verifier
 
@@ -436,7 +436,7 @@ class OIDCController(LoggerMixin):
         if isinstance(provider, ProblemDetail):
             return provider
 
-        auth_manager = provider.get_authentication_manager()  # type: ignore[attr-defined]
+        auth_manager = provider.get_authentication_manager()
 
         # The bearer token's payload IS the credential JSON — parse it directly.
         # This avoids a DB lookup that would fail after token refresh (the credential
@@ -448,7 +448,7 @@ class OIDCController(LoggerMixin):
             return OIDC_INVALID_REQUEST.detailed(_("Invalid credential data"))
 
         id_token_claims = token_data["id_token_claims"]
-        patron_identifier = id_token_claims.get(provider._settings.patron_id_claim)  # type: ignore[attr-defined]
+        patron_identifier = id_token_claims.get(provider.patron_id_claim)
 
         # Best-effort: revoke access and refresh tokens to prevent silent re-authentication
         # at the IdP after local CM logout. revoke_token suppresses all errors internally.
@@ -464,7 +464,7 @@ class OIDCController(LoggerMixin):
 
         # Invalidate our local patron credentials.
         try:
-            credential_manager = provider._credential_manager  # type: ignore[attr-defined]
+            credential_manager = provider.credential_manager
             patron = credential_manager.lookup_patron_by_identifier(
                 db, patron_identifier, library.id
             )
@@ -615,23 +615,19 @@ class OIDCController(LoggerMixin):
                     continue
 
                 try:
-                    auth_manager = provider._authentication_manager_factory.create(  # type: ignore[attr-defined]
-                        provider._settings  # type: ignore[attr-defined]
-                    )
+                    auth_manager = provider.get_authentication_manager()
 
                     # Try to validate the logout token with this provider
                     claims = auth_manager.validate_logout_token(logout_token)
 
                     # Successfully validated - get patron identifier
-                    patron_identifier = claims.get(
-                        provider._settings.patron_id_claim  # type: ignore[attr-defined]
-                    )
+                    patron_identifier = claims.get(provider.patron_id_claim)
                     if not patron_identifier:
                         self.log.warning("Logout token missing patron identifier claim")
                         return "", 400
 
                     # Invalidate patron credentials
-                    credential_manager = provider._credential_manager  # type: ignore[attr-defined]
+                    credential_manager = provider.credential_manager
                     patron = credential_manager.lookup_patron_by_identifier(
                         db, patron_identifier, provider.library_id
                     )
