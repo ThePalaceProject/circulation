@@ -661,17 +661,20 @@ class OIDCController(LoggerMixin):
                                 db, patron.id
                             )
                             self.log.info(
-                                f"Back-channel logout: invalidated credentials for patron {patron_identifier}"
+                                "Back-channel logout: invalidated credentials for patron "
+                                f"{patron_identifier} in library {provider.library_id}"
                             )
                         else:
                             self.log.warning(
-                                f"Back-channel logout: patron not found for identifier {patron_identifier}"
+                                "Back-channel logout: patron not found for identifier "
+                                f"{patron_identifier} in library {provider.library_id}"
                             )
 
                     processed = True
                 except SQLAlchemyError:
                     self.log.exception(
-                        f"Back-channel logout failed for provider {provider.label()}"
+                        f"Back-channel logout failed for provider {provider.label()} "
+                        f"in library {provider.library_id}"
                     )
                     failed = True
 
