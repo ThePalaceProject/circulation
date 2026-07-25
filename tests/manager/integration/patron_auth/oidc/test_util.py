@@ -352,6 +352,16 @@ class TestOIDCUtilityDiscovery:
                 assert result == mock_discovery_document
                 mock_get.assert_called_once()
 
+    def test_store_in_cache_without_redis_is_noop(self):
+        """Storing is silently skipped when no Redis client is configured.
+
+        The public callers never reach this branch (they only pass a cache
+        key obtained with Redis present), so exercise the guard directly.
+        """
+        utility = OIDCUtility(redis_client=None)
+
+        utility._store_in_cache("some-key", {"a": 1}, ttl=60)
+
 
 class TestOIDCUtilityJWKS:
     """Tests for JWKS fetching."""
