@@ -992,10 +992,16 @@ class BaseOIDCAuthenticationProvider[
     def flow_type(self) -> str:
         return "http://palaceproject.io/authtype/OpenIDConnect"
 
-    @property
     @abstractmethod
-    def patron_id_claim(self) -> str:
-        """Name of the ID token claim used to identify the patron."""
+    def extract_patron_identifier(self, id_token_claims: dict[str, Any]) -> str | None:
+        """Extract the patron identifier from validated token claims.
+
+        Must apply the same extraction used at login, so that logout
+        lookups match the stored authorization identifier.
+
+        :param id_token_claims: Validated token claims
+        :return: Patron identifier, or None if it cannot be determined
+        """
 
     @property
     @abstractmethod

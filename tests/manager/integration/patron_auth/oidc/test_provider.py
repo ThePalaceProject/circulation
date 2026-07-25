@@ -67,6 +67,43 @@ class TestOIDCAuthenticationProvider:
     def test_patron_id_claim(self, oidc_provider: OIDCAuthenticationProvider) -> None:
         assert oidc_provider.patron_id_claim == oidc_provider._settings.patron_id_claim
 
+    @pytest.mark.parametrize(
+        "claims,patron_id_regex,expected",
+        [
+            pytest.param({"sub": "user123"}, None, "user123", id="plain-claim"),
+            pytest.param(
+                {"sub": "jdoe@example.edu"},
+                r"(?P<patron_id>[^@]+)@example\.edu",
+                "jdoe",
+                id="regex-extraction",
+            ),
+            pytest.param(
+                {"sub": "jdoe@other.edu"},
+                r"(?P<patron_id>[^@]+)@example\.edu",
+                None,
+                id="regex-no-match",
+            ),
+            pytest.param({"email": "x@y.z"}, None, None, id="missing-claim"),
+        ],
+    )
+    def test_extract_patron_identifier(
+        self,
+        create_oidc_settings: Callable[..., OIDCAuthSettings],
+        create_oidc_provider: Callable[..., OIDCAuthenticationProvider],
+        claims: dict[str, Any],
+        patron_id_regex: str | None,
+        expected: str | None,
+    ) -> None:
+        """The extraction applies the same claim and optional regex used at login."""
+        settings_kwargs: dict[str, Any] = {}
+        if patron_id_regex is not None:
+            settings_kwargs["patron_id_regular_expression"] = patron_id_regex
+        provider = create_oidc_provider(
+            settings=create_oidc_settings(**settings_kwargs)
+        )
+
+        assert provider.extract_patron_identifier(claims) == expected
+
     def test_credential_manager(
         self, oidc_provider: OIDCAuthenticationProvider
     ) -> None:

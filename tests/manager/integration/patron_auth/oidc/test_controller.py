@@ -51,11 +51,12 @@ def create_mock_oidc_provider(
     The provider is specced against BaseOIDCAuthenticationProvider, so
     isinstance checks pass and reads of attributes outside the provider
     contract fail. It satisfies the public contract the controller consumes:
-    ``patron_id_claim``, ``credential_manager``, and
+    ``extract_patron_identifier``, ``credential_manager``, and
     ``get_authentication_manager``. Tests configure the returned
     authentication manager and the provider's credential manager as needed.
 
-    :param patron_id_claim: Name of the ID token claim identifying the patron
+    :param patron_id_claim: Name of the token claim the provider's
+        ``extract_patron_identifier`` reads the identifier from
     :param label: Return value of the provider's label(), when given
     :param integration_id: Integration the provider belongs to. Providers
         sharing an integration share one logout token validation, so pass
@@ -65,7 +66,9 @@ def create_mock_oidc_provider(
     :return: 2-tuple (provider, authentication manager)
     """
     provider = Mock(spec=BaseOIDCAuthenticationProvider)
-    provider.patron_id_claim = patron_id_claim
+    provider.extract_patron_identifier.side_effect = lambda claims: claims.get(
+        patron_id_claim
+    )
     provider.integration_id = integration_id
     provider.credential_manager = Mock(spec=OIDCCredentialManager)
     if label is not None:
@@ -2131,7 +2134,6 @@ class TestOIDCControllerBackChannelLogout:
         provider_b, auth_manager_b = create_mock_oidc_provider(
             label="Test OIDC", library_id=2
         )
-        auth_manager_b.validate_logout_token.return_value = claims
         provider_b.credential_manager.lookup_patron_by_identifier.side_effect = (
             SQLAlchemyError("connection blip")
         )
@@ -2156,3 +2158,56 @@ class TestOIDCControllerBackChannelLogout:
         assert body == ""
         provider_a.credential_manager.invalidate_patron_credentials.assert_called_once()
         provider_b.credential_manager.invalidate_patron_credentials.assert_not_called()
+        # Provider B shares provider A's integration, so its claims come
+        # from the cache and its auth manager never validates the token.
+        auth_manager_b.validate_logout_token.assert_not_called()
+
+    def test_oidc_backchannel_logout_second_integration_validates(
+        self, backchannel_controller, db
+    ):
+        """The sweep keeps trying distinct integrations after a rejection.
+
+        The first integration rejects the token; the second validates it
+        and must still complete the logout.
+        """
+        claims = {
+            "sub": "user123@example.com",
+            "iss": "https://oidc.provider.test",
+            "aud": "test-client-id",
+            "iat": 1234567890,
+            "jti": "unique-token-id",
+            "events": {"http://schemas.openid.net/event/backchannel-logout": {}},
+        }
+
+        provider_a, auth_manager_a = create_mock_oidc_provider(
+            label="Test OIDC 1", integration_id=1, library_id=1
+        )
+        auth_manager_a.validate_logout_token.side_effect = Exception(
+            "Provider 1 cannot validate"
+        )
+
+        provider_b, auth_manager_b = create_mock_oidc_provider(
+            label="Test OIDC 2", integration_id=2, library_id=2
+        )
+        auth_manager_b.validate_logout_token.return_value = claims
+        provider_b.credential_manager.lookup_patron_by_identifier.return_value = Mock(
+            id=1
+        )
+
+        mock_library_auth = Mock()
+        mock_library_auth.providers = [provider_a, provider_b]
+        backchannel_controller._authenticator.library_authenticators["test-library"] = (
+            mock_library_auth
+        )
+
+        form_data = {"logout_token": "test.logout.token"}
+
+        body, status = backchannel_controller.oidc_backchannel_logout(
+            form_data, db.session
+        )
+
+        assert status == 200
+        assert body == ""
+        auth_manager_a.validate_logout_token.assert_called_once()
+        provider_a.credential_manager.invalidate_patron_credentials.assert_not_called()
+        provider_b.credential_manager.invalidate_patron_credentials.assert_called_once()

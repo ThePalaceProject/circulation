@@ -448,7 +448,7 @@ class OIDCController(LoggerMixin):
             return OIDC_INVALID_REQUEST.detailed(_("Invalid credential data"))
 
         id_token_claims = token_data["id_token_claims"]
-        patron_identifier = id_token_claims.get(provider.patron_id_claim)
+        patron_identifier = provider.extract_patron_identifier(id_token_claims)
 
         # Best-effort: revoke access and refresh tokens to prevent silent re-authentication
         # at the IdP after local CM logout. revoke_token suppresses all errors internally.
@@ -639,7 +639,7 @@ class OIDCController(LoggerMixin):
                 if claims is None:
                     continue
 
-                patron_identifier = claims.get(provider.patron_id_claim)
+                patron_identifier = provider.extract_patron_identifier(claims)
                 if not patron_identifier:
                     self.log.warning("Logout token missing patron identifier claim")
                     continue
@@ -664,7 +664,7 @@ class OIDCController(LoggerMixin):
                         )
 
                     processed = True
-                except Exception:
+                except SQLAlchemyError:
                     self.log.exception(
                         f"Back-channel logout failed for provider {provider.label()}"
                     )

@@ -432,14 +432,15 @@ class OIDCAuthenticationProvider(
         self._auth_manager = manager
         return self._auth_manager
 
-    def remote_patron_lookup_from_oidc_claims(
-        self, id_token_claims: dict[str, Any]
-    ) -> PatronData:
-        """Create PatronData from ID token claims.
+    def extract_patron_identifier(self, id_token_claims: dict[str, Any]) -> str | None:
+        """Extract the patron identifier from validated token claims.
 
-        :param id_token_claims: Validated ID token claims
-        :return: PatronData object
-        :raises: ProblemDetailException if patron cannot be determined
+        Applies the configured patron ID claim and optional extraction
+        regular expression. Logout paths use this so their patron lookups
+        match the identifier stored at login.
+
+        :param id_token_claims: Validated token claims
+        :return: Patron identifier, or None if it cannot be determined
         """
         patron_id_claim = self.patron_id_claim
         id_token_claim_names = list(id_token_claims.keys())
@@ -451,7 +452,7 @@ class OIDCAuthenticationProvider(
                 patron_id_claim,
                 id_token_claim_names,
             )
-            raise ProblemDetailException(problem_detail=OIDC_CANNOT_DETERMINE_PATRON)
+            return None
 
         if self._settings.patron_id_regular_expression:
             match = self._settings.patron_id_regular_expression.match(
@@ -464,9 +465,7 @@ class OIDCAuthenticationProvider(
                     raw_patron_id,
                     patron_id_claim,
                 )
-                raise ProblemDetailException(
-                    problem_detail=OIDC_CANNOT_DETERMINE_PATRON
-                )
+                return None
             patron_id = match.group("patron_id")
         else:
             patron_id = str(raw_patron_id)
@@ -477,6 +476,21 @@ class OIDCAuthenticationProvider(
             patron_id_claim,
             id_token_claim_names,
         )
+        return patron_id
+
+    def remote_patron_lookup_from_oidc_claims(
+        self, id_token_claims: dict[str, Any]
+    ) -> PatronData:
+        """Create PatronData from ID token claims.
+
+        :param id_token_claims: Validated ID token claims
+        :return: PatronData object
+        :raises: ProblemDetailException if patron cannot be determined
+        """
+        patron_id = self.extract_patron_identifier(id_token_claims)
+        if patron_id is None:
+            raise ProblemDetailException(problem_detail=OIDC_CANNOT_DETERMINE_PATRON)
+
         return PatronData(
             permanent_id=patron_id,
             authorization_identifier=patron_id,
