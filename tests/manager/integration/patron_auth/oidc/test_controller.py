@@ -35,7 +35,7 @@ from tests.fixtures.database import DatabaseTransactionFixture
 
 def create_mock_oidc_provider(
     *,
-    spec: bool = False,
+    spec: bool = True,
     patron_id_claim: str = "sub",
     label: str | None = None,
     **attrs: Any,
@@ -48,7 +48,8 @@ def create_mock_oidc_provider(
     authentication manager and the provider's credential manager as needed.
 
     :param spec: Spec the mock against BaseOIDCAuthenticationProvider so that
-        isinstance checks pass
+        isinstance checks pass and reads of attributes outside the provider
+        contract fail. Pass False only when a bare Mock is required.
     :param patron_id_claim: Name of the ID token claim identifying the patron
     :param label: Return value of the provider's label(), when given
     :param attrs: Additional attributes to set on the provider

@@ -18,8 +18,6 @@ from pydantic import (
 )
 from pydantic_core.core_schema import ValidationInfo
 
-from palace.util.log import LoggerMixin
-
 from palace.manager.api.admin.problem_details import (
     INCOMPLETE_CONFIGURATION,
     INVALID_CONFIGURATION_OPTION,
@@ -247,7 +245,7 @@ AuthLinkPrivacyStatementUrlSetting = Annotated[
 ]
 
 
-class OIDCAuthSettings(AuthProviderSettings, LoggerMixin):
+class OIDCAuthSettings(AuthProviderSettings):
     """OIDC Authentication Provider Settings.
 
     Configures OpenID Connect (OIDC) authentication for patron authentication.
