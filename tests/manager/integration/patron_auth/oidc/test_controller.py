@@ -9,6 +9,8 @@ import jwt
 import pytest
 from sqlalchemy.exc import SQLAlchemyError
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.api.authentication.base import PatronData
 from palace.manager.api.authenticator import BaseOIDCAuthenticationProvider
 from palace.manager.api.problem_details import LIBRARY_NOT_FOUND, UNKNOWN_OIDC_PROVIDER
@@ -2112,7 +2114,9 @@ class TestOIDCControllerBackChannelLogout:
 
         The IdP treats 200 as final, so reporting success while one
         library's sessions survive would leave them stranded. A 400 lets
-        the IdP retry the logout.
+        the IdP retry the logout. Library A uses a real credential so the
+        test also proves the failing library's rollback does not discard
+        library A's completed invalidation.
         """
         claims = {
             "sub": "user123@example.com",
@@ -2123,13 +2127,26 @@ class TestOIDCControllerBackChannelLogout:
             "events": {"http://schemas.openid.net/event/backchannel-logout": {}},
         }
 
+        # Library A: a real patron and credential behind a real manager.
+        patron = db.patron()
+        patron.authorization_identifier = "user123@example.com"
+        credential_manager = OIDCCredentialManager()
+        credential = credential_manager.create_oidc_token(
+            db.session,
+            patron,
+            claims,
+            "access-token",
+            expires_in=3600,
+        )
+        db.session.flush()
+        assert credential.expires is not None
+        assert credential.expires > utc_now()
+
         provider_a, auth_manager_a = create_mock_oidc_provider(
-            label="Test OIDC", library_id=1
+            label="Test OIDC", library_id=patron.library_id
         )
         auth_manager_a.validate_logout_token.return_value = claims
-        provider_a.credential_manager.lookup_patron_by_identifier.return_value = Mock(
-            id=1
-        )
+        provider_a.credential_manager = credential_manager
 
         provider_b, auth_manager_b = create_mock_oidc_provider(
             label="Test OIDC", library_id=2
@@ -2156,7 +2173,9 @@ class TestOIDCControllerBackChannelLogout:
 
         assert status == 400
         assert body == ""
-        provider_a.credential_manager.invalidate_patron_credentials.assert_called_once()
+
+        # Library A's invalidation survived library B's failure.
+        assert credential.expires <= utc_now()
         provider_b.credential_manager.invalidate_patron_credentials.assert_not_called()
         # Provider B shares provider A's integration, so its claims come
         # from the cache and its auth manager never validates the token.

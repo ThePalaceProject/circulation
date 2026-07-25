@@ -646,22 +646,27 @@ class OIDCController(LoggerMixin):
 
                 # Invalidate patron credentials. Failures here must not be
                 # mistaken for validation failures: they mark the whole
-                # request failed so the IdP gets a 400 it can retry.
+                # request failed so the IdP gets a 400 it can retry. The
+                # savepoint scopes the rollback to the failing provider,
+                # so completed invalidations for other libraries survive.
                 try:
-                    credential_manager = provider.credential_manager
-                    patron = credential_manager.lookup_patron_by_identifier(
-                        db, patron_identifier, provider.library_id
-                    )
+                    with db.begin_nested():
+                        credential_manager = provider.credential_manager
+                        patron = credential_manager.lookup_patron_by_identifier(
+                            db, patron_identifier, provider.library_id
+                        )
 
-                    if patron:
-                        credential_manager.invalidate_patron_credentials(db, patron.id)
-                        self.log.info(
-                            f"Back-channel logout: invalidated credentials for patron {patron_identifier}"
-                        )
-                    else:
-                        self.log.warning(
-                            f"Back-channel logout: patron not found for identifier {patron_identifier}"
-                        )
+                        if patron:
+                            credential_manager.invalidate_patron_credentials(
+                                db, patron.id
+                            )
+                            self.log.info(
+                                f"Back-channel logout: invalidated credentials for patron {patron_identifier}"
+                            )
+                        else:
+                            self.log.warning(
+                                f"Back-channel logout: patron not found for identifier {patron_identifier}"
+                            )
 
                     processed = True
                 except SQLAlchemyError:
@@ -669,13 +674,12 @@ class OIDCController(LoggerMixin):
                         f"Back-channel logout failed for provider {provider.label()}"
                     )
                     failed = True
-                    # Recover the session so the remaining providers can be
-                    # processed and teardown does not commit a poisoned
-                    # session.
-                    db.rollback()
 
         if processed and not failed:
             return "", 200
 
-        self.log.error("Back-channel logout did not complete successfully")
+        if all(c is None for c in claims_by_integration.values()):
+            self.log.error("No OIDC provider could validate the logout token")
+        else:
+            self.log.error("Back-channel logout did not complete successfully")
         return "", 400
