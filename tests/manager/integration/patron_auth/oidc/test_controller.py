@@ -2181,6 +2181,63 @@ class TestOIDCControllerBackChannelLogout:
         # from the cache and its auth manager never validates the token.
         auth_manager_b.validate_logout_token.assert_not_called()
 
+    def test_oidc_backchannel_logout_sibling_recovers_after_transient_failure(
+        self, backchannel_controller, db
+    ):
+        """A transient validation failure must not poison sibling providers.
+
+        Sibling providers of one integration validate independently, so
+        when the first library's provider fails transiently, the second
+        library's provider must still get its chance to validate and
+        complete its logout.
+        """
+        claims = {
+            "sub": "user123@example.com",
+            "iss": "https://oidc.provider.test",
+            "aud": "test-client-id",
+            "iat": 1234567890,
+            "jti": "unique-token-id",
+            "events": {"http://schemas.openid.net/event/backchannel-logout": {}},
+        }
+
+        provider_a, auth_manager_a = create_mock_oidc_provider(
+            label="Test OIDC", library_id=1
+        )
+        auth_manager_a.validate_logout_token.side_effect = Exception(
+            "transient IdP blip"
+        )
+
+        provider_b, auth_manager_b = create_mock_oidc_provider(
+            label="Test OIDC", library_id=2
+        )
+        auth_manager_b.validate_logout_token.return_value = claims
+        provider_b.credential_manager.lookup_patron_by_identifier.return_value = Mock(
+            id=2
+        )
+
+        for library_key, mock_provider in [
+            ("lib-a", provider_a),
+            ("lib-b", provider_b),
+        ]:
+            mock_library_auth = Mock()
+            mock_library_auth.providers = [mock_provider]
+            backchannel_controller._authenticator.library_authenticators[
+                library_key
+            ] = mock_library_auth
+
+        form_data = {"logout_token": "test.logout.token"}
+
+        body, status = backchannel_controller.oidc_backchannel_logout(
+            form_data, db.session
+        )
+
+        assert status == 200
+        assert body == ""
+        auth_manager_a.validate_logout_token.assert_called_once()
+        auth_manager_b.validate_logout_token.assert_called_once()
+        provider_a.credential_manager.invalidate_patron_credentials.assert_not_called()
+        provider_b.credential_manager.invalidate_patron_credentials.assert_called_once()
+
     def test_oidc_backchannel_logout_second_integration_validates(
         self, backchannel_controller, db
     ):

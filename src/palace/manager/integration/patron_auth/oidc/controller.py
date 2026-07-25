@@ -609,9 +609,11 @@ class OIDCController(LoggerMixin):
         # libraries appears as a sibling provider in each library's
         # authenticator, and patron lookup is library-scoped, so stopping
         # at the first match would log the patron out of only one library.
-        # Sibling providers share one integration's settings, so the token
-        # is validated once per integration and the claims are reused.
-        claims_by_integration: dict[int, dict[str, Any] | None] = {}
+        # Sibling providers share one integration's settings, so once one
+        # of them validates the token the claims are reused. Only
+        # successes are cached: a transient failure for one library's
+        # provider must not prevent a sibling from validating.
+        claims_by_integration: dict[int, dict[str, Any]] = {}
         processed = False
         failed = False
         for (
@@ -623,9 +625,8 @@ class OIDCController(LoggerMixin):
                 if not isinstance(provider, BaseOIDCAuthenticationProvider):
                     continue
 
-                if provider.integration_id in claims_by_integration:
-                    claims = claims_by_integration[provider.integration_id]
-                else:
+                claims = claims_by_integration.get(provider.integration_id)
+                if claims is None:
                     try:
                         auth_manager = provider.get_authentication_manager()
                         claims = auth_manager.validate_logout_token(logout_token)
@@ -634,10 +635,8 @@ class OIDCController(LoggerMixin):
                         self.log.debug(
                             f"Provider {provider.label()} could not validate logout token: {e}"
                         )
-                        claims = None
+                        continue
                     claims_by_integration[provider.integration_id] = claims
-                if claims is None:
-                    continue
 
                 patron_identifier = provider.extract_patron_identifier(claims)
                 if not patron_identifier:
@@ -681,7 +680,7 @@ class OIDCController(LoggerMixin):
         if processed and not failed:
             return "", 200
 
-        if all(c is None for c in claims_by_integration.values()):
+        if not claims_by_integration:
             self.log.error("No OIDC provider could validate the logout token")
         else:
             self.log.error("Back-channel logout did not complete successfully")
