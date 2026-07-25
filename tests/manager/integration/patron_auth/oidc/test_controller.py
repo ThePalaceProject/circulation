@@ -43,6 +43,7 @@ def create_mock_oidc_provider(
     *,
     patron_id_claim: str = "sub",
     label: str | None = None,
+    integration_id: int = 1,
     **attrs: Any,
 ) -> tuple[Mock, Mock]:
     """Create a mock OIDC provider wired to a mock authentication manager.
@@ -56,12 +57,16 @@ def create_mock_oidc_provider(
 
     :param patron_id_claim: Name of the ID token claim identifying the patron
     :param label: Return value of the provider's label(), when given
+    :param integration_id: Integration the provider belongs to. Providers
+        sharing an integration share one logout token validation, so pass
+        distinct values when simulating distinct integrations.
     :param attrs: Additional attributes to set on the provider
-        (e.g., integration_id, library_id)
+        (e.g., library_id)
     :return: 2-tuple (provider, authentication manager)
     """
     provider = Mock(spec=BaseOIDCAuthenticationProvider)
     provider.patron_id_claim = patron_id_claim
+    provider.integration_id = integration_id
     provider.credential_manager = Mock(spec=OIDCCredentialManager)
     if label is not None:
         provider.label.return_value = label
@@ -2013,16 +2018,17 @@ class TestOIDCControllerBackChannelLogout:
         """Test back-channel logout when no provider can validate the token."""
         library = db.default_library()
 
-        # Create multiple OIDC providers that all reject the token
+        # Create multiple OIDC providers, from distinct integrations, that
+        # all reject the token.
         mock_provider1, mock_auth_manager1 = create_mock_oidc_provider(
-            label="Test OIDC 1"
+            label="Test OIDC 1", integration_id=1
         )
         mock_auth_manager1.validate_logout_token.side_effect = Exception(
             "Provider 1 cannot validate"
         )
 
         mock_provider2, mock_auth_manager2 = create_mock_oidc_provider(
-            label="Test OIDC 2"
+            label="Test OIDC 2", integration_id=2
         )
         mock_auth_manager2.validate_logout_token.side_effect = Exception(
             "Provider 2 cannot validate"
@@ -2062,6 +2068,7 @@ class TestOIDCControllerBackChannelLogout:
         }
 
         providers = []
+        auth_managers = []
         for index, library_key in enumerate(["lib-a", "lib-b"]):
             mock_provider, mock_auth_manager = create_mock_oidc_provider(
                 label="Test OIDC", library_id=index + 1
@@ -2071,6 +2078,7 @@ class TestOIDCControllerBackChannelLogout:
                 id=index + 1
             )
             providers.append(mock_provider)
+            auth_managers.append(mock_auth_manager)
 
             mock_library_auth = Mock()
             mock_library_auth.providers = [mock_provider]
@@ -2088,3 +2096,63 @@ class TestOIDCControllerBackChannelLogout:
         assert body == ""
         for mock_provider in providers:
             mock_provider.credential_manager.invalidate_patron_credentials.assert_called_once()
+
+        # Both providers share one integration, so the token is validated
+        # only once and the claims reused for the sibling.
+        auth_managers[0].validate_logout_token.assert_called_once()
+        auth_managers[1].validate_logout_token.assert_not_called()
+
+    def test_oidc_backchannel_logout_partial_failure_returns_400(
+        self, backchannel_controller, db
+    ):
+        """A failure during any library's invalidation must produce a 400.
+
+        The IdP treats 200 as final, so reporting success while one
+        library's sessions survive would leave them stranded. A 400 lets
+        the IdP retry the logout.
+        """
+        claims = {
+            "sub": "user123@example.com",
+            "iss": "https://oidc.provider.test",
+            "aud": "test-client-id",
+            "iat": 1234567890,
+            "jti": "unique-token-id",
+            "events": {"http://schemas.openid.net/event/backchannel-logout": {}},
+        }
+
+        provider_a, auth_manager_a = create_mock_oidc_provider(
+            label="Test OIDC", library_id=1
+        )
+        auth_manager_a.validate_logout_token.return_value = claims
+        provider_a.credential_manager.lookup_patron_by_identifier.return_value = Mock(
+            id=1
+        )
+
+        provider_b, auth_manager_b = create_mock_oidc_provider(
+            label="Test OIDC", library_id=2
+        )
+        auth_manager_b.validate_logout_token.return_value = claims
+        provider_b.credential_manager.lookup_patron_by_identifier.side_effect = (
+            SQLAlchemyError("connection blip")
+        )
+
+        for library_key, mock_provider in [
+            ("lib-a", provider_a),
+            ("lib-b", provider_b),
+        ]:
+            mock_library_auth = Mock()
+            mock_library_auth.providers = [mock_provider]
+            backchannel_controller._authenticator.library_authenticators[
+                library_key
+            ] = mock_library_auth
+
+        form_data = {"logout_token": "test.logout.token"}
+
+        body, status = backchannel_controller.oidc_backchannel_logout(
+            form_data, db.session
+        )
+
+        assert status == 400
+        assert body == ""
+        provider_a.credential_manager.invalidate_patron_credentials.assert_called_once()
+        provider_b.credential_manager.invalidate_patron_credentials.assert_not_called()

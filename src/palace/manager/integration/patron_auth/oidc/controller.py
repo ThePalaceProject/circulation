@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from urllib.parse import SplitResult, parse_qs, urlencode, urlsplit
 
 import jwt
@@ -609,7 +609,11 @@ class OIDCController(LoggerMixin):
         # libraries appears as a sibling provider in each library's
         # authenticator, and patron lookup is library-scoped, so stopping
         # at the first match would log the patron out of only one library.
+        # Sibling providers share one integration's settings, so the token
+        # is validated once per integration and the claims are reused.
+        claims_by_integration: dict[int, dict[str, Any] | None] = {}
         processed = False
+        failed = False
         for (
             library_authenticator
         ) in self._authenticator.library_authenticators.values():
@@ -619,19 +623,31 @@ class OIDCController(LoggerMixin):
                 if not isinstance(provider, BaseOIDCAuthenticationProvider):
                     continue
 
+                if provider.integration_id in claims_by_integration:
+                    claims = claims_by_integration[provider.integration_id]
+                else:
+                    try:
+                        auth_manager = provider.get_authentication_manager()
+                        claims = auth_manager.validate_logout_token(logout_token)
+                    except Exception as e:
+                        # This provider couldn't validate the token; try the next one.
+                        self.log.debug(
+                            f"Provider {provider.label()} could not validate logout token: {e}"
+                        )
+                        claims = None
+                    claims_by_integration[provider.integration_id] = claims
+                if claims is None:
+                    continue
+
+                patron_identifier = claims.get(provider.patron_id_claim)
+                if not patron_identifier:
+                    self.log.warning("Logout token missing patron identifier claim")
+                    continue
+
+                # Invalidate patron credentials. Failures here must not be
+                # mistaken for validation failures: they mark the whole
+                # request failed so the IdP gets a 400 it can retry.
                 try:
-                    auth_manager = provider.get_authentication_manager()
-
-                    # Try to validate the logout token with this provider
-                    claims = auth_manager.validate_logout_token(logout_token)
-
-                    # Successfully validated - get patron identifier
-                    patron_identifier = claims.get(provider.patron_id_claim)
-                    if not patron_identifier:
-                        self.log.warning("Logout token missing patron identifier claim")
-                        continue
-
-                    # Invalidate patron credentials
                     credential_manager = provider.credential_manager
                     patron = credential_manager.lookup_patron_by_identifier(
                         db, patron_identifier, provider.library_id
@@ -647,21 +663,19 @@ class OIDCController(LoggerMixin):
                             f"Back-channel logout: patron not found for identifier {patron_identifier}"
                         )
 
-                    # Only count this provider once invalidation has actually
-                    # run: a failure above must fall through to the 400 the
-                    # IdP can retry, not report success.
                     processed = True
-
-                except Exception as e:
-                    # This provider couldn't validate the token, try the next one
-                    self.log.debug(
-                        f"Provider {provider.label()} could not validate logout token: {e}"
+                except Exception:
+                    self.log.exception(
+                        f"Back-channel logout failed for provider {provider.label()}"
                     )
-                    continue
+                    failed = True
+                    # Recover the session so the remaining providers can be
+                    # processed and teardown does not commit a poisoned
+                    # session.
+                    db.rollback()
 
-        if processed:
+        if processed and not failed:
             return "", 200
 
-        # No provider could validate the logout token
-        self.log.error("No OIDC provider could validate the logout token")
+        self.log.error("Back-channel logout did not complete successfully")
         return "", 400
