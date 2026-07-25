@@ -35,28 +35,26 @@ from tests.fixtures.database import DatabaseTransactionFixture
 
 def create_mock_oidc_provider(
     *,
-    spec: bool = True,
     patron_id_claim: str = "sub",
     label: str | None = None,
     **attrs: Any,
 ) -> tuple[Mock, Mock]:
     """Create a mock OIDC provider wired to a mock authentication manager.
 
-    The provider satisfies the public contract the controller consumes:
+    The provider is specced against BaseOIDCAuthenticationProvider, so
+    isinstance checks pass and reads of attributes outside the provider
+    contract fail. It satisfies the public contract the controller consumes:
     ``patron_id_claim``, ``credential_manager``, and
     ``get_authentication_manager``. Tests configure the returned
     authentication manager and the provider's credential manager as needed.
 
-    :param spec: Spec the mock against BaseOIDCAuthenticationProvider so that
-        isinstance checks pass and reads of attributes outside the provider
-        contract fail. Pass False only when a bare Mock is required.
     :param patron_id_claim: Name of the ID token claim identifying the patron
     :param label: Return value of the provider's label(), when given
     :param attrs: Additional attributes to set on the provider
         (e.g., integration_id, library_id)
     :return: 2-tuple (provider, authentication manager)
     """
-    provider = Mock(spec=BaseOIDCAuthenticationProvider) if spec else Mock()
+    provider = Mock(spec=BaseOIDCAuthenticationProvider)
     provider.patron_id_claim = patron_id_claim
     provider.credential_manager = Mock()
     if label is not None:
@@ -1859,7 +1857,7 @@ class TestOIDCControllerBackChannelLogout:
 
         # Create mock provider with spec so isinstance checks work
         mock_provider, mock_auth_manager = create_mock_oidc_provider(
-            spec=True, label="Test OIDC", library_id=library.id
+            label="Test OIDC", library_id=library.id
         )
 
         # Auth manager validates the logout token
@@ -1915,9 +1913,7 @@ class TestOIDCControllerBackChannelLogout:
         library = db.default_library()
 
         # Create mock provider that rejects the token
-        mock_provider, mock_auth_manager = create_mock_oidc_provider(
-            spec=True, label="Test OIDC"
-        )
+        mock_provider, mock_auth_manager = create_mock_oidc_provider(label="Test OIDC")
         mock_auth_manager.validate_logout_token.side_effect = Exception("Invalid token")
 
         # Set up library authenticator
@@ -1942,7 +1938,7 @@ class TestOIDCControllerBackChannelLogout:
 
         # Create mock provider with spec so isinstance checks work
         mock_provider, mock_auth_manager = create_mock_oidc_provider(
-            spec=True, label="Test OIDC", library_id=library.id
+            label="Test OIDC", library_id=library.id
         )
         mock_auth_manager.validate_logout_token.return_value = {
             "sub": "nonexistent@example.com",
@@ -1980,7 +1976,7 @@ class TestOIDCControllerBackChannelLogout:
         library = db.default_library()
 
         mock_provider, mock_auth_manager = create_mock_oidc_provider(
-            spec=True, label="Test OIDC", library_id=library.id
+            label="Test OIDC", library_id=library.id
         )
         mock_auth_manager.validate_logout_token.return_value = {
             "iss": "https://oidc.provider.test",
@@ -2013,14 +2009,14 @@ class TestOIDCControllerBackChannelLogout:
 
         # Create multiple OIDC providers that all reject the token
         mock_provider1, mock_auth_manager1 = create_mock_oidc_provider(
-            spec=True, label="Test OIDC 1"
+            label="Test OIDC 1"
         )
         mock_auth_manager1.validate_logout_token.side_effect = Exception(
             "Provider 1 cannot validate"
         )
 
         mock_provider2, mock_auth_manager2 = create_mock_oidc_provider(
-            spec=True, label="Test OIDC 2"
+            label="Test OIDC 2"
         )
         mock_auth_manager2.validate_logout_token.side_effect = Exception(
             "Provider 2 cannot validate"
@@ -2040,3 +2036,49 @@ class TestOIDCControllerBackChannelLogout:
 
         assert status == 400
         assert body == ""
+
+    def test_oidc_backchannel_logout_invalidates_all_libraries(
+        self, backchannel_controller, db
+    ):
+        """A logout token must end the patron's sessions in every library.
+
+        One integration associated with several libraries surfaces as a
+        provider in each library's authenticator, and each validates the
+        same token, so the sweep must not stop at the first match.
+        """
+        claims = {
+            "sub": "user123@example.com",
+            "iss": "https://oidc.provider.test",
+            "aud": "test-client-id",
+            "iat": 1234567890,
+            "jti": "unique-token-id",
+            "events": {"http://schemas.openid.net/event/backchannel-logout": {}},
+        }
+
+        providers = []
+        for index, library_key in enumerate(["lib-a", "lib-b"]):
+            mock_provider, mock_auth_manager = create_mock_oidc_provider(
+                label="Test OIDC", library_id=index + 1
+            )
+            mock_auth_manager.validate_logout_token.return_value = claims
+            mock_provider.credential_manager.lookup_patron_by_identifier.return_value = Mock(
+                id=index + 1
+            )
+            providers.append(mock_provider)
+
+            mock_library_auth = Mock()
+            mock_library_auth.providers = [mock_provider]
+            backchannel_controller._authenticator.library_authenticators[
+                library_key
+            ] = mock_library_auth
+
+        form_data = {"logout_token": "test.logout.token"}
+
+        body, status = backchannel_controller.oidc_backchannel_logout(
+            form_data, db.session
+        )
+
+        assert status == 200
+        assert body == ""
+        for mock_provider in providers:
+            mock_provider.credential_manager.invalidate_patron_credentials.assert_called_once()

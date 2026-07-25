@@ -604,7 +604,12 @@ class OIDCController(LoggerMixin):
             return "", 400
 
         # We need to determine which provider sent this logout token.
-        # Try all configured OIDC providers until we find one that can validate the token.
+        # Every provider that validates it gets to invalidate its own
+        # library's sessions: an integration associated with several
+        # libraries appears as a sibling provider in each library's
+        # authenticator, and patron lookup is library-scoped, so stopping
+        # at the first match would log the patron out of only one library.
+        processed = False
         for (
             library_authenticator
         ) in self._authenticator.library_authenticators.values():
@@ -624,7 +629,9 @@ class OIDCController(LoggerMixin):
                     patron_identifier = claims.get(provider.patron_id_claim)
                     if not patron_identifier:
                         self.log.warning("Logout token missing patron identifier claim")
-                        return "", 400
+                        continue
+
+                    processed = True
 
                     # Invalidate patron credentials
                     credential_manager = provider.credential_manager
@@ -642,14 +649,15 @@ class OIDCController(LoggerMixin):
                             f"Back-channel logout: patron not found for identifier {patron_identifier}"
                         )
 
-                    return "", 200
-
                 except Exception as e:
                     # This provider couldn't validate the token, try the next one
                     self.log.debug(
                         f"Provider {provider.label()} could not validate logout token: {e}"
                     )
                     continue
+
+        if processed:
+            return "", 200
 
         # No provider could validate the logout token
         self.log.error("No OIDC provider could validate the logout token")
