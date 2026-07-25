@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 from re import Pattern
 from typing import Annotated, Any
 
 from flask_babel import lazy_gettext as _
 from pydantic import (
+    AfterValidator,
     HttpUrl,
     PositiveInt,
     TypeAdapter,
@@ -27,7 +29,6 @@ from palace.manager.api.authentication.base import (
     AuthProviderSettings,
 )
 from palace.manager.integration.settings import (
-    BaseSettings,
     FormFieldType,
     FormMetadata,
     SettingsValidationError,
@@ -50,8 +51,11 @@ OIDC_INCORRECT_FILTER_EXPRESSION = pd(
 )
 
 
-def _validate_filter_expression(cls: type[BaseSettings], v: str | None) -> str | None:
-    """Shared validator for OIDC filter expression fields on settings models.
+def _check_filter_expression_syntax(v: str | None) -> str | None:
+    """Validate the syntax of a filter expression setting value.
+
+    Attached to filter expression fields with ``AfterValidator`` so the
+    check travels with the field definition.
 
     :raises SettingsValidationError: if the expression is syntactically invalid.
     """
@@ -59,7 +63,7 @@ def _validate_filter_expression(cls: type[BaseSettings], v: str | None) -> str |
         try:
             FilterExpression(v).check_syntax()
         except FilterExpressionError as exception:
-            cls.logger().warning(
+            logging.getLogger(__name__).warning(
                 f"Validation of the filter expression failed: {exception}"
             )
             raise SettingsValidationError(
@@ -135,6 +139,7 @@ IntegrationFilterExpressionSetting = Annotated[
         type=FormFieldType.TEXTAREA,
         use_monospace_font=True,
     ),
+    AfterValidator(_check_filter_expression_syntax),
 ]
 
 # Note: the key-ordering caveat in the description below is a JSONB storage
@@ -574,11 +579,6 @@ class OIDCAuthSettings(AuthProviderSettings, LoggerMixin):
             )
         return v
 
-    @field_validator("filter_expression")
-    @classmethod
-    def validate_filter_expression(cls, v: str | None) -> str | None:
-        return _validate_filter_expression(cls, v)
-
     @field_validator("patron_id_regular_expression")
     @classmethod
     def validate_patron_id_regex(cls, v: Pattern[str] | None) -> Pattern[str] | None:
@@ -614,9 +614,5 @@ class OIDCAuthLibrarySettings(AuthProviderLibrarySettings):
             type=FormFieldType.TEXTAREA,
             use_monospace_font=True,
         ),
+        AfterValidator(_check_filter_expression_syntax),
     ] = None
-
-    @field_validator("filter_expression")
-    @classmethod
-    def validate_filter_expression(cls, v: str | None) -> str | None:
-        return _validate_filter_expression(cls, v)
