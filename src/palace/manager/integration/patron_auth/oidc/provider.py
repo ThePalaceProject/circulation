@@ -441,7 +441,7 @@ class OIDCAuthenticationProvider(
         :return: PatronData object
         :raises: ProblemDetailException if patron cannot be determined
         """
-        patron_id_claim = self._settings.patron_id_claim
+        patron_id_claim = self.patron_id_claim
         id_token_claim_names = list(id_token_claims.keys())
         raw_patron_id = id_token_claims.get(patron_id_claim)
 

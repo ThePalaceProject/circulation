@@ -15,6 +15,7 @@ from palace.manager.integration.patron_auth.oidc.auth import OIDCRefreshTokenErr
 from palace.manager.integration.patron_auth.oidc.credential import OIDCCredentialManager
 from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.sqlalchemy.model.datasource import DataSource
+from palace.manager.sqlalchemy.util import get_one
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
@@ -927,3 +928,13 @@ class TestOIDCCredentialManagerLogout:
         assert count == 1
         assert other_credential.expires <= utc_now()
         assert oidc_credential.expires > utc_now()
+
+    def test_invalidate_patron_credentials_does_not_create_data_source(self, db):
+        """Invalidation with nothing stored must not create the data source row."""
+        patron = db.patron()
+        manager = OIDCCredentialManager(data_source_name="NeverStored")
+
+        count = manager.invalidate_patron_credentials(db.session, patron.id)
+
+        assert count == 0
+        assert get_one(db.session, DataSource, name="NeverStored") is None

@@ -142,6 +142,26 @@ IntegrationFilterExpressionSetting = Annotated[
     AfterValidator(_check_filter_expression_syntax),
 ]
 
+LibraryFilterExpressionSetting = Annotated[
+    str | None,
+    FormMetadata(
+        label="Filter Expression",
+        description=(
+            "A Python expression that may restrict a patron's access to this library"
+            " based on their ID token claims and other settings."
+            " When present, it must evaluate to True in order for the patron to gain"
+            " access to this library."
+            "<br>"
+            "<br>"
+            "Refer to the integration-level Filter Expression setting for expression"
+            " syntax and available context variables."
+        ),
+        type=FormFieldType.TEXTAREA,
+        use_monospace_font=True,
+    ),
+    AfterValidator(_check_filter_expression_syntax),
+]
+
 # Note: the key-ordering caveat in the description below is a JSONB storage
 # side effect. PostgreSQL sorts all object keys when storing/retrieving JSONB.
 ExtraDataSetting = Annotated[
@@ -597,22 +617,4 @@ class OIDCAuthSettings(AuthProviderSettings, LoggerMixin):
 class OIDCAuthLibrarySettings(AuthProviderLibrarySettings):
     """Per-library OIDC authentication settings."""
 
-    filter_expression: Annotated[
-        str | None,
-        FormMetadata(
-            label="Filter Expression",
-            description=(
-                "A Python expression that may restrict a patron's access to this library"
-                " based on their ID token claims and other settings."
-                " When present, it must evaluate to True in order for the patron to gain"
-                " access to this library."
-                "<br>"
-                "<br>"
-                "Refer to the integration-level Filter Expression setting for expression"
-                " syntax and available context variables."
-            ),
-            type=FormFieldType.TEXTAREA,
-            use_monospace_font=True,
-        ),
-        AfterValidator(_check_filter_expression_syntax),
-    ] = None
+    filter_expression: LibraryFilterExpressionSetting = None

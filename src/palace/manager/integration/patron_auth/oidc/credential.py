@@ -28,7 +28,7 @@ from palace.manager.integration.patron_auth.oidc.auth import (
 from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.patron import Patron
-from palace.manager.sqlalchemy.util import get_one_or_create
+from palace.manager.sqlalchemy.util import get_one, get_one_or_create
 
 
 class OIDCCredentialManager(LoggerMixin):
@@ -417,11 +417,17 @@ class OIDCCredentialManager(LoggerMixin):
         :param patron_id: Patron ID
         :return: Number of credentials invalidated
         """
+        # Plain lookup rather than _get_token_data_source: invalidation must
+        # not create the data source when nothing was ever stored under it.
+        data_source = get_one(db, DataSource, name=self._data_source_name)
+        if data_source is None:
+            return 0
+
         credentials = (
             db.query(Credential)
             .filter(
                 Credential.patron_id == patron_id,
-                Credential.data_source == self._get_token_data_source(db),
+                Credential.data_source == data_source,
                 Credential.type == self._token_type,
             )
             .all()
