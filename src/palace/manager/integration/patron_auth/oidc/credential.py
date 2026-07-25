@@ -45,20 +45,27 @@ class OIDCCredentialManager(LoggerMixin):
 
     def __init__(
         self,
-        token_type: str = TOKEN_TYPE,
-        data_source_name: str = TOKEN_DATA_SOURCE_NAME,
+        token_type: str | None = None,
+        data_source_name: str | None = None,
     ) -> None:
         """Initialize the credential manager.
 
         The defaults suit the generic OIDC provider. Other providers built on
-        the same machinery can pass distinct values so their credentials do
-        not collide with OIDC ones.
+        the same machinery can pass distinct values, or subclass and override
+        the class constants, so their credentials do not collide with OIDC
+        ones.
 
-        :param token_type: Value stored as ``Credential.type``
-        :param data_source_name: Name of the ``DataSource`` owning the credentials
+        :param token_type: Value stored as ``Credential.type``.
+            Defaults to the class's ``TOKEN_TYPE``.
+        :param data_source_name: Name of the ``DataSource`` owning the
+            credentials. Defaults to the class's ``TOKEN_DATA_SOURCE_NAME``.
         """
-        self._token_type = token_type
-        self._data_source_name = data_source_name
+        self._token_type = token_type if token_type is not None else self.TOKEN_TYPE
+        self._data_source_name = (
+            data_source_name
+            if data_source_name is not None
+            else self.TOKEN_DATA_SOURCE_NAME
+        )
 
     def _get_token_data_source(self, db: Session) -> DataSource:
         """Get or create the data source for OIDC credentials.
@@ -400,7 +407,11 @@ class OIDCCredentialManager(LoggerMixin):
         self.log.info(f"Invalidated credential {credential_id}")
 
     def invalidate_patron_credentials(self, db: Session, patron_id: int) -> int:
-        """Invalidate all OIDC credentials for a patron.
+        """Invalidate all of a patron's credentials managed by this manager.
+
+        Only credentials matching this manager's data source and token type
+        are affected, so providers with distinct credential namespaces can
+        be invalidated independently.
 
         :param db: Database session
         :param patron_id: Patron ID
@@ -410,6 +421,7 @@ class OIDCCredentialManager(LoggerMixin):
             db.query(Credential)
             .filter(
                 Credential.patron_id == patron_id,
+                Credential.data_source == self._get_token_data_source(db),
                 Credential.type == self._token_type,
             )
             .all()

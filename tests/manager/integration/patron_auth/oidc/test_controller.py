@@ -1904,7 +1904,9 @@ class TestOIDCControllerBackChannelLogout:
         library = db.default_library()
 
         # Create mock provider that rejects the token
-        mock_provider, mock_auth_manager = create_mock_oidc_provider(label="Test OIDC")
+        mock_provider, mock_auth_manager = create_mock_oidc_provider(
+            spec=True, label="Test OIDC"
+        )
         mock_auth_manager.validate_logout_token.side_effect = Exception("Invalid token")
 
         # Set up library authenticator

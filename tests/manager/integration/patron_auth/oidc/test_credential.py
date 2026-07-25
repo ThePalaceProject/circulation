@@ -331,6 +331,30 @@ class TestOIDCCredentialManager:
         assert found_by_value is not None
         assert found_by_value.id == credential.id
 
+    def test_create_oidc_token_with_subclassed_names(
+        self,
+        db: DatabaseTransactionFixture,
+        mock_patron,
+        sample_id_token_claims,
+    ):
+        """Class-constant overrides in a subclass take effect without constructor arguments."""
+
+        class SubclassedCredentialManager(OIDCCredentialManager):
+            TOKEN_TYPE = "Subclassed token"
+            TOKEN_DATA_SOURCE_NAME = "SubclassedProvider"
+
+        manager = SubclassedCredentialManager()
+
+        credential = manager.create_oidc_token(
+            db.session,
+            mock_patron,
+            sample_id_token_claims,
+            "test-access-token",
+        )
+
+        assert credential.type == "Subclassed token"
+        assert credential.data_source.name == "SubclassedProvider"
+
     def test_lookup_oidc_token_by_patron_found(
         self,
         manager,
@@ -878,3 +902,28 @@ class TestOIDCCredentialManagerLogout:
         count = manager.invalidate_patron_credentials(db.session, patron.id)
 
         assert count == 0
+
+    def test_invalidate_patron_credentials_scoped_to_data_source(self, db, manager):
+        """Invalidation only affects credentials in the manager's own namespace.
+
+        Two managers sharing a token type but using different data sources
+        must be able to invalidate a patron's credentials independently.
+        """
+        patron = db.patron()
+        other_manager = OIDCCredentialManager(
+            token_type=OIDCCredentialManager.TOKEN_TYPE,
+            data_source_name="OtherProvider",
+        )
+
+        oidc_credential = manager.create_oidc_token(
+            db.session, patron, {"sub": "user123"}, "access-token-oidc"
+        )
+        other_credential = other_manager.create_oidc_token(
+            db.session, patron, {"sub": "user123"}, "access-token-other"
+        )
+
+        count = other_manager.invalidate_patron_credentials(db.session, patron.id)
+
+        assert count == 1
+        assert other_credential.expires <= utc_now()
+        assert oidc_credential.expires > utc_now()
