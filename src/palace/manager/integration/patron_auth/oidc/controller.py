@@ -631,8 +631,6 @@ class OIDCController(LoggerMixin):
                         self.log.warning("Logout token missing patron identifier claim")
                         continue
 
-                    processed = True
-
                     # Invalidate patron credentials
                     credential_manager = provider.credential_manager
                     patron = credential_manager.lookup_patron_by_identifier(
@@ -648,6 +646,11 @@ class OIDCController(LoggerMixin):
                         self.log.warning(
                             f"Back-channel logout: patron not found for identifier {patron_identifier}"
                         )
+
+                    # Only count this provider once invalidation has actually
+                    # run: a failure above must fall through to the 400 the
+                    # IdP can retry, not report success.
+                    processed = True
 
                 except Exception as e:
                     # This provider couldn't validate the token, try the next one

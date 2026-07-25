@@ -12,7 +12,10 @@ from sqlalchemy.exc import SQLAlchemyError
 from palace.manager.api.authentication.base import PatronData
 from palace.manager.api.authenticator import BaseOIDCAuthenticationProvider
 from palace.manager.api.problem_details import LIBRARY_NOT_FOUND, UNKNOWN_OIDC_PROVIDER
-from palace.manager.integration.patron_auth.oidc.auth import OIDCAuthenticationError
+from palace.manager.integration.patron_auth.oidc.auth import (
+    OIDCAuthenticationError,
+    OIDCAuthenticationManager,
+)
 from palace.manager.integration.patron_auth.oidc.configuration.model import (
     OIDCAuthLibrarySettings,
     OIDCAuthSettings,
@@ -22,6 +25,9 @@ from palace.manager.integration.patron_auth.oidc.controller import (
     OIDC_INVALID_RESPONSE,
     OIDC_INVALID_STATE,
     OIDCController,
+)
+from palace.manager.integration.patron_auth.oidc.credential import (
+    OIDCCredentialManager,
 )
 from palace.manager.integration.patron_auth.oidc.provider import (
     OIDC_CANNOT_DETERMINE_PATRON,
@@ -56,12 +62,12 @@ def create_mock_oidc_provider(
     """
     provider = Mock(spec=BaseOIDCAuthenticationProvider)
     provider.patron_id_claim = patron_id_claim
-    provider.credential_manager = Mock()
+    provider.credential_manager = Mock(spec=OIDCCredentialManager)
     if label is not None:
         provider.label.return_value = label
     for name, value in attrs.items():
         setattr(provider, name, value)
-    auth_manager = Mock()
+    auth_manager = Mock(spec=OIDCAuthenticationManager)
     provider.get_authentication_manager.return_value = auth_manager
     return provider, auth_manager
 
