@@ -258,6 +258,7 @@ class TestOIDCController:
         }
 
         mock_auth_manager = MagicMock()
+        mock_auth_manager.use_pkce = False
         mock_auth_manager.build_authorization_url.return_value = "https://idp.example.com/authorize?client_id=test-client-id&response_type=code&state=test&nonce=test"
 
         controller._authenticator.oidc_provider_lookup.return_value = oidc_provider
@@ -284,6 +285,10 @@ class TestOIDCController:
             assert "client_id=test-client-id" in result.location
             assert "response_type=code" in result.location
 
+            # The non-PKCE branch must not send a code challenge.
+            call_kwargs = mock_auth_manager.build_authorization_url.call_args.kwargs
+            assert call_kwargs["code_challenge"] is None
+
     def test_oidc_authentication_redirect_success_with_pkce(
         self, db: DatabaseTransactionFixture, controller
     ):
@@ -308,6 +313,7 @@ class TestOIDCController:
         }
 
         mock_auth_manager = MagicMock()
+        mock_auth_manager.use_pkce = True
         mock_auth_manager.build_authorization_url.return_value = "https://idp.example.com/authorize?code_challenge=test&code_challenge_method=S256"
 
         controller._authenticator.oidc_provider_lookup.return_value = oidc_provider
@@ -332,6 +338,10 @@ class TestOIDCController:
             assert result.status_code == 302
             assert "code_challenge=" in result.location
             assert "code_challenge_method=S256" in result.location
+
+            # The PKCE branch must send a generated code challenge.
+            call_kwargs = mock_auth_manager.build_authorization_url.call_args.kwargs
+            assert call_kwargs["code_challenge"] is not None
 
     @pytest.mark.parametrize(
         "prompt",

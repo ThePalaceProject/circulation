@@ -5,7 +5,6 @@ This module provides the OIDC authentication provider implementation for patron 
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Generator, Sequence
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -19,6 +18,7 @@ from palace.opds.authentication.document import AuthenticateLink, PalaceAuthenti
 from palace.opds.authentication.palace import LocalizedValue
 from palace.opds.rwpm import Link
 from palace.util.exceptions import PalaceValueError
+from palace.util.log import LoggerType
 
 from palace.manager.api.authentication.base import PatronData, PatronLookupNotSupported
 from palace.manager.api.authenticator import BaseOIDCAuthenticationProvider
@@ -97,7 +97,7 @@ def evaluate_patron_filters(
     *,
     library: Library,
     claim_names: Sequence[str],
-    log: logging.Logger | logging.LoggerAdapter[logging.Logger],
+    log: LoggerType,
 ) -> None:
     """Evaluate labeled filter expressions as an authorization check.
 

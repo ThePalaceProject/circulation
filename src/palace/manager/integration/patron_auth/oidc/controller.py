@@ -474,7 +474,7 @@ class OIDCController(LoggerMixin):
                 self.log.info(f"Invalidated credentials for patron {patron_identifier}")
             else:
                 self.log.warning(f"Patron not found for identifier {patron_identifier}")
-        except (SQLAlchemyError, AttributeError):
+        except SQLAlchemyError:
             self.log.exception("Failed to invalidate credentials")
 
         # If the provider does not support RP-Initiated Logout (only token revocation),
