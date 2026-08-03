@@ -165,13 +165,13 @@ class TestLane:
         lane = db.lane()
 
         # Not affected by any lists.
-        for l in [l1, l2]:
-            assert 0 == Lane.affected_by_customlist(l1).with_entities(Lane.id).count()
+        for cl in [l1, l2]:
+            assert [] == Lane.affected_by_customlist(cl).all()
 
         # Add a lane to the list, and it becomes affected.
         lane.customlists.append(l1)
         assert [lane] == lane.affected_by_customlist(l1).all()
-        assert 0 == lane.affected_by_customlist(l2).with_entities(Lane.id).count()
+        assert [] == Lane.affected_by_customlist(l2).all()
         lane.customlists = []
 
         # A lane based on all lists with the GUTENBERG db source.
@@ -181,7 +181,7 @@ class TestLane:
         # It's affected by the GUTENBERG list but not the OVERDRIVE
         # list.
         assert [lane2] == Lane.affected_by_customlist(l1).all()
-        assert 0 == Lane.affected_by_customlist(l2).with_entities(Lane.id).count()
+        assert [] == Lane.affected_by_customlist(l2).all()
 
     def test_inherited_value(self, db: DatabaseTransactionFixture):
         # Test WorkList.inherited_value.
