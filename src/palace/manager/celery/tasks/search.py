@@ -157,6 +157,17 @@ def advance_read_pointer(
     set_read_pointer(log, service, revision)
 
 
+SEARCH_REINDEX_LOCK_TIMEOUT = timedelta(hours=1)
+"""
+How long the search reindex lock survives without being extended.
+
+A full reindex can span days, and the lock is extended once per batch, so this needs
+to exceed the longest realistic gap between two batches. The observed worst case in
+production is ~28 minutes on a circulation manager whose `default` queue runs a
+persistent backlog; an hour leaves roughly a 2x margin on that.
+"""
+
+
 @shared_task(
     queue=QueueNames.default, bind=True, max_retries=4, throws=(LockNotAcquired,)
 )
@@ -178,7 +189,15 @@ def search_reindex(
         advances the read pointer.
     """
     index = task.services.search.index()
-    task_lock = TaskLock(task, lock_name="search_reindex")
+    # The lock is only extended when a batch actually runs, so its timeout has to
+    # cover the wait between batches, not just the work a batch does. On a busy
+    # `default` queue that wait is dominated by queue latency and can reach tens of
+    # minutes; if the lock lapses in that window a beat-scheduled reindex can start
+    # a second run, and whichever run next fails to reacquire the lock dies and
+    # loses all of its progress.
+    task_lock = TaskLock(
+        task, lock_name="search_reindex", lock_timeout=SEARCH_REINDEX_LOCK_TIMEOUT
+    )
 
     with task_lock.lock(release_on_exit=False, ignored_exceptions=(Retry, Ignore)):
         try:
