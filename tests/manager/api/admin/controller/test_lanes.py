@@ -417,7 +417,7 @@ class TestLanesController:
         lane.customlists += [list]
         assert (
             1
-            == alm_fixture.ctrl.db.session.query(Lane)
+            == alm_fixture.ctrl.db.session.query(Lane.id)
             .filter(Lane.library == library)
             .count()
         )
@@ -431,7 +431,7 @@ class TestLanesController:
             # The lane has been deleted.
             assert (
                 0
-                == alm_fixture.ctrl.db.session.query(Lane)
+                == alm_fixture.ctrl.db.session.query(Lane.id)
                 .filter(Lane.library == library)
                 .count()
             )
@@ -454,7 +454,7 @@ class TestLanesController:
         grandchild.customlists += [list]
         assert (
             3
-            == alm_fixture.ctrl.db.session.query(Lane)
+            == alm_fixture.ctrl.db.session.query(Lane.id)
             .filter(Lane.library == library)
             .count()
         )
@@ -468,7 +468,7 @@ class TestLanesController:
             # The lanes have all been deleted.
             assert (
                 0
-                == alm_fixture.ctrl.db.session.query(Lane)
+                == alm_fixture.ctrl.db.session.query(Lane.id)
                 .filter(Lane.library == library)
                 .count()
             )
@@ -574,7 +574,7 @@ class TestLanesController:
             # The old lane is gone.
             assert (
                 0
-                == alm_fixture.ctrl.db.session.query(Lane)
+                == alm_fixture.ctrl.db.session.query(Lane.id)
                 .filter(Lane.library == library)
                 .filter(Lane.id == old_lane.id)
                 .count()
@@ -583,7 +583,7 @@ class TestLanesController:
             # lanes were created.
             assert (
                 0
-                < alm_fixture.ctrl.db.session.query(Lane)
+                < alm_fixture.ctrl.db.session.query(Lane.id)
                 .filter(Lane.library == library)
                 .count()
             )
