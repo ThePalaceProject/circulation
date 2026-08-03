@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from palace.util.log import LoggerMixin
 
-from palace.manager.celery.tasks.search import get_migrate_search_chain
+from palace.manager.celery.tasks.search import search_reindex
 from palace.manager.scripts.startup import run_startup_tasks as _run_startup_tasks
 from palace.manager.search.revision import SearchSchemaRevision
 from palace.manager.search.service import SearchService
@@ -125,11 +125,12 @@ class InstanceInitializationScript(LoggerMixin):
         revision: SearchSchemaRevision,
     ) -> None:
         # The revision is not the most recent. We need to create a new index.
-        # and start reindexing our data into it asynchronously. When the reindex
-        # is complete, we will switch the read pointer to the new index.
+        # and start reindexing our data into it asynchronously. The reindex advances
+        # the read pointer itself once it has filled the new index, so a run that never
+        # finishes leaves reads on the old index rather than half-migrating.
         cls.logger().info(f"Creating a new index for revision (v{revision.version}).")
         cls.create_search_index(service, revision)
-        task = get_migrate_search_chain().apply_async()
+        task = search_reindex.apply_async()
         cls.logger().info(
             f"Task queued to index data into new search index (Task ID: {task.id})."
         )

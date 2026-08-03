@@ -237,8 +237,8 @@ class TestInstanceInitializationScript:
         script.migrate_search = MagicMock(wraps=script.migrate_search)
         script._container.search.revision_directory.override(new_revision_directory)
         with patch(
-            "palace.manager.scripts.initialization.get_migrate_search_chain"
-        ) as get_migrate_search_chain:
+            "palace.manager.scripts.initialization.search_reindex"
+        ) as search_reindex:
             script.initialize_search()
 
         # We should have created the new search index, and started the migration
@@ -267,9 +267,8 @@ class TestInstanceInitializationScript:
         [indexed_work_1] = index.query_works("")
         assert indexed_work_1.work_id == work1.id
 
-        # The migration should have been queued
-        get_migrate_search_chain.assert_called_once()
-        get_migrate_search_chain.return_value.apply_async.assert_called_once()
+        # The reindex should have been queued
+        search_reindex.apply_async.assert_called_once()
 
         # If the initialization is run again, the migration should not be run again, but we do log a message
         # about the read pointer being out of date

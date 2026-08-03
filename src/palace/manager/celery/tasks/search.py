@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from datetime import timedelta
 from typing import Any
 
-from celery import chain, shared_task
+from celery import shared_task
 from celery.exceptions import Ignore, Retry
 from opensearchpy import OpenSearchException
 from sqlalchemy import select
@@ -17,6 +17,8 @@ from palace.util.log import elapsed_time_logging
 from palace.manager.celery.task import Task
 from palace.manager.celery.utils import signature_with
 from palace.manager.search.external_search import ExternalSearchIndex
+from palace.manager.search.revision import SearchSchemaRevision
+from palace.manager.search.service import SearchService
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.lock import LockNotAcquired, TaskLock
 from palace.manager.service.redis.models.search import WaitingForIndexing
@@ -64,18 +66,88 @@ def add_documents_to_index(
 class FailedToIndex(BasePalaceException): ...
 
 
+def set_read_pointer(
+    task: Task, service: SearchService, revision: SearchSchemaRevision
+) -> None:
+    try:
+        service.read_pointer_set(revision)
+    except OpenSearchException as e:
+        wait_time = exponential_backoff(task.request.retries)
+        task.log.error(
+            f"Failed to update read pointer: {e}. Retrying in {wait_time} seconds."
+        )
+        raise task.retry(countdown=wait_time)
+    task.log.info(
+        f"Updated read pointer ({service.base_revision_name} v{revision.version})."
+    )
+
+
+def advance_read_pointer(task: Task, target_index: str | None) -> None:
+    """
+    Point reads at the index a completed reindex just filled, if reads are still being
+    served from an older one.
+
+    This is what makes a schema migration finish on its own: a new revision is created
+    with the write pointer aimed at it, and whichever reindex first completes a full
+    pass over that index publishes it. No caller has to remember to advance the pointer,
+    and a run that dies partway through simply leaves the pointer where it was.
+
+    :param target_index: The index the completed run was filling.
+    """
+    service = task.services.search.service()
+    revision = task.services.search.revision_directory().highest()
+    latest_index = revision.name_for_index(service.base_revision_name)
+
+    read_pointer = service.read_pointer()
+    if read_pointer is not None and read_pointer.version >= revision.version:
+        return
+
+    if target_index != latest_index:
+        task.log.warning(
+            f"Not advancing read pointer: this reindex filled {target_index}, "
+            f"but the latest revision is {latest_index}."
+        )
+        return
+
+    write_pointer = service.write_pointer()
+    if write_pointer is None or write_pointer.index != target_index:
+        # The write pointer moved partway through, so our documents are split across the
+        # old and new indexes and neither one received a complete pass.
+        task.log.warning(
+            f"Not advancing read pointer: the write pointer moved to "
+            f"{write_pointer.index if write_pointer is not None else None} "
+            f"while this reindex was filling {target_index}."
+        )
+        return
+
+    set_read_pointer(task, service, revision)
+
+
 @shared_task(queue=QueueNames.default, bind=True, max_retries=4)
-def search_reindex(task: Task, offset: int = 0, batch_size: int = 500) -> None:
+def search_reindex(
+    task: Task, offset: int = 0, batch_size: int = 500, target_index: str | None = None
+) -> None:
     """
     Submit all works that are presentation ready to the search index.
 
     This is done in batches, with the batch size determined by the batch_size parameter. This
-    task will do a batch, then requeue itself until all works have been indexed.
+    task will do a batch, then requeue itself until all works have been indexed. Once every
+    work has been indexed, the read pointer is advanced to the index we filled if it is still
+    behind. See advance_read_pointer.
+
+    :param target_index: The index this run is filling, carried across requeues so the final
+        batch can tell whether the write pointer moved partway through. Resolved from the write
+        pointer when the run starts; callers should not pass it.
     """
     index = task.services.search.index()
+    service = task.services.search.service()
     task_lock = TaskLock(task, lock_name="search_reindex")
 
     with task_lock.lock(release_on_exit=False, ignored_exceptions=(Retry, Ignore)):
+        if target_index is None:
+            write_pointer = service.write_pointer()
+            target_index = write_pointer.index if write_pointer is not None else None
+
         task.log.info(
             f"Running search reindex at offset {offset} with batch size {batch_size}."
         )
@@ -98,8 +170,12 @@ def search_reindex(task: Task, offset: int = 0, batch_size: int = 500) -> None:
             # when this task is running in parallel on multiple workers.
             delay = random.uniform(5, 15)
             raise task.replace(
-                signature_with(task, offset=offset + batch_size).set(countdown=delay)
+                signature_with(
+                    task, offset=offset + batch_size, target_index=target_index
+                ).set(countdown=delay)
             )
+
+        advance_read_pointer(task, target_index)
 
     task.log.info("Finished search reindex.")
     task_lock.release()
@@ -108,27 +184,18 @@ def search_reindex(task: Task, offset: int = 0, batch_size: int = 500) -> None:
 @shared_task(queue=QueueNames.default, bind=True, max_retries=4)
 def update_read_pointer(task: Task) -> None:
     """
-    Update the read pointer to the latest revision.
+    Update the read pointer to the latest revision, unconditionally.
 
-    This is used to indicate that the search index has been updated to a specific version. We
-    chain this task with search_reindex when doing a migration to ensure that the read pointer is
-    updated after all works have been indexed. See get_migrate_search_chain.
+    search_reindex advances the read pointer itself once it has filled the latest index, so
+    this is the manual override for the cases it deliberately declines to handle: publishing
+    an index that no single reindex run filled end to end, or one filled by a run that
+    started before the revision it ended up writing to existed.
     """
     task.log.info("Updating read pointer.")
     service = task.services.search.service()
     revision_directory = task.services.search.revision_directory()
     revision = revision_directory.highest()
-    try:
-        service.read_pointer_set(revision)
-    except OpenSearchException as e:
-        wait_time = exponential_backoff(task.request.retries)
-        task.log.error(
-            f"Failed to update read pointer: {e}. Retrying in {wait_time} seconds."
-        )
-        raise task.retry(countdown=wait_time)
-    task.log.info(
-        f"Updated read pointer ({service.base_revision_name} v{revision.version})."
-    )
+    set_read_pointer(task, service, revision)
 
 
 @shared_task(queue=QueueNames.default, bind=True, throws=(LockNotAcquired,))
@@ -176,10 +243,3 @@ def index_works(task: Task, works: Sequence[int]) -> None:
         documents = Work.to_search_documents(session, works)
 
     add_documents_to_index(task, index, documents)
-
-
-def get_migrate_search_chain() -> chain:
-    """
-    Get the chain of tasks to run when migrating the search index to a new schema.
-    """
-    return chain(search_reindex.si(), update_read_pointer.si())

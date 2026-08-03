@@ -10,7 +10,6 @@ from opensearchpy import OpenSearchException
 from palace.util.exceptions import BasePalaceException
 
 from palace.manager.celery.tasks.search import (
-    get_migrate_search_chain,
     get_work_search_documents,
     index_works,
     search_indexing,
@@ -321,69 +320,124 @@ def test_update_read_pointer_failures(
     assert read_pointer_set_mock.call_count == 2
 
 
-def test_get_migrate_search_chain(
+class SearchMigrationFixture:
+    """A search index mid-migration: a new revision exists and the write pointer has
+    moved to it, but the read pointer is still serving the old one."""
+
+    def __init__(
+        self,
+        db: DatabaseTransactionFixture,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+    ):
+        container = end_to_end_search_fixture.external_search.search_container
+        self.client = container.write_client()
+        self.service = container.service()
+        revision_directory = container.revision_directory()
+
+        self.works = [
+            db.work(title=f"Work {x}", with_open_access_download=True)
+            for x in range(10)
+        ]
+        end_to_end_search_fixture.populate_search_index()
+
+        self.old_index = revision_directory.highest().name_for_index(
+            self.service.base_revision_name
+        )
+
+        self.new_revision = MockSearchSchemaRevisionLatest(1010101)
+        self.new_index = self.new_revision.name_for_index(
+            self.service.base_revision_name
+        )
+        available = dict(revision_directory.available)
+        available[self.new_revision.version] = self.new_revision
+        revision_directory._available = available
+
+        InstanceInitializationScript.create_search_index(
+            self.service, self.new_revision
+        )
+
+    def assert_pointers(self, read: str, write: str) -> None:
+        read_pointer = self.service.read_pointer()
+        write_pointer = self.service.write_pointer()
+        assert read_pointer is not None and read_pointer.index == read
+        assert write_pointer is not None and write_pointer.index == write
+
+
+@pytest.fixture
+def search_migration_fixture(
     db: DatabaseTransactionFixture,
-    celery_fixture: CeleryFixture,
-    search_reindex_task_lock_fixture: SearchReindexTaskLockFixture,
     end_to_end_search_fixture: EndToEndSearchFixture,
 ):
-    container = end_to_end_search_fixture.external_search.search_container
+    return SearchMigrationFixture(db, end_to_end_search_fixture)
 
-    client = container.write_client()
-    service = container.service()
-    revision_directory = container.revision_directory()
-    revision = revision_directory.highest()
 
-    works = [
-        db.work(title=f"Work {x}", with_open_access_download=True) for x in range(10)
-    ]
+def test_search_reindex_advances_read_pointer(
+    celery_fixture: CeleryFixture,
+    search_migration_fixture: SearchMigrationFixture,
+    end_to_end_search_fixture: EndToEndSearchFixture,
+):
+    fixture = search_migration_fixture
 
-    end_to_end_search_fixture.populate_search_index()
-    new_revision = MockSearchSchemaRevisionLatest(1010101)
-    new_revision_index_name = new_revision.name_for_index(service.base_revision_name)
-    available = dict(revision_directory.available)
-    available[new_revision.version] = new_revision
-    revision_directory._available = available
+    # Creating the new index moves the write pointer but leaves reads on the old index.
+    fixture.assert_pointers(read=fixture.old_index, write=fixture.new_index)
 
-    InstanceInitializationScript.create_search_index(service, new_revision)
+    search_reindex.delay().wait()
 
-    # The write pointer should point to the new revision
-    write_pointer = service.write_pointer()
-    assert write_pointer is not None
-    assert write_pointer.index == new_revision_index_name
-    assert write_pointer.version == new_revision.version
+    # Having filled the new index end to end, the reindex publishes it. Nothing had to
+    # chain a second task on to do it.
+    fixture.assert_pointers(read=fixture.new_index, write=fixture.new_index)
 
-    # The read pointer should still point to the old revision
-    read_pointer = service.read_pointer()
-    assert read_pointer is not None
-    assert read_pointer.index == revision.name_for_index(service.base_revision_name)
-    assert read_pointer.version == revision.version
+    fixture.client.indices.refresh()
+    end_to_end_search_fixture.expect_results(fixture.works, "", ordered=False)
 
-    # There is a lock on the search reindex task
+
+def test_search_reindex_does_not_advance_read_pointer_for_another_index(
+    celery_fixture: CeleryFixture,
+    search_migration_fixture: SearchMigrationFixture,
+):
+    fixture = search_migration_fixture
+
+    # A run that started before the new revision existed has been filling the old index,
+    # so the new one never received a complete pass and must not be published.
+    search_reindex.delay(target_index=fixture.old_index).wait()
+
+    fixture.assert_pointers(read=fixture.old_index, write=fixture.new_index)
+
+
+def test_search_reindex_does_not_advance_read_pointer_when_it_fails(
+    celery_fixture: CeleryFixture,
+    search_reindex_task_lock_fixture: SearchReindexTaskLockFixture,
+    search_migration_fixture: SearchMigrationFixture,
+):
+    fixture = search_migration_fixture
+
+    # A reindex that never reaches the end leaves reads where they were, rather than
+    # publishing a partially filled index.
     search_reindex_task_lock_fixture.task_lock.acquire()
-
-    # Run the migration task
     with pytest.raises(BasePalaceException):
-        get_migrate_search_chain().delay().wait()
+        search_reindex.delay().wait()
 
-    # The read pointer should still point to the old revision
-    read_pointer = service.read_pointer()
-    assert read_pointer is not None
-    assert read_pointer.index == revision.name_for_index(service.base_revision_name)
-    assert read_pointer.version == revision.version
+    fixture.assert_pointers(read=fixture.old_index, write=fixture.new_index)
 
-    # Release the lock and try again
-    search_reindex_task_lock_fixture.task_lock.release()
-    get_migrate_search_chain().delay().wait()
 
-    # The read pointer should now point to the new revision
-    read_pointer = service.read_pointer()
-    assert read_pointer is not None
-    assert read_pointer.index == new_revision_index_name
+def test_search_reindex_leaves_current_read_pointer_alone(
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+    end_to_end_search_fixture: EndToEndSearchFixture,
+):
+    # Outside a migration the read pointer is already at the latest revision, so a
+    # routine reindex has nothing to advance.
+    service = end_to_end_search_fixture.external_search.service
+    db.work(with_open_access_download=True)
+    before = service.read_pointer()
 
-    # And we should have all the works in the new index
-    client.indices.refresh()
-    end_to_end_search_fixture.expect_results(works, "", ordered=False)
+    with patch.object(
+        type(service), "read_pointer_set", autospec=True
+    ) as read_pointer_set:
+        search_reindex.delay().wait()
+
+    read_pointer_set.assert_not_called()
+    assert service.read_pointer() == before
 
 
 class SearchIndexingFixture:

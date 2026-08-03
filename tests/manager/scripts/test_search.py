@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from palace.manager.scripts.search import RebuildSearchIndexScript
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.services import ServicesFixture
@@ -41,16 +43,10 @@ class TestRebuildSearchIndexScript:
         services_fixture.search_index.clear_search_documents.assert_called_once_with()
         mock_search_reindex.s.return_value.delay.assert_called_once_with()
 
-    @patch("palace.manager.scripts.search.get_migrate_search_chain")
-    def test_do_run_migration(
-        self, mock_get_migrate_search_chain: MagicMock, db: DatabaseTransactionFixture
+    def test_do_run_migration_flag_removed(
+        self, db: DatabaseTransactionFixture, services_fixture: ServicesFixture
     ):
-        # If we are called with the --migration argument, we treat the reindex as completing a migration.
-        RebuildSearchIndexScript(db.session, cmd_args=["--migration"]).do_run()
-        mock_get_migrate_search_chain.return_value.delay.assert_called_once_with()
-
-        # We can also combine --blocking and --migration.
-        RebuildSearchIndexScript(
-            db.session, cmd_args=["--migration", "--blocking"]
-        ).do_run()
-        mock_get_migrate_search_chain.return_value.assert_called_once_with()
+        # search_reindex advances the read pointer itself, so there is no longer a
+        # separate migration mode to opt into.
+        with pytest.raises(SystemExit):
+            RebuildSearchIndexScript(db.session, cmd_args=["--migration"])
