@@ -51,7 +51,7 @@ dependencies = [
     "croniter>=6.2.4,<7",
     "dependency-injector>=4.49.1,<5",
     "expiringdict==1.2.2",
-    "feedparser==6.0.12",
+    "feedparser==6.0.14",
     "firebase-admin>=7.5.0,<8",
     "Flask-Babel>=4.0,<5",
     "Flask-Cors==6.0.2",
