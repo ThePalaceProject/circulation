@@ -390,17 +390,12 @@ class Library(Base, HasSessionCache):
             from palace.manager.sqlalchemy.model.lane import Lane
 
             _db = Session.object_session(self)
-            # Query the id column rather than the Lane entity: Query.count() wraps its
-            # source in a subquery that re-selects every mapped column, including deferred
-            # ones. Selecting the whole entity here therefore still emits the deprecated
-            # lanes.size / size_by_entrypoint columns, which blocks dropping them. Selecting
-            # a single column avoids that.
-            root_lanes = (
+            root_lanes_count = (
                 _db.query(Lane.id)
                 .filter(Lane.library == self)
                 .filter(Lane.root_for_patron_type != None)
-            )
-            value = root_lanes.count() > 0
+            ).count()
+            value = root_lanes_count > 0
             Library._has_root_lane_cache[self.id] = value
         return value
 
