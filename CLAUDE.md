@@ -180,6 +180,28 @@ the removal isn't forgotten later:
 Pushing both PRs up front is deliberate: it makes the follow-up cleanup visible and prevents the second step from
 being lost.
 
+**Verifying backwards compatibility.** CI runs a `Backwards compatibility test`
+(`docker/ci/test_backwards_compatibility.sh`): it builds the schema from the current code, then runs the **latest**
+**published release's** database test suite (`pytest -m db`, external-schema mode) against it. A failure there means
+the migration would break the still-running previous release. It most often means a release-1 "stop using" change
+did not actually stop using the object — e.g. a `deferred()` column still re-selected by `Query.count()` /
+`from_self()`, or a Python-side `default=` still emitted on `INSERT`.
+
+Because that gate tests against a *published release*, it can only catch such a mistake **after** release-1 has
+shipped — a full release cycle after the bug was written. To get the same signal locally in minutes, pass a **git**
+**ref** to the script; it then builds both sides from git (previous side from the ref, current side from your working
+tree) instead of pulling a release:
+
+```bash
+# Prove that <release-1 commit> still works against the schema in your working tree
+# (e.g. the stacked release-2 drop). Green here means the "stop using" change is real.
+./docker/ci/test_backwards_compatibility.sh <release-1-commit-or-HEAD~1>
+```
+
+Run this before merging any release-1 "stop using" PR: check out the drop in your working tree, point the script at
+the release-1 commit, and confirm it passes. CI still tests against the real previous release; this is a local
+pre-flight so a broken "stop using" change never reaches a release. (Requires Docker and a pullable base image.)
+
 ## Contributing Guidelines
 
 - All new features require corresponding tests

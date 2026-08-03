@@ -18,8 +18,22 @@
 # The current image is provided via the WEBAPP_IMAGE environment variable (as in the other
 # docker CI jobs). The previous release image can be overridden via PREV_RELEASE_IMAGE
 # (useful for running this script locally).
+#
+# Local mode (PREV_RELEASE_REF): pass a git ref as the first argument, or set
+# PREV_RELEASE_REF, to test against that ref instead of the latest published release. Both
+# images are then built from git -- the previous side from the ref's committed tree, the
+# current side from the working tree (WEBAPP_IMAGE, built if unset) -- so you can prove a
+# "stop using" change is backwards compatible locally, before it is released. Example:
+#
+#   ./docker/ci/test_backwards_compatibility.sh HEAD~1
+#
+# Requires that the build base image is pullable (docker login ghcr.io if needed). CI leaves
+# PREV_RELEASE_REF unset and keeps testing against the real previous release.
 
 set -uo pipefail
+
+# Optional git ref for local mode (see header): accept it as $1 or via PREV_RELEASE_REF.
+PREV_RELEASE_REF="${PREV_RELEASE_REF:-${1:-}}"
 
 COMPOSE_FILES=(-f docker-compose.yml -f docker/ci/test_backwards_compatibility.yml)
 
@@ -43,6 +57,37 @@ fail() {
   echo "::error::$1"
   exit "${2:-1}"
 }
+
+# (0) Local mode: when a git ref is given, build both sides from git instead of pulling the
+# latest release, so a "stop using" change can be validated before it ships. Skipped in CI,
+# which leaves PREV_RELEASE_REF unset and tests against the published previous release.
+if [[ -n "${PREV_RELEASE_REF}" ]]; then
+  git rev-parse --verify --quiet "${PREV_RELEASE_REF}^{commit}" >/dev/null \
+    || fail "PREV_RELEASE_REF='${PREV_RELEASE_REF}' is not a valid git ref."
+  prev_sha="$(git rev-parse --short "${PREV_RELEASE_REF}")"
+  base_image="${BUILD_BASE_IMAGE:-ghcr.io/thepalaceproject/circ-baseimage:latest}"
+
+  # Previous side: build from the ref's committed tree. git archive streams that tree as the
+  # build context, so uncommitted changes are excluded (this is exactly the ref's code) and
+  # the working tree is never touched -- no checkout or worktree needed.
+  PREV_RELEASE_IMAGE="circ-webapp:backcompat-prev-${prev_sha}"
+  echo "Building previous image from ${PREV_RELEASE_REF} (${prev_sha}) ..."
+  git archive --format=tar "${PREV_RELEASE_REF}" \
+    | docker build -f docker/Dockerfile --target webapp \
+        --build-arg "BASE_IMAGE=${base_image}" \
+        --cache-from ghcr.io/thepalaceproject/circ-webapp:main \
+        -t "${PREV_RELEASE_IMAGE}" - \
+    || fail "Could not build the previous image from ${PREV_RELEASE_REF}."
+
+  # Current side: build from the working tree (including uncommitted changes) so the schema
+  # under test is whatever you are working on right now.
+  if [[ -z "${WEBAPP_IMAGE:-}" ]]; then
+    export WEBAPP_IMAGE="circ-webapp:backcompat-current-local"
+    echo "Building current image from the working tree ..."
+    compose_cmd build webapp \
+      || fail "Could not build the current image from the working tree."
+  fi
+fi
 
 # (1) Resolve the previous release image.
 if [[ -z "${PREV_RELEASE_IMAGE:-}" ]]; then
@@ -78,14 +123,19 @@ fi
 trap cleanup EXIT
 
 # (2) Build the current schema by initializing a fresh database with the current image.
-compose_cmd up -d pg os minio valkey || fail "Could not start service containers."
+# --wait blocks until the services report healthy: initialize_instance is run with
+# `compose run --no-deps` (below), which bypasses the webapp service's depends_on health
+# gating, so without --wait it can race a still-starting OpenSearch/Postgres and fail.
+compose_cmd up -d --wait pg os minio valkey || fail "Could not start service containers."
 run_in_container webapp "./bin/util/initialize_instance" \
   || fail "Failed to initialize the database with the current image."
 
 # (3) Run the previous release's database tests against the new schema. In external-schema
 # mode each xdist worker clones the freshly-built schema into its own database, so the suite
-# runs in parallel (-n auto).
-compose_cmd pull --quiet webapp-prev || fail "Could not pull ${PREV_RELEASE_IMAGE}."
+# runs in parallel (-n auto). In local mode the previous image was built above, not pulled.
+if [[ -z "${PREV_RELEASE_REF}" ]]; then
+  compose_cmd pull --quiet webapp-prev || fail "Could not pull ${PREV_RELEASE_IMAGE}."
+fi
 echo "Running the previous release's database tests against the current schema ..."
 if ! run_in_container webapp-prev \
   "uv sync --frozen --active && pytest --no-cov -n auto -m db --ignore=tests/migration tests"; then
