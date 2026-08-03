@@ -155,7 +155,10 @@ mapped column in its default `SELECT`, and eagerly emits any column that has a P
 using it, and a later drop will break the still-running previous release. To fully stop using a column in
 release 1, before dropping it in release 2:
 
-- **Reads:** mark the column `deferred()` so it is excluded from the default `SELECT`.
+- **Reads:** mark the column `deferred()` so it is excluded from the default `SELECT`. Note that
+  `deferred()` alone is not always sufficient:
+  - `Query.count()` wraps its source in `SELECT count(*) FROM (<source>)`, and that inner subquery re-selects
+    every mapped column, deferred ones included.
 - **Writes:** remove any Python-side `default=`. If the column is `NOT NULL`, removing the Python default
   alone makes inserts fail the not-null constraint (SQLAlchemy sends no value and the database has none), so
   first move the default into the database with a `server_default`. A **nullable** column with no default
