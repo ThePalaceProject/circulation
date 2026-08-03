@@ -16,8 +16,9 @@
 #      compatible.
 #
 # The current image is provided via the WEBAPP_IMAGE environment variable (as in the other
-# docker CI jobs). The previous release image can be overridden via PREV_RELEASE_IMAGE
-# (useful for running this script locally).
+# docker CI jobs). The previous release image can be overridden via PREV_RELEASE_IMAGE (useful
+# for running this script locally); it is ignored in local mode, where the previous image is
+# always built from the ref.
 #
 # Local mode (PREV_RELEASE_REF): pass a git ref as the first argument, or set
 # PREV_RELEASE_REF, to test against that ref instead of the latest published release. Both
@@ -32,8 +33,9 @@
 
 set -uo pipefail
 
-# Optional git ref for local mode (see header): accept it as $1 or via PREV_RELEASE_REF.
-PREV_RELEASE_REF="${PREV_RELEASE_REF:-${1:-}}"
+# Optional git ref for local mode (see header): accept it as $1, falling back to
+# PREV_RELEASE_REF.
+PREV_RELEASE_REF="${1:-${PREV_RELEASE_REF:-}}"
 
 COMPOSE_FILES=(-f docker-compose.yml -f docker/ci/test_backwards_compatibility.yml)
 
@@ -42,7 +44,10 @@ compose_cmd() {
   docker compose "${COMPOSE_FILES[@]}" --progress quiet "$@"
 }
 
-# Run a command in a container with the palace virtualenv activated.
+# Run a command in a container with the palace virtualenv activated. compose run builds a missing
+# image from its build: context, so webapp-prev -- which inherits webapp's build: via extends --
+# must have its previous image ensured upstream (its --load/pull steps are || fail-guarded), or a
+# missing one would silently test the working tree against itself instead of failing.
 run_in_container() {
   local container="$1"
   shift
@@ -58,33 +63,45 @@ fail() {
   exit "${2:-1}"
 }
 
+# Reject bad arguments early: only one git ref is meaningful. Too many (e.g. mistaking it for a
+# ref range) or an empty one (e.g. ./...sh "$UNSET_VAR") would otherwise silently test the wrong
+# thing -- the first ref, or a fall-through to the latest release -- and report a confident result.
+[[ $# -gt 1 ]] && fail "Too many arguments; expected at most one git ref, got $#."
+[[ $# -eq 1 && -z "${1:-}" ]] && fail "Empty git ref argument; pass a ref, or no argument to test against the latest release."
+
 # (0) Local mode: when a git ref is given, build both sides from git instead of pulling the
 # latest release, so a "stop using" change can be validated before it ships. Skipped in CI,
 # which leaves PREV_RELEASE_REF unset and tests against the published previous release.
 if [[ -n "${PREV_RELEASE_REF}" ]]; then
   git rev-parse --verify --quiet "${PREV_RELEASE_REF}^{commit}" >/dev/null \
     || fail "PREV_RELEASE_REF='${PREV_RELEASE_REF}' is not a valid git ref."
-  prev_sha="$(git rev-parse --short "${PREV_RELEASE_REF}")"
-  base_image="${BUILD_BASE_IMAGE:-ghcr.io/thepalaceproject/circ-baseimage:latest}"
+  prev_sha="$(git rev-parse --short "${PREV_RELEASE_REF}^{commit}")"
+  base_image="${BUILD_BASE_IMAGE-ghcr.io/thepalaceproject/circ-baseimage:latest}"
 
-  # Previous side: build from the ref's committed tree. git archive streams that tree as the
-  # build context, so uncommitted changes are excluded (this is exactly the ref's code) and
-  # the working tree is never touched -- no checkout or worktree needed.
-  PREV_RELEASE_IMAGE="circ-webapp:backcompat-prev-${prev_sha}"
+  # Previous side: build the ref's committed tree, streamed as the build context via git archive
+  # so the working tree is untouched -- no checkout or worktree needed. Export (not just set) so
+  # `compose_cmd build webapp` below sees it, else compose warns webapp-prev's image is unset.
+  export PREV_RELEASE_IMAGE="circ-webapp:backcompat-prev-${prev_sha}"
   echo "Building previous image from ${PREV_RELEASE_REF} (${prev_sha}) ..."
-  git archive --format=tar "${PREV_RELEASE_REF}" \
-    | docker build -f docker/Dockerfile --target webapp \
-        --build-arg "BASE_IMAGE=${base_image}" \
-        --cache-from ghcr.io/thepalaceproject/circ-webapp:main \
-        -t "${PREV_RELEASE_IMAGE}" - \
+  # --load: else a container-driver buildx builder leaves the tag only in its cache, not the image store.
+  prev_build=(docker buildx build -f docker/Dockerfile --target webapp --load
+    --build-arg "BASE_IMAGE=${base_image}" -t "${PREV_RELEASE_IMAGE}")
+  # cache_from / --platform: mirror docker-compose.yml so both sides build alike (empty cache_from is skipped;
+  # a BUILD_PLATFORM mismatch would otherwise surface as a bogus "not backwards compatible" on webapp-prev).
+  cache_from="${BUILD_CACHE_FROM-ghcr.io/thepalaceproject/circ-webapp:main}"
+  [[ -n "${cache_from}" ]] && prev_build+=(--cache-from "${cache_from}")
+  [[ -n "${BUILD_PLATFORM:-}" ]] && prev_build+=(--platform "${BUILD_PLATFORM}")
+  prev_build+=(-)
+  git archive --format=tar "${PREV_RELEASE_REF}" | "${prev_build[@]}" \
     || fail "Could not build the previous image from ${PREV_RELEASE_REF}."
 
   # Current side: build from the working tree (including uncommitted changes) so the schema
-  # under test is whatever you are working on right now.
+  # under test is whatever you are working on right now. Use plain progress (not compose_cmd's
+  # --progress quiet) so this build -- the longest step in local mode -- streams output.
   if [[ -z "${WEBAPP_IMAGE:-}" ]]; then
     export WEBAPP_IMAGE="circ-webapp:backcompat-current-local"
     echo "Building current image from the working tree ..."
-    compose_cmd build webapp \
+    docker compose "${COMPOSE_FILES[@]}" --progress plain build webapp \
       || fail "Could not build the current image from the working tree."
   fi
 fi
@@ -119,6 +136,9 @@ echo "Previous release image: ${PREV_RELEASE_IMAGE}"
 if [[ -z "${WEBAPP_IMAGE:-}" ]]; then
   fail "WEBAPP_IMAGE is not set; it must point at the current build's webapp image."
 fi
+# Echo the current image too, so a stale/exported WEBAPP_IMAGE (which skips the working-tree
+# build in local mode) is visible rather than producing a confidently wrong result.
+echo "Current image: ${WEBAPP_IMAGE}"
 
 trap cleanup EXIT
 
@@ -126,7 +146,14 @@ trap cleanup EXIT
 # --wait blocks until the services report healthy: initialize_instance is run with
 # `compose run --no-deps` (below), which bypasses the webapp service's depends_on health
 # gating, so without --wait it can race a still-starting OpenSearch/Postgres and fail.
-compose_cmd up -d --wait pg os minio valkey || fail "Could not start service containers."
+services=(pg os minio valkey)
+echo "Starting service containers and waiting for them to be healthy ..."
+compose_cmd up -d --wait "${services[@]}" || {
+  # cleanup (trap EXIT) tears these down on exit, so capture state and logs before failing.
+  compose_cmd ps -a
+  compose_cmd logs --no-color "${services[@]}"
+  fail "Could not start service containers."
+}
 run_in_container webapp "./bin/util/initialize_instance" \
   || fail "Failed to initialize the database with the current image."
 
@@ -136,6 +163,13 @@ run_in_container webapp "./bin/util/initialize_instance" \
 if [[ -z "${PREV_RELEASE_REF}" ]]; then
   compose_cmd pull --quiet webapp-prev || fail "Could not pull ${PREV_RELEASE_IMAGE}."
 fi
+# Assert the previous image is actually present before running it. compose pull does not reliably
+# fail for a service with a build: section (webapp-prev inherits webapp's via extends; it can fall
+# back to "must build"), and compose run would then rebuild the missing image from the working
+# tree -- a vacuous current-vs-current pass. This inspect fails loudly in both the pull (CI) and
+# --load (local) paths, so a missing previous image can never be silently rebuilt.
+docker image inspect "${PREV_RELEASE_IMAGE}" >/dev/null 2>&1 \
+  || fail "${PREV_RELEASE_IMAGE} is not present locally; the check would rebuild it from the working tree and pass vacuously."
 echo "Running the previous release's database tests against the current schema ..."
 if ! run_in_container webapp-prev \
   "uv sync --frozen --active && pytest --no-cov -n auto -m db --ignore=tests/migration tests"; then
