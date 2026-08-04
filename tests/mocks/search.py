@@ -39,6 +39,7 @@ class SearchServiceFake(SearchService):
         self._documents_by_index = defaultdict(list)
         self._read_pointer: SearchPointer | None = None
         self._write_pointer: SearchPointer | None = None
+        self._created_indices: set[str] = set()
         self._search_client = Search(using=MagicMock())
         self._multi_search_client = MultiSearch(using=MagicMock())
         self._document_submission_attempts = []
@@ -99,6 +100,7 @@ class SearchServiceFake(SearchService):
 
     def index_create(self, revision: SearchSchemaRevision) -> None:
         self._fail_if_necessary()
+        self._created_indices.add(revision.name_for_index(self.base_name))
         return None
 
     def index_set_mapping(self, revision: SearchSchemaRevision) -> None:
@@ -181,6 +183,13 @@ class SearchServiceFake(SearchService):
         to_remove = [item for item in items if item.get("_id") == doc_id]
         for item in to_remove:
             items.remove(item)
+
+    def index_remove(self, name: str) -> bool:
+        self._fail_if_necessary()
+        if name in self._created_indices:
+            self._created_indices.discard(name)
+            return True
+        return False
 
 
 def fake_hits(works: list[Work]):

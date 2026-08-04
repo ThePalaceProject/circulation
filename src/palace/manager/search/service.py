@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
@@ -160,6 +161,14 @@ class SearchService(ABC):
     @abstractmethod
     def index_remove_document(self, doc_id: int) -> None:
         """Remove a specific document from the given index."""
+
+    @abstractmethod
+    def index_remove(self, name: str) -> bool:
+        """Delete the index with the given *name* if it exists.
+
+        :return: True if the index existed and was removed, False if there was
+            no such index.
+        """
 
 
 class SearchServiceOpensearch1(SearchService, LoggerMixin):
@@ -349,3 +358,60 @@ class SearchServiceOpensearch1(SearchService, LoggerMixin):
 
     def index_remove_document(self, doc_id: int) -> None:
         self._write_client.delete(index=self.write_pointer_name(), id=doc_id)
+
+    def index_remove(self, name: str) -> bool:
+        if not self._write_client.indices.exists(index=name):
+            return False
+        self.log.info(f"removing index {name}")
+        # ignore=[404] covers the small window where the index is dropped between
+        # the exists() check and here, so a concurrent delete is a no-op rather
+        # than a NotFoundError.
+        self._write_client.indices.delete(index=name, ignore=[404])
+        return True
+
+
+def remove_search_indices(
+    service: SearchService,
+    versions: Sequence[int],
+    *,
+    log: logging.Logger,
+) -> list[str]:
+    """Remove the search indexes for the given old schema *versions*.
+
+    When the search schema migrates to a new revision the read and write aliases
+    are re-pointed at the new index, but the index they replaced is left in
+    place, so retired revisions leave orphaned ``{base}-v{n}`` indexes behind in
+    the cluster. This deletes the named versions if they are still present.
+
+    As a safety guard it never deletes an index that a read or write alias still
+    points at, so it cannot remove the live index even if it is asked to.
+
+    :param service: The search service to operate on.
+    :param versions: The schema versions whose indexes should be removed.
+    :param log: The logger to report progress to.
+    :return: The names of the indexes that were removed.
+    """
+    base = service.base_revision_name
+
+    # Never delete an index an alias still points at -- that would break reads or
+    # writes. In the expected post-migration state both aliases are on the
+    # current revision, so none of the old versions are protected.
+    protected = {
+        pointer.index
+        for pointer in (service.read_pointer(), service.write_pointer())
+        if pointer is not None
+    }
+
+    removed: list[str] = []
+    for version in versions:
+        name = f"{base}-v{version}"
+        if name in protected:
+            log.warning(
+                f"Not removing search index {name}: an alias still points at it."
+            )
+        elif service.index_remove(name):
+            log.info(f"Removed old search index {name}.")
+            removed.append(name)
+        else:
+            log.info(f"Old search index {name} not found; nothing to remove.")
+    return removed
