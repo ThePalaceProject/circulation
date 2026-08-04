@@ -220,3 +220,25 @@ class TestTaskLock:
             mock_task, lock_name="test_lock", redis_client=redis_fixture.client
         )
         assert task_lock.key.endswith("::TaskLock::test_lock")
+
+    def test___init___without_task(self, redis_fixture: RedisFixture):
+        # A caller outside Celery can contend for a task's lock, as long as it supplies
+        # the two things the task would otherwise have provided.
+        task_lock = TaskLock(lock_name="test_lock", redis_client=redis_fixture.client)
+        assert task_lock.key.endswith("::TaskLock::test_lock")
+
+        # It gets the same key a task holding the same lock would, so the two contend.
+        mock_task = create_autospec(Task)
+        mock_task.name = "test_task"
+        assert (
+            TaskLock(
+                mock_task, lock_name="test_lock", redis_client=redis_fixture.client
+            ).key
+            == task_lock.key
+        )
+
+        # Without a task there is no name to fall back on, and no client to borrow.
+        with pytest.raises(LockValueError):
+            TaskLock(redis_client=redis_fixture.client)
+        with pytest.raises(LockValueError):
+            TaskLock(lock_name="test_lock")

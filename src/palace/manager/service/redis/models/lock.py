@@ -233,23 +233,37 @@ class RedisLock(BaseRedisLock):
 
 
 class TaskLock(RedisLock):
+    """
+    The lock a task takes to keep a second copy of itself from running.
+
+    `task` may be omitted, as long as `lock_name` and `redis_client` are given, so that
+    code outside Celery can contend for the same lock as a task. That is for callers
+    doing a task's work themselves rather than merely touching the same resource - a
+    script reindexing in process, say - which need to hold off the scheduled task while
+    they do it.
+    """
+
     def __init__(
         self,
-        task: Task,
+        task: Task | None = None,
         redis_client: Redis | None = None,
         lock_name: str | None = None,
         lock_timeout: timedelta | None = timedelta(minutes=5),
         retry_delay: float = 0.2,
     ):
-        random_value = task.request.root_id or task.request.id
+        random_value = (task.request.root_id or task.request.id) if task else None
         if lock_name is None:
-            if task.name is None:
+            if task is None or task.name is None:
                 raise LockValueError(
-                    "Task.name must not be None if lock_name is not provided."
+                    "Task with a name must be provided if lock_name is not provided."
                 )
             name = ["Task", task.name]
         else:
             name = [lock_name]
         if redis_client is None:
+            if task is None:
+                raise LockValueError(
+                    "redis_client must be provided if task is not provided."
+                )
             redis_client = task.services.redis.client()
         super().__init__(redis_client, name, random_value, lock_timeout, retry_delay)
