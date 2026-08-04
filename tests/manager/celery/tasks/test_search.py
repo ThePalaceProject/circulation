@@ -402,18 +402,23 @@ def search_migration_fixture(
     return SearchMigrationFixture(db, end_to_end_search_fixture)
 
 
+@patch("palace.manager.celery.tasks.search.random.uniform")
 def test_search_reindex_advances_read_pointer(
+    mock_random_uniform: MagicMock,
     celery_fixture: CeleryFixture,
     redis_fixture: RedisFixture,
     search_migration_fixture: SearchMigrationFixture,
     end_to_end_search_fixture: EndToEndSearchFixture,
 ):
     fixture = search_migration_fixture
+    mock_random_uniform.return_value = 0.0
 
     # Creating the new index moves the write pointer but leaves reads on the old index.
     fixture.assert_pointers(read=fixture.old_index, write=fixture.new_index)
 
-    search_reindex.delay().wait()
+    # A real migration always takes more than one batch, so use a batch size that makes
+    # the run requeue itself: the index it is filling has to survive the requeues.
+    search_reindex.delay(batch_size=3).wait()
 
     # Having filled the new index end to end, the reindex publishes it. Nothing had to
     # chain a second task on to do it.
@@ -470,6 +475,28 @@ def test_search_reindex_does_not_advance_read_pointer_when_the_write_pointer_mov
 
     assert write_pointer.call_count == 2
     fixture.assert_pointers(read=fixture.old_index, write=fixture.new_index)
+
+
+@patch("palace.manager.celery.tasks.search.exponential_backoff")
+def test_search_reindex_retries_when_the_write_pointer_cannot_be_read(
+    mock_backoff: MagicMock,
+    celery_fixture: CeleryFixture,
+    redis_fixture: RedisFixture,
+    search_migration_fixture: SearchMigrationFixture,
+):
+    fixture = search_migration_fixture
+    mock_backoff.return_value = 0
+    started_on = fixture.service.write_pointer()
+
+    # The run can't tell which index it is filling until it reads the write pointer, so a
+    # transient failure there is retried rather than failing the run.
+    with patch.object(
+        type(fixture.service), "write_pointer", autospec=True
+    ) as write_pointer:
+        write_pointer.side_effect = [OpenSearchException(), started_on, started_on]
+        search_reindex.delay().wait()
+
+    fixture.assert_pointers(read=fixture.new_index, write=fixture.new_index)
 
 
 @patch("palace.manager.celery.tasks.search.exponential_backoff")

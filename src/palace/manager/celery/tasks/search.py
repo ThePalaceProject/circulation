@@ -90,6 +90,26 @@ def set_read_pointer(
     )
 
 
+def resolve_target_index(task: Task, service: SearchService) -> str | None:
+    """
+    Identify the index a reindex starting now is going to fill.
+
+    :param task: The task doing the reindex, retried with a backoff if OpenSearch cannot
+        be reached.
+    :param service: The search service to read the write pointer from.
+    :return: The index writes are currently going to, or None if there is no write pointer.
+    """
+    try:
+        write_pointer = service.write_pointer()
+    except OpenSearchException as e:
+        wait_time = exponential_backoff(task.request.retries)
+        task.log.error(
+            f"Failed to read the write pointer: {e}. Retrying in {wait_time} seconds."
+        )
+        raise task.retry(countdown=wait_time)
+    return write_pointer.index if write_pointer is not None else None
+
+
 def advance_read_pointer(task: Task, target_index: str | None) -> None:
     """
     Point reads at the index a completed reindex just filled, if reads are still being
@@ -165,8 +185,7 @@ def search_reindex(
 
     with task_lock.lock(release_on_exit=False, ignored_exceptions=(Retry, Ignore)):
         if target_index is None and offset == 0:
-            write_pointer = service.write_pointer()
-            target_index = write_pointer.index if write_pointer is not None else None
+            target_index = resolve_target_index(task, service)
 
         task.log.info(
             f"Running search reindex at offset {offset} with batch size {batch_size}."
