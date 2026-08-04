@@ -197,6 +197,52 @@ class TestMarkIdentifiersUnavailable:
         assert existing_set.exists() is False
         assert active_set.exists() is False
 
+    @pytest.mark.parametrize(
+        "status_kwargs,expected_status",
+        [
+            pytest.param({}, LicensePoolStatus.REMOVED, id="default"),
+            pytest.param(
+                {"status": LicensePoolStatus.EXHAUSTED},
+                LicensePoolStatus.EXHAUSTED,
+                id="explicit",
+            ),
+        ],
+    )
+    def test_status(
+        self,
+        db: DatabaseTransactionFixture,
+        identifier_tasks_fixture: IdentifierTasksFixture,
+        status_kwargs: dict[str, LicensePoolStatus],
+        expected_status: LicensePoolStatus,
+    ) -> None:
+        """The recorded status defaults to REMOVED but can be overridden.
+
+        Distributors that drop titles when a lease ends, rather than only when a
+        title is withdrawn, want EXHAUSTED so outstanding loans and holds survive.
+        """
+        collection = db.collection()
+        license_pools = identifier_tasks_fixture.license_pools(
+            collection=collection, count=2
+        )
+
+        existing_set = IdentifierSet(identifier_tasks_fixture.redis_client)
+        existing_set.add(*identifier_tasks_fixture.identifiers(license_pools))
+        active_set = IdentifierSet(identifier_tasks_fixture.redis_client)
+        active_set.add(*identifier_tasks_fixture.identifiers(license_pools[:1]))
+
+        with patch.object(identifiers, "circulation_apply") as mock_apply:
+            identifiers.mark_identifiers_unavailable.delay(
+                [existing_set, active_set],
+                collection_id=collection.id,
+                **status_kwargs,
+            ).wait()
+
+        mock_apply.delay.assert_called_once()
+        circulation = mock_apply.delay.call_args.kwargs["circulation"]
+        assert circulation.status == expected_status
+        assert circulation.licenses_owned == 0
+        assert circulation.licenses_available == 0
+
     def test_run_with_nonexistent_sets(
         self,
         db: DatabaseTransactionFixture,

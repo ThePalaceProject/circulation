@@ -73,6 +73,17 @@ def import_workflow_lock(
     )
 
 
+def reap_key(collection_id: int, *additional: str) -> list[str]:
+    """
+    Generate a Redis key for a reap run's identifier set.
+    """
+    return [
+        "ReapCollection",
+        Collection.redis_key_from_id(collection_id),
+        *additional,
+    ]
+
+
 def reap_workflow_key(collection_id: int) -> list[str]:
     """
     Generate a Redis key for the reap workflow-level lock for the given collection.

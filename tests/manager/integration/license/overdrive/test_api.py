@@ -28,10 +28,15 @@ from palace.manager.api.circulation.fulfillment import (
     StreamingFulfillment,
 )
 from palace.manager.api.config import Configuration
-from palace.manager.celery.tasks import overdrive as overdrive_celery
+from palace.manager.celery.tasks import (
+    identifiers as identifiers_celery,
+    overdrive as overdrive_celery,
+)
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.exceptions import IntegrationException
+from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.integration.license.overdrive.api import (
+    BookInfoEndpoint,
     OverdriveAPI,
     OverdriveToken,
 )
@@ -60,6 +65,7 @@ from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
     LicensePool,
+    LicensePoolStatus,
     RightsStatus,
 )
 from palace.manager.sqlalchemy.model.patron import Hold
@@ -77,11 +83,116 @@ from tests.mocks.mock import MockRequestsResponse
 class TestOverdriveAPI:
     def test_reap_task(self) -> None:
         collection_id = MagicMock()
-        with patch.object(overdrive_celery, "reap_collection") as mock_reap:
+        with (
+            patch.object(overdrive_celery, "reap_collection") as mock_reap,
+            patch.object(
+                identifiers_celery, "create_mark_unavailable_chord"
+            ) as mock_chord,
+        ):
             result = OverdriveAPI.reap_task(collection_id)
 
         mock_reap.s.assert_called_once_with(collection_id)
-        assert result == mock_reap.s.return_value
+        # Overdrive drops titles when a lease ends, so a missing title means the
+        # copies are gone, not that outstanding loans and holds should be revoked.
+        mock_chord.assert_called_once_with(
+            collection_id,
+            mock_reap.s.return_value,
+            status=LicensePoolStatus.EXHAUSTED,
+        )
+        assert result == mock_chord.return_value
+
+    def test_product_page_initial_endpoint(
+        self, overdrive_api_fixture: OverdriveAPIFixture
+    ) -> None:
+        endpoint = overdrive_api_fixture.api.product_page_initial_endpoint()
+
+        assert "/v1/collections/fake%20collection%20token/products" in endpoint.url
+        assert f"limit={OverdriveAPI.PRODUCTS_PAGE_SIZE_LIMIT}" in endpoint.url
+        # _make_link_safe escapes the colon in the sort value; Overdrive accepts
+        # either form.
+        assert "sort=dateAdded%3Aasc" in endpoint.url
+
+    def test_product_page_initial_endpoint_caps_page_size(
+        self, overdrive_api_fixture: OverdriveAPIFixture
+    ) -> None:
+        endpoint = overdrive_api_fixture.api.product_page_initial_endpoint(
+            page_size=100_000
+        )
+        assert f"limit={OverdriveAPI.PRODUCTS_PAGE_SIZE_LIMIT}" in endpoint.url
+
+    def test_fetch_product_page(
+        self, overdrive_api_fixture: OverdriveAPIFixture
+    ) -> None:
+        data, raw = overdrive_api_fixture.sample_json("overdrive_product_page.json")
+        overdrive_api_fixture.mock_http.queue_response(200, content=data)
+
+        page = overdrive_api_fixture.api.fetch_product_page(
+            BookInfoEndpoint("http://products/")
+        )
+
+        # Every product on the page is counted, whether or not it is still owned,
+        # because the count is what gets checked against totalItems.
+        assert page.seen == len(raw["products"]) == 3
+        assert page.total_items == raw["totalItems"]
+        assert page.next_page is not None
+        assert page.next_page.url == raw["links"]["next"]["href"]
+
+        # The title Overdrive no longer owns is left out of the active set, so it is
+        # reaped alongside titles that dropped out of the feed entirely.
+        not_owned = [
+            p["id"] for p in raw["products"] if p.get("isOwnedByCollections") is False
+        ]
+        assert len(not_owned) == 1
+        assert len(page.active) == 2
+        assert not_owned[0].lower() not in {i.identifier for i in page.active}
+
+    def test_fetch_product_page_last_page(
+        self, overdrive_api_fixture: OverdriveAPIFixture
+    ) -> None:
+        data, raw = overdrive_api_fixture.sample_json(
+            "overdrive_product_page_last.json"
+        )
+        overdrive_api_fixture.mock_http.queue_response(200, content=data)
+
+        page = overdrive_api_fixture.api.fetch_product_page(
+            BookInfoEndpoint("http://products/")
+        )
+
+        assert "next" not in raw["links"]
+        assert page.next_page is None
+        assert page.seen == 2
+
+    def test_fetch_product_page_normalizes_identifier_case(
+        self,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        db: DatabaseTransactionFixture,
+    ) -> None:
+        """Crawled identifiers must take the form the database stores.
+
+        Overdrive sends product ids uppercased in the product list but lowercased in
+        availability documents, and `Identifier.for_foreign_id` lowercases them on the
+        way in. If the crawl preserved the feed's casing, no crawled identifier would
+        match a stored one and the reaper would treat every title in the collection as
+        having been removed.
+        """
+        data, raw = overdrive_api_fixture.sample_json("overdrive_product_page.json")
+        overdrive_api_fixture.mock_http.queue_response(200, content=data)
+
+        # Guard the premise: if Overdrive ever starts sending lowercase ids here,
+        # this test stops proving anything and should be revisited.
+        assert any(p["id"] != p["id"].lower() for p in raw["products"])
+
+        page = overdrive_api_fixture.api.fetch_product_page(
+            BookInfoEndpoint("http://products/")
+        )
+
+        for product in raw["products"]:
+            if product.get("isOwnedByCollections") is False:
+                continue
+            identifier, _ = Identifier.for_foreign_id(
+                db.session, Identifier.OVERDRIVE_ID, product["id"]
+            )
+            assert IdentifierData.from_identifier(identifier) in page.active
 
     def test_patron_activity_exception_collection_none(
         self,

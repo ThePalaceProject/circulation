@@ -84,6 +84,7 @@ def mark_identifiers_unavailable(
     existing_and_active_identifier_sets: list[RedisSetKwargs | None],
     *,
     collection_id: int,
+    status: LicensePoolStatus = LicensePoolStatus.REMOVED,
 ) -> bool:
     """
     Takes a list of two RedisSetKwargs elements as the first positional argument. These are used to create
@@ -96,10 +97,14 @@ def mark_identifiers_unavailable(
 
     Any identifiers present in the existing set but not in the active set will be marked as unavailable in
     the collection. This is done by sending a circulation_apply task that creates CirculationData with
-    licenses_available and licenses_owned both set to 0, and status set to LicensePoolStatus.REMOVED.
+    licenses_available and licenses_owned both set to 0, and status set to `status`.
 
     This function is designed to be used as the body of a chord created by `create_mark_unavailable_chord`.
 
+    :param status: The status to record on the affected license pools. Defaults to
+        `LicensePoolStatus.REMOVED`, which revokes outstanding loans and holds. Distributors
+        whose feeds routinely drop titles that are merely out of circulation should pass
+        `LicensePoolStatus.EXHAUSTED` instead.
     :return: True if identifiers were successfully marked as unavailable, False if the operation was skipped.
     """
     redis_client = task.services.redis().client()
@@ -148,7 +153,7 @@ def mark_identifiers_unavailable(
             data_source_name=data_source_name,
             licenses_owned=0,
             licenses_available=0,
-            status=LicensePoolStatus.REMOVED,
+            status=status,
         )
         identifiers_to_mark = existing_identifiers - active_identifiers
         for identifier in identifiers_to_mark:
@@ -170,7 +175,10 @@ def mark_identifiers_unavailable(
 
 
 def create_mark_unavailable_chord(
-    collection_id: int, active_identifiers_sig: Signature
+    collection_id: int,
+    active_identifiers_sig: Signature,
+    *,
+    status: LicensePoolStatus = LicensePoolStatus.REMOVED,
 ) -> Signature:
     """
     Creates a Celery chord that identifies and marks as unavailable any identifiers that were not
@@ -190,11 +198,15 @@ def create_mark_unavailable_chord(
     :param active_identifiers_sig: A Celery signature that returns an IdentifierSet containing
         identifiers available in the distributor's feed. This task may requeue itself if needed, as
         long as it ultimately returns an IdentifierSet.
+    :param status: The status to record on the affected license pools. See
+        `mark_identifiers_unavailable`.
 
     :return: A Celery chord signature that can be executed to perform the unavailable identifier marking process.
     """
     existing_identifiers_sig = existing_available_identifiers.s(collection_id)
-    mark_identifiers_sig = mark_identifiers_unavailable.s(collection_id=collection_id)
+    mark_identifiers_sig = mark_identifiers_unavailable.s(
+        collection_id=collection_id, status=status
+    )
 
     chord_header = [existing_identifiers_sig, active_identifiers_sig]
 

@@ -3,7 +3,6 @@ from typing import Any, Literal, TypedDict, TypeGuard
 from uuid import uuid4
 
 from celery import chain, chord, group, shared_task
-from sqlalchemy import select
 
 from palace.util.datetime_helpers import utc_now
 
@@ -11,6 +10,7 @@ from palace.manager.celery.importer import (
     import_all as create_import_tasks,
     import_key,
     import_workflow_lock,
+    reap_key,
     reap_workflow_lock,
     workflow_lock_guard,
 )
@@ -25,8 +25,6 @@ from palace.manager.integration.license.overdrive.importer import OverdriveImpor
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.set import IdentifierSet
 from palace.manager.sqlalchemy.model.collection import Collection
-from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.util.http.exception import (
     BadResponseException,
     RemoteIntegrationException,
@@ -34,6 +32,13 @@ from palace.manager.util.http.exception import (
 )
 
 IMPORT_SKIPPED: str = "import_skipped"
+
+# How far a completed crawl may fall short of Overdrive's reported totalItems before
+# it is treated as incomplete. A crawl of a large collection runs for minutes while
+# titles are added and removed under it, so the count is expected to move a little;
+# the floor keeps small collections from being held to an unreachable standard.
+REAP_CRAWL_ALLOWANCE: float = 0.001
+REAP_CRAWL_ALLOWANCE_FLOOR: int = 10
 
 
 class ImportSkippedPayload(TypedDict):
@@ -469,7 +474,10 @@ def reap_all_collections(task: Task) -> None:
     Queue a reap task for every Overdrive collection.
 
     Includes both parent collections and Advantage (child) collections, since titles
-    can be removed from either independently.
+    can be removed from either independently. Each collection is reaped against its
+    own collection token, which is what keeps parent and Advantage collections
+    consistent: an Advantage token lists only the titles that account owns, exactly
+    the titles the importer wrote into that collection.
     """
     with task.session() as session:
         registry = task.services.integration_registry().license_providers()
@@ -478,7 +486,7 @@ def reap_all_collections(task: Task) -> None:
         )
         collections = session.scalars(collection_query).all()
     for collection in collections:
-        reap_collection.delay(collection.id)
+        OverdriveAPI.reap_task(collection.id).apply_async()
 
 
 @shared_task(
@@ -493,19 +501,36 @@ def reap_collection(
     task: Task,
     collection_id: int,
     *,
-    offset: int = 0,
-    batch_size: int = 50,
-) -> None:
+    page: str | None = None,
+    seen: int = 0,
+) -> IdentifierSet | None:
     """
-    Check for books that are in the local collection but have left our Overdrive collection.
+    Enumerate the titles an Overdrive collection currently holds.
 
-    Processes identifiers in batches, re-queuing itself via task.replace() until all
-    identifiers have been checked. Concurrency is governed by
+    Walks the collection's product list one page at a time, re-queuing itself via
+    ``task.replace()`` until the crawl is complete, and collects the identifiers into
+    a Redis set. Only ids are read -- no metadata or availability lookups -- so a
+    whole collection costs a handful of requests rather than one per title.
+
+    The returned set is the "active" half of
+    :func:`~palace.manager.celery.tasks.identifiers.create_mark_unavailable_chord`:
+    identifiers the collection holds locally but which are absent from this set have
+    left the Overdrive collection and are marked exhausted. Titles Overdrive still
+    lists but no longer owns are excluded by :meth:`OverdriveAPI.fetch_product_page`,
+    so they are reaped on the same footing.
+
+    Because reaping acts on the *absence* of an identifier, a partial crawl would
+    mark live titles as gone. The crawl is therefore checked against Overdrive's
+    ``totalItems`` before the set is handed on, and ``None`` is returned if it cannot
+    be shown to be complete -- which the chord body treats as a failed run and
+    aborts, marking nothing. Concurrency is governed by
     :func:`~palace.manager.celery.importer.workflow_lock_guard`.
 
     :param collection_id: The ID of the Overdrive collection to reap.
-    :param offset: The last Identifier.id processed; used to resume across batches.
-    :param batch_size: Number of identifiers to process per batch.
+    :param page: The product-list page to fetch, as a url. None starts a new crawl.
+    :param seen: Running count of products returned by previous pages.
+    :return: The identifiers the collection currently holds, or None if the crawl was
+        skipped, aborted, or could not be verified as complete.
     """
     with workflow_lock_guard(
         task,
@@ -514,54 +539,76 @@ def reap_collection(
         lock_factory=reap_workflow_lock,
     ) as proceed:
         if not proceed:
-            return
+            return None
 
-        new_offset = 0
-        processed_count = 0
-        collection_name = None
+        redis = task.services.redis().client()
+        identifier_set = IdentifierSet(redis, reap_key(collection_id, task.request.id))
 
         with task.transaction() as session:
             collection = load_from_id(session, Collection, collection_id)
             collection_name = collection.name
 
-            identifiers = (
-                session.execute(
-                    select(Identifier)
-                    .join(Identifier.licensed_through)
-                    .where(
-                        LicensePool.collection_id == collection_id,
-                        Identifier.id > offset,
-                    )
-                    .order_by(Identifier.id)
-                    .limit(batch_size)
+            if collection.marked_for_deletion:
+                task.log.warning(
+                    f"This collection is marked for deletion. "
+                    f"Skipping reap of '{collection_name}'."
                 )
-                .unique()
-                .scalars()
-                .all()
-            )
-
-            if not identifiers:
-                task.log.info(
-                    f"Overdrive reaper complete for collection '{collection_name}'."
-                )
-                return
+                identifier_set.delete()
+                return None
 
             api = OverdriveAPI(session, collection)
-            for identifier in identifiers:
-                api.update_licensepool(identifier.identifier)
+            endpoint = (
+                BookInfoEndpoint(page) if page else api.product_page_initial_endpoint()
+            )
+            result = api.fetch_product_page(endpoint)
 
-            new_offset = identifiers[-1].id
-            processed_count = len(identifiers)
+        identifier_set.add(*result.active)
+        seen += result.seen
+
+        if result.next_page is not None:
+            task.log.info(
+                f"Overdrive reaper crawling '{collection_name}': {seen} products seen "
+                f"of {result.total_items}."
+            )
+            raise task.replace(
+                signature_with(task, page=result.next_page.url, seen=seen)
+            )
+
+        if not _crawl_is_complete(task, collection_name, seen, result.total_items):
+            identifier_set.delete()
+            return None
 
         task.log.info(
-            f"Overdrive reaper: processed {processed_count} identifiers for "
-            f"collection '{collection_name}' (offset: {offset} -> {new_offset})."
+            f"Overdrive reaper crawl complete for collection '{collection_name}': "
+            f"{seen} products seen, {identifier_set.len()} still owned."
         )
+        return identifier_set
 
-        if processed_count == batch_size:
-            raise task.replace(
-                signature_with(
-                    task,
-                    offset=new_offset,
-                )
-            )
+
+def _crawl_is_complete(
+    task: Task, collection_name: str, seen: int, total_items: int | None
+) -> bool:
+    """Decide whether a finished crawl covered the whole collection.
+
+    A crawl runs for minutes against a collection that keeps changing underneath it,
+    so a small discrepancy against ``totalItems`` is expected -- titles added or
+    removed mid-crawl move the count. A large shortfall means pages were missed, and
+    reaping on that would mark live titles as gone.
+    """
+    if total_items is None:
+        task.log.error(
+            f"Overdrive reaper aborting for collection '{collection_name}': "
+            f"Overdrive did not report totalItems, so the crawl cannot be verified."
+        )
+        return False
+
+    allowance = max(REAP_CRAWL_ALLOWANCE_FLOOR, int(total_items * REAP_CRAWL_ALLOWANCE))
+    if seen + allowance < total_items:
+        task.log.error(
+            f"Overdrive reaper aborting for collection '{collection_name}': crawl saw "
+            f"{seen} products but Overdrive reports {total_items} "
+            f"(allowance {allowance}). Refusing to reap on an incomplete crawl."
+        )
+        return False
+
+    return True

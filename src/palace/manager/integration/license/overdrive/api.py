@@ -53,6 +53,7 @@ from palace.manager.core.config import CannotLoadConfiguration, Configuration
 from palace.manager.core.exceptions import IntegrationException
 from palace.manager.core.selftest import SelfTestResult
 from palace.manager.data_layer.format import FormatData
+from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.integration.base import HasChildIntegrationConfiguration
 from palace.manager.integration.license.overdrive.advantage import (
@@ -115,6 +116,7 @@ from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
     LicensePool,
     LicensePoolDeliveryMechanism,
+    LicensePoolStatus,
     RightsStatus,
 )
 from palace.manager.sqlalchemy.model.patron import Hold, Patron
@@ -134,6 +136,26 @@ class OverdriveToken(NamedTuple):
 @dataclass
 class BookInfoEndpoint:
     url: str
+
+
+@dataclass(frozen=True)
+class ProductPage:
+    """One page of a collection's product list, as consumed by the reaper.
+
+    :param active: Identifiers for the titles on this page that the collection still
+        owns. Titles Overdrive reports as no longer owned are excluded, so they fall
+        out of the reaper's active set and are reaped like titles that left the feed
+        entirely.
+    :param seen: How many products the page contained, owned or not. Accumulated
+        across pages and compared against ``total_items`` to detect a truncated crawl.
+    :param total_items: Overdrive's count of the whole result set.
+    :param next_page: The following page, or None once the crawl is complete.
+    """
+
+    active: tuple[IdentifierData, ...]
+    seen: int
+    total_items: int | None
+    next_page: BookInfoEndpoint | None
 
 
 class OverdriveAPI(
@@ -216,6 +238,11 @@ class OverdriveAPI(
     )
     ALL_PRODUCTS_ENDPOINT = f"{HOST_ENDPOINT_BASE}/v1/collections/%(collection_token)s/products?sort=%(sort)s"
 
+    COLLECTION_PRODUCTS_ENDPOINT = (
+        f"{HOST_ENDPOINT_BASE}/v1/collections/%(collection_token)s/products"
+        "?limit=%(limit)s&sort=%(sort)s"
+    )
+
     METADATA_ENDPOINT_BASE = "/v1/collections/%(collection_token)s/products"
 
     METADATA_ENDPOINT = (
@@ -243,6 +270,21 @@ class OverdriveAPI(
     MAX_CREDENTIAL_AGE = 50 * 60
 
     PAGE_SIZE_LIMIT = 300
+
+    # The products endpoint honours a page size up to 2000; anything larger is
+    # silently capped. Only the reaper asks for pages this large, and it reads
+    # nothing but ids, so the response stays manageable.
+    PRODUCTS_PAGE_SIZE_LIMIT = 2000
+
+    # Sorting the reaper's crawl by an immutable field keeps offset pagination
+    # stable. Overdrive's `next` links are offset-based, so under the default
+    # ordering a title whose metadata changes mid-crawl can shift position and
+    # slide past the cursor -- and a title the crawl never sees is
+    # indistinguishable from one that left the collection. dateAdded never
+    # changes, and sorting it ascending puts newly added titles beyond the
+    # cursor instead of shifting everything behind them.
+    PRODUCTS_CRAWL_SORT = "dateAdded:asc"
+
     EVENT_SOURCE = "Overdrive"
 
     EVENT_DELAY = datetime.timedelta(minutes=120)
@@ -288,9 +330,20 @@ class OverdriveAPI(
     def reap_task(cls, collection_id: int) -> Signature:
         # Local import to avoid a circular import between this module and the
         # overdrive celery tasks module, which imports OverdriveAPI.
+        from palace.manager.celery.tasks.identifiers import (
+            create_mark_unavailable_chord,
+        )
         from palace.manager.celery.tasks.overdrive import reap_collection
 
-        return reap_collection.s(collection_id)
+        return create_mark_unavailable_chord(
+            collection_id,
+            reap_collection.s(collection_id),
+            # Overdrive drops titles from a collection when a lease ends or a
+            # purchase is returned, not only when a title is withdrawn, so a
+            # missing title means "no copies here now" rather than "revoke
+            # outstanding loans and holds".
+            status=LicensePoolStatus.EXHAUSTED,
+        )
 
     def __init__(self, _db: Session, collection: Collection) -> None:
         super().__init__(_db, collection)
@@ -693,6 +746,75 @@ class OverdriveAPI(
         endpoint: str = _make_link_safe(book_info_initial_endpoint)
 
         return BookInfoEndpoint(endpoint)
+
+    def product_page_initial_endpoint(
+        self, page_size: int | None = None
+    ) -> BookInfoEndpoint:
+        """Create the first-page url for a full crawl of the collection's products.
+
+        Unlike :meth:`book_info_initial_endpoint` this is not filtered by update
+        time: the reaper needs every title the collection currently holds, not only
+        those that changed recently.
+
+        :param page_size: Titles per page. Capped at
+            :attr:`PRODUCTS_PAGE_SIZE_LIMIT`, which is also the default.
+        """
+        if page_size is None:
+            page_size = self.PRODUCTS_PAGE_SIZE_LIMIT
+        url = self.endpoint(
+            self.COLLECTION_PRODUCTS_ENDPOINT,
+            collection_token=self.collection_token,
+            limit=str(min(page_size, self.PRODUCTS_PAGE_SIZE_LIMIT)),
+            sort=self.PRODUCTS_CRAWL_SORT,
+        )
+        return BookInfoEndpoint(_make_link_safe(url))
+
+    def fetch_product_page(self, endpoint: BookInfoEndpoint) -> ProductPage:
+        """Fetch a single page of the collection's product list.
+
+        Only ids and ownership are read from the response -- no metadata or
+        availability lookups are made -- which is what lets a whole collection be
+        enumerated in a handful of requests.
+
+        Overdrive returns product ids uppercased here but lowercased in availability
+        documents, and :meth:`Identifier.for_foreign_id` stores them lowercased. The
+        ids are normalised on the way out so the reaper's set operations line up with
+        the identifiers in the database.
+
+        :param endpoint: The page to fetch.
+        :return: The page's owned identifiers, product count, result-set size and
+            next page.
+        """
+        status_code, _, content = self.get(endpoint.url)
+        if status_code != 200:
+            # Left to the caller's completeness check rather than raised here: a
+            # short page and a missing totalItems both surface there as "crawl
+            # could not be verified", which is the outcome either way.
+            self.log.error(
+                "Unexpected status code %s fetching Overdrive product page %s",
+                status_code,
+                endpoint.url,
+            )
+        data = json.loads(content)
+
+        products = data.get("products") or []
+        active = tuple(
+            IdentifierData(
+                type=Identifier.OVERDRIVE_ID, identifier=product["id"].lower()
+            )
+            for product in products
+            # A title Overdrive still lists but no longer owns is as gone as one
+            # that left the feed, so it is left out of the active set.
+            if product.get("isOwnedByCollections") is not False
+        )
+        next_url = OverdriveRepresentationExtractor.link(data, self.NEXT_REL)
+
+        return ProductPage(
+            active=active,
+            seen=len(products),
+            total_items=data.get("totalItems"),
+            next_page=BookInfoEndpoint(next_url) if next_url else None,
+        )
 
     async def fetch_book_info_list(
         self,

@@ -11,13 +11,18 @@ from celery.result import AsyncResult
 from palace.util.datetime_helpers import datetime_utc
 from palace.util.log import LogLevel
 
-from palace.manager.celery.importer import import_workflow_lock, reap_workflow_lock
+from palace.manager.celery.importer import (
+    import_workflow_lock,
+    reap_key,
+    reap_workflow_lock,
+)
 from palace.manager.celery.tasks import overdrive
 from palace.manager.celery.tasks.overdrive import import_collection_group
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.integration.license.overdrive.api import (
     BookInfoEndpoint,
     OverdriveAPI,
+    ProductPage,
 )
 from palace.manager.integration.license.overdrive.importer import (
     FeedImportResult,
@@ -1220,6 +1225,33 @@ class TestIntegration:
         return identifier
 
 
+def product_page(
+    *,
+    active: tuple[IdentifierData, ...] = (),
+    seen: int | None = None,
+    total_items: int | None = None,
+    next_page: BookInfoEndpoint | None = None,
+) -> ProductPage:
+    """Build a ProductPage, defaulting `seen` to the number of active identifiers.
+
+    `total_items` is passed through as given, so a test can ask for the case where
+    Overdrive omits it.
+    """
+    return ProductPage(
+        active=active,
+        seen=len(active) if seen is None else seen,
+        total_items=total_items,
+        next_page=next_page,
+    )
+
+
+def overdrive_identifiers(*identifiers: str) -> tuple[IdentifierData, ...]:
+    return tuple(
+        IdentifierData(type=Identifier.OVERDRIVE_ID, identifier=identifier)
+        for identifier in identifiers
+    )
+
+
 class TestOverdriveReaper:
     """Tests for the reap_all_collections and reap_collection Celery tasks."""
 
@@ -1228,7 +1260,7 @@ class TestOverdriveReaper:
         db: DatabaseTransactionFixture,
         celery_fixture: CeleryFixture,
     ):
-        """reap_all_collections queues reap_collection for every Overdrive collection,
+        """reap_all_collections queues a reap for every Overdrive collection,
         including child (Advantage) collections."""
         db.default_collection()  # non-Overdrive, should be ignored
         collection1 = db.collection(protocol=OverdriveAPI)
@@ -1236,10 +1268,10 @@ class TestOverdriveReaper:
         child_collection = db.collection(protocol=OverdriveAPI)
         child_collection.parent = collection1
 
-        with patch.object(overdrive, "reap_collection") as mock_reap:
+        with patch.object(OverdriveAPI, "reap_task") as mock_reap_task:
             overdrive.reap_all_collections.delay().wait()
 
-        mock_reap.delay.assert_has_calls(
+        mock_reap_task.assert_has_calls(
             [
                 call(collection1.id),
                 call(collection2.id),
@@ -1247,10 +1279,58 @@ class TestOverdriveReaper:
             ],
             any_order=True,
         )
-        assert mock_reap.delay.call_count == 3
+        assert mock_reap_task.return_value.apply_async.call_count == 3
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
-    def test_reap_collection_empty(
+    def test_reap_collection_returns_owned_identifiers(
+        self,
+        mock_api_class: MagicMock,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        redis_fixture: RedisFixture,
+    ):
+        """A completed crawl returns the identifiers the collection still holds."""
+        collection = overdrive_api_fixture.collection
+        active = overdrive_identifiers("id-one", "id-two")
+        mock_api_class.return_value.fetch_product_page.return_value = product_page(
+            active=active, seen=3, total_items=3
+        )
+
+        result = overdrive.reap_collection.delay(collection.id).wait()
+
+        identifier_set = IdentifierSet(redis_fixture.client, result["key"])
+        assert identifier_set.get() == set(active)
+
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
+    def test_reap_collection_pages_until_crawl_completes(
+        self,
+        mock_api_class: MagicMock,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        redis_fixture: RedisFixture,
+    ):
+        """A page with a successor re-queues the task with the next url and running count."""
+        collection = overdrive_api_fixture.collection
+        mock_api_class.return_value.fetch_product_page.return_value = product_page(
+            active=overdrive_identifiers("id-one"),
+            seen=2,
+            total_items=10,
+            next_page=BookInfoEndpoint("http://od/products?offset=2"),
+        )
+
+        with patch.object(overdrive.reap_collection, "replace") as mock_replace:
+            mock_replace.side_effect = Exception("replaced")
+            with pytest.raises(Exception, match="replaced"):
+                overdrive.reap_collection.delay(collection.id).wait()
+
+        replace_sig = mock_replace.call_args[0][0]
+        assert replace_sig.kwargs["page"] == "http://od/products?offset=2"
+        assert replace_sig.kwargs["seen"] == 2
+
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
+    def test_reap_collection_aborts_on_incomplete_crawl(
         self,
         mock_api_class: MagicMock,
         db: DatabaseTransactionFixture,
@@ -1259,17 +1339,52 @@ class TestOverdriveReaper:
         redis_fixture: RedisFixture,
         caplog: pytest.LogCaptureFixture,
     ):
-        """When no identifiers exist for a collection, reap_collection logs complete and returns."""
+        """A crawl that saw far fewer products than Overdrive reports marks nothing.
+
+        Reaping acts on the absence of an identifier, so handing a partial crawl to the
+        chord would mark live titles as gone. Returning None instead makes the chord
+        body abort.
+        """
         collection = overdrive_api_fixture.collection
-        caplog.set_level(LogLevel.info)
+        caplog.set_level(LogLevel.error)
+        mock_api_class.return_value.fetch_product_page.return_value = product_page(
+            active=overdrive_identifiers("id-one"), seen=1, total_items=5000
+        )
 
-        overdrive.reap_collection.delay(collection.id).wait()
+        async_result = overdrive.reap_collection.delay(collection.id)
 
-        mock_api_class.return_value.update_licensepool.assert_not_called()
-        assert "complete" in caplog.text
+        assert async_result.wait() is None
+        assert "Refusing to reap on an incomplete crawl" in caplog.text
+        # The partial set is not left behind in Redis for the chord to pick up.
+        partial_set = IdentifierSet(
+            redis_fixture.client, reap_key(collection.id, async_result.id)
+        )
+        assert not partial_set.exists()
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
-    def test_reap_collection_processes_batch(
+    def test_reap_collection_aborts_when_total_items_missing(
+        self,
+        mock_api_class: MagicMock,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        redis_fixture: RedisFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """Without totalItems there is no way to show the crawl was complete."""
+        collection = overdrive_api_fixture.collection
+        caplog.set_level(LogLevel.error)
+        mock_api_class.return_value.fetch_product_page.return_value = product_page(
+            active=overdrive_identifiers("id-one"), seen=1, total_items=None
+        )
+
+        result = overdrive.reap_collection.delay(collection.id).wait()
+
+        assert result is None
+        assert "did not report totalItems" in caplog.text
+
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
+    def test_reap_collection_tolerates_small_shortfall(
         self,
         mock_api_class: MagicMock,
         db: DatabaseTransactionFixture,
@@ -1277,73 +1392,40 @@ class TestOverdriveReaper:
         overdrive_api_fixture: OverdriveAPIFixture,
         redis_fixture: RedisFixture,
     ):
-        """reap_collection calls update_licensepool for each identifier in the batch."""
+        """Titles added or removed mid-crawl move totalItems, which is not a failure."""
         collection = overdrive_api_fixture.collection
-        edition1 = db.edition()
-        edition2 = db.edition()
-        pool1 = db.licensepool(edition1, collection=collection)
-        pool2 = db.licensepool(edition2, collection=collection)
-        db.session.flush()
+        active = overdrive_identifiers("id-one", "id-two")
+        mock_api_class.return_value.fetch_product_page.return_value = product_page(
+            active=active,
+            seen=1000,
+            total_items=1000 + overdrive.REAP_CRAWL_ALLOWANCE_FLOOR,
+        )
 
-        overdrive.reap_collection.delay(collection.id).wait()
+        result = overdrive.reap_collection.delay(collection.id).wait()
 
-        mock_api = mock_api_class.return_value
-        identifiers_called = {
-            c.args[0] for c in mock_api.update_licensepool.call_args_list
-        }
-        assert pool1.identifier.identifier in identifiers_called
-        assert pool2.identifier.identifier in identifiers_called
+        assert result is not None
+        assert IdentifierSet(redis_fixture.client, result["key"]).get() == set(active)
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
-    def test_reap_collection_replaces_when_full_batch(
+    def test_reap_collection_skips_collection_marked_for_deletion(
         self,
         mock_api_class: MagicMock,
         db: DatabaseTransactionFixture,
         celery_fixture: CeleryFixture,
         overdrive_api_fixture: OverdriveAPIFixture,
         redis_fixture: RedisFixture,
+        caplog: pytest.LogCaptureFixture,
     ):
-        """When a full batch is processed, task.replace is raised with the next offset."""
         collection = overdrive_api_fixture.collection
-        # Create exactly batch_size identifiers to trigger replace
-        batch_size = 3
-        pools = [
-            db.licensepool(db.edition(), collection=collection)
-            for _ in range(batch_size)
-        ]
+        collection.marked_for_deletion = True
         db.session.flush()
-        last_id = max(p.identifier.id for p in pools)
+        caplog.set_level(LogLevel.warning)
 
-        with patch.object(overdrive.reap_collection, "replace") as mock_replace:
-            mock_replace.side_effect = Exception("replaced")
-            with pytest.raises(Exception, match="replaced"):
-                overdrive.reap_collection.delay(
-                    collection.id, batch_size=batch_size
-                ).wait()
+        result = overdrive.reap_collection.delay(collection.id).wait()
 
-            replace_sig = mock_replace.call_args[0][0]
-            assert replace_sig.kwargs["offset"] == last_id
-            assert "lock_value" not in replace_sig.kwargs
-
-    @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
-    def test_reap_collection_stops_on_partial_batch(
-        self,
-        mock_api_class: MagicMock,
-        db: DatabaseTransactionFixture,
-        celery_fixture: CeleryFixture,
-        overdrive_api_fixture: OverdriveAPIFixture,
-        redis_fixture: RedisFixture,
-    ):
-        """When fewer identifiers than batch_size exist, the task completes without replacing."""
-        collection = overdrive_api_fixture.collection
-        batch_size = 10
-        db.licensepool(db.edition(), collection=collection)
-        db.session.flush()
-
-        with patch.object(overdrive.reap_collection, "replace") as mock_replace:
-            overdrive.reap_collection.delay(collection.id, batch_size=batch_size).wait()
-
-        mock_replace.assert_not_called()
+        assert result is None
+        mock_api_class.return_value.fetch_product_page.assert_not_called()
+        assert "marked for deletion" in caplog.text
 
     def test_reap_collection_lock_not_released_on_autoretry(
         self,
@@ -1352,32 +1434,29 @@ class TestOverdriveReaper:
         overdrive_api_fixture: OverdriveAPIFixture,
         redis_fixture: RedisFixture,
     ):
-        """A retryable failure holds the workflow lock and each retry re-runs the reap.
+        """A retryable failure holds the workflow lock and each retry re-runs the crawl.
 
         The workflow lock is keyed on ``task.request.id``, which Celery preserves across
-        retries, so every retry re-acquires the same workflow lock and re-runs the batch,
+        retries, so every retry re-acquires the same workflow lock and re-runs the page,
         rather than skipping as if another run were in progress. The lock stays held so no
         concurrent run can start.
         """
         collection = overdrive_api_fixture.collection
-        db.licensepool(db.edition(), collection=collection)
-        db.session.flush()
-
         mock_response = MockRequestsResponse(500, content="Internal Server Error")
 
         with patch(
             "palace.manager.celery.tasks.overdrive.OverdriveAPI"
         ) as mock_api_class:
-            mock_api_class.return_value.update_licensepool.side_effect = (
+            mock_api_class.return_value.fetch_product_page.side_effect = (
                 BadResponseException("http://test.com", "Bad response", mock_response)
             )
 
             with celery_fixture.patch_retry_backoff():
                 overdrive.reap_collection.delay(collection.id).get(propagate=False)
 
-            # The reap was re-run on every retry (1 initial attempt + max_retries=4),
+            # The crawl was re-run on every retry (1 initial attempt + max_retries=4),
             # not skipped as an "already in progress" run.
-            assert mock_api_class.return_value.update_licensepool.call_count == 5
+            assert mock_api_class.return_value.fetch_product_page.call_count == 5
 
         # Lock is still held after retries exhaust; it expires via the Redis TTL.
         workflow_lock = reap_workflow_lock(
@@ -1393,10 +1472,8 @@ class TestOverdriveReaper:
         redis_fixture: RedisFixture,
         caplog: pytest.LogCaptureFixture,
     ):
-        """On the first batch, if the workflow lock is already held, the task skips without processing."""
+        """If the workflow lock is already held, the task skips without crawling."""
         collection = overdrive_api_fixture.collection
-        db.licensepool(db.edition(), collection=collection)
-        db.session.flush()
 
         lock_value = str(uuid4())
         workflow_lock = reap_workflow_lock(
@@ -1409,9 +1486,10 @@ class TestOverdriveReaper:
         with patch(
             "palace.manager.celery.tasks.overdrive.OverdriveAPI"
         ) as mock_api_class:
-            overdrive.reap_collection.delay(collection.id).wait()
-            mock_api_class.return_value.update_licensepool.assert_not_called()
+            result = overdrive.reap_collection.delay(collection.id).wait()
+            mock_api_class.return_value.fetch_product_page.assert_not_called()
 
+        assert result is None
         assert "skipped" in caplog.text
         assert "already in progress" in caplog.text
         workflow_lock.release()

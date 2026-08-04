@@ -37,11 +37,12 @@ class TestOverdriveReaperScript:
     ) -> None:
         caplog.set_level(LogLevel.info)
         collection = db.collection(protocol=OverdriveAPI)
-        with patch("palace.manager.scripts.overdrive.reap_collection") as mock:
+        with patch.object(OverdriveAPI, "reap_task") as mock:
             OverdriveReaperScript(db.session, services_fixture.services).do_run(
                 ["--collection-name", collection.name]
             )
-            mock.delay.assert_called_once_with(collection.id)
+            mock.assert_called_once_with(collection.id)
+            mock.return_value.apply_async.assert_called_once_with()
             assert '"reap_collection" task has been queued' in caplog.text
 
     def test_reap_collection_wrong_protocol(
