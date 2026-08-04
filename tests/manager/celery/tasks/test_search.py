@@ -18,6 +18,7 @@ from palace.manager.celery.tasks.search import (
 )
 from palace.manager.scripts.initialization import InstanceInitializationScript
 from palace.manager.search.filter import Filter
+from palace.manager.search.service import SearchPointer
 from palace.manager.service.redis.models.lock import LockNotAcquired, TaskLock
 from palace.manager.service.redis.models.search import WaitingForIndexing
 from tests.fixtures.celery import CeleryFixture
@@ -43,6 +44,34 @@ class SearchReindexTaskLockFixture:
 @pytest.fixture
 def search_reindex_task_lock_fixture(redis_fixture: RedisFixture):
     return SearchReindexTaskLockFixture(redis_fixture)
+
+
+@pytest.fixture
+def mock_search_pointers(
+    services_fixture: ServicesFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Point the mocked search service at a single index at the latest revision.
+
+    A reindex reads both pointers to decide whether to advance the read pointer, and an
+    unconfigured autospec hands back mocks that can neither be compared nor serialized
+    into the task's requeue.
+    """
+    base_name = "test_index"
+    revision = MockSearchSchemaRevisionLatest(42)
+    index = revision.name_for_index(base_name)
+
+    # The services fixture resets return values between tests, but not attributes we
+    # assign directly, so base_revision_name is set through monkeypatch.
+    monkeypatch.setattr(
+        services_fixture.search_service, "base_revision_name", base_name
+    )
+    services_fixture.search_revision_directory.highest.return_value = revision
+    services_fixture.search_service.read_pointer.return_value = SearchPointer(
+        alias=f"{base_name}-search-read", index=index, version=revision.version
+    )
+    services_fixture.search_service.write_pointer.return_value = SearchPointer(
+        alias=f"{base_name}-search-write", index=index, version=revision.version
+    )
 
 
 def test_get_work_search_documents(db: DatabaseTransactionFixture) -> None:
@@ -161,6 +190,7 @@ def test_search_reindex_failures(
     celery_fixture: CeleryFixture,
     search_reindex_task_lock_fixture: SearchReindexTaskLockFixture,
     services_fixture: ServicesFixture,
+    mock_search_pointers: None,
 ):
     # Make sure our backoff function doesn't delay the test.
     mock_backoff.return_value = 0
@@ -200,6 +230,7 @@ def test_search_reindex_requeue_delay(
     celery_fixture: CeleryFixture,
     search_reindex_task_lock_fixture: SearchReindexTaskLockFixture,
     services_fixture: ServicesFixture,
+    mock_search_pointers: None,
 ) -> None:
     """Verify that the task requeues with a random delay to avoid hammering the search service."""
     mock_backoff.return_value = 0
@@ -231,6 +262,7 @@ def test_search_reindex_failures_multiple_batch(
     celery_fixture: CeleryFixture,
     search_reindex_task_lock_fixture: SearchReindexTaskLockFixture,
     services_fixture: ServicesFixture,
+    mock_search_pointers: None,
 ):
     # When a batch succeeds, the retry count is reset.
     mock_backoff.return_value = 0
@@ -373,6 +405,7 @@ def search_migration_fixture(
 
 def test_search_reindex_advances_read_pointer(
     celery_fixture: CeleryFixture,
+    redis_fixture: RedisFixture,
     search_migration_fixture: SearchMigrationFixture,
     end_to_end_search_fixture: EndToEndSearchFixture,
 ):
@@ -393,6 +426,7 @@ def test_search_reindex_advances_read_pointer(
 
 def test_search_reindex_does_not_advance_read_pointer_for_another_index(
     celery_fixture: CeleryFixture,
+    redis_fixture: RedisFixture,
     search_migration_fixture: SearchMigrationFixture,
 ):
     fixture = search_migration_fixture
@@ -423,6 +457,7 @@ def test_search_reindex_does_not_advance_read_pointer_when_it_fails(
 def test_search_reindex_leaves_current_read_pointer_alone(
     db: DatabaseTransactionFixture,
     celery_fixture: CeleryFixture,
+    redis_fixture: RedisFixture,
     end_to_end_search_fixture: EndToEndSearchFixture,
 ):
     # Outside a migration the read pointer is already at the latest revision, so a
