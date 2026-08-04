@@ -428,6 +428,32 @@ def test_search_reindex_advances_read_pointer(
     end_to_end_search_fixture.expect_results(fixture.works, "", ordered=False)
 
 
+@patch("palace.manager.celery.tasks.search.random.uniform")
+@patch("palace.manager.celery.tasks.search.exponential_backoff")
+def test_search_reindex_advances_read_pointer_after_a_retried_batch(
+    mock_backoff: MagicMock,
+    mock_random_uniform: MagicMock,
+    celery_fixture: CeleryFixture,
+    redis_fixture: RedisFixture,
+    search_migration_fixture: SearchMigrationFixture,
+):
+    fixture = search_migration_fixture
+    mock_backoff.return_value = 0
+    mock_random_uniform.return_value = 0
+
+    # The index a run is filling has to survive a retry of an already requeued batch, not
+    # just the requeue: a batch at a non-zero offset fails once, retries, and the run
+    # still knows what it filled when it reaches the end.
+    with patch.object(
+        ExternalSearchIndex, "add_documents", autospec=True
+    ) as add_documents:
+        add_documents.side_effect = [None, OpenSearchException(), None, None]
+        search_reindex.delay(batch_size=4).wait()
+
+    assert add_documents.call_count == 4
+    fixture.assert_pointers(read=fixture.new_index, write=fixture.new_index)
+
+
 def test_search_reindex_does_not_advance_read_pointer_for_another_index(
     celery_fixture: CeleryFixture,
     redis_fixture: RedisFixture,
