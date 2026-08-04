@@ -143,6 +143,14 @@ def advance_read_pointer(task: Task, target_index: str | None) -> None:
     if read_pointer is not None and read_pointer.version >= revision.version:
         return
 
+    if target_index is None:
+        # Either the run started partway through, or there was no write pointer for it to
+        # record when it started.
+        task.log.warning(
+            "Not advancing read pointer: this run did not record an index to fill."
+        )
+        return
+
     if target_index != latest_index:
         task.log.warning(
             f"Not advancing read pointer: this reindex filled {target_index}, "
