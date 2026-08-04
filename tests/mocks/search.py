@@ -17,7 +17,7 @@ from palace.manager.search.service import (
     SearchService,
     SearchServiceFailedDocument,
 )
-from palace.manager.search.v5 import SearchV5
+from palace.manager.search.v8 import SearchV8
 from palace.manager.sqlalchemy.model.work import Work
 
 
@@ -280,4 +280,4 @@ class MockSearchSchemaRevision(SearchSchemaRevision):
 class MockSearchSchemaRevisionLatest(MockSearchSchemaRevision):
     def __init__(self, version: int) -> None:
         super().__init__(version)
-        self._document = SearchV5().mapping_document()
+        self._document = SearchV8().mapping_document()
