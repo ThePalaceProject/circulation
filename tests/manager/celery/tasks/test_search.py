@@ -437,6 +437,63 @@ def test_search_reindex_does_not_advance_read_pointer_for_another_index(
     fixture.assert_pointers(read=fixture.old_index, write=fixture.new_index)
 
 
+@pytest.mark.parametrize("write_pointer_removed", [False, True])
+def test_search_reindex_does_not_advance_read_pointer_when_the_write_pointer_moves(
+    celery_fixture: CeleryFixture,
+    redis_fixture: RedisFixture,
+    search_migration_fixture: SearchMigrationFixture,
+    write_pointer_removed: bool,
+):
+    fixture = search_migration_fixture
+    started_on = fixture.service.write_pointer()
+
+    # An instance running a newer revision deploys partway through and aims writes at an
+    # index this run never touched, so the works are split across two indexes and neither
+    # got a complete pass.
+    later_revision = MockSearchSchemaRevisionLatest(1010102)
+    moved_to = (
+        None
+        if write_pointer_removed
+        else SearchPointer(
+            alias=fixture.service.write_pointer_name(),
+            index=later_revision.name_for_index(fixture.service.base_revision_name),
+            version=later_revision.version,
+        )
+    )
+
+    # The run reads the write pointer once on the way in and once at the end.
+    with patch.object(
+        type(fixture.service), "write_pointer", autospec=True
+    ) as write_pointer:
+        write_pointer.side_effect = [started_on, moved_to]
+        search_reindex.delay().wait()
+
+    assert write_pointer.call_count == 2
+    fixture.assert_pointers(read=fixture.old_index, write=fixture.new_index)
+
+
+@patch("palace.manager.celery.tasks.search.exponential_backoff")
+def test_search_reindex_retries_when_the_pointers_cannot_be_read(
+    mock_backoff: MagicMock,
+    celery_fixture: CeleryFixture,
+    redis_fixture: RedisFixture,
+    search_migration_fixture: SearchMigrationFixture,
+):
+    fixture = search_migration_fixture
+    mock_backoff.return_value = 0
+    current_read_pointer = fixture.service.read_pointer()
+
+    # Reading the pointers is the last thing a pass does, after days of work on a large
+    # collection, so a transient failure there is retried rather than losing the run.
+    with patch.object(
+        type(fixture.service), "read_pointer", autospec=True
+    ) as read_pointer:
+        read_pointer.side_effect = [OpenSearchException(), current_read_pointer]
+        search_reindex.delay().wait()
+
+    fixture.assert_pointers(read=fixture.new_index, write=fixture.new_index)
+
+
 @patch("palace.manager.celery.tasks.search.random.uniform")
 @patch("palace.manager.celery.tasks.search.exponential_backoff")
 def test_search_reindex_does_not_advance_read_pointer_when_it_fails(

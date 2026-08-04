@@ -69,6 +69,14 @@ class FailedToIndex(BasePalaceException): ...
 def set_read_pointer(
     task: Task, service: SearchService, revision: SearchSchemaRevision
 ) -> None:
+    """
+    Publish a revision's index for reads.
+
+    :param task: The task doing the update, retried with a backoff if OpenSearch rejects
+        the alias update.
+    :param service: The search service whose read pointer is being moved.
+    :param revision: The revision whose index should serve reads.
+    """
     try:
         service.read_pointer_set(revision)
     except OpenSearchException as e:
@@ -98,7 +106,18 @@ def advance_read_pointer(task: Task, target_index: str | None) -> None:
     revision = task.services.search.revision_directory().highest()
     latest_index = revision.name_for_index(service.base_revision_name)
 
-    read_pointer = service.read_pointer()
+    try:
+        read_pointer = service.read_pointer()
+        write_pointer = service.write_pointer()
+    except OpenSearchException as e:
+        # A full pass takes days on a large collection, so a transient failure reading the
+        # pointers is worth retrying rather than discarding the run's work.
+        wait_time = exponential_backoff(task.request.retries)
+        task.log.error(
+            f"Failed to read search pointers: {e}. Retrying in {wait_time} seconds."
+        )
+        raise task.retry(countdown=wait_time)
+
     if read_pointer is not None and read_pointer.version >= revision.version:
         return
 
@@ -109,7 +128,6 @@ def advance_read_pointer(task: Task, target_index: str | None) -> None:
         )
         return
 
-    write_pointer = service.write_pointer()
     if write_pointer is None or write_pointer.index != target_index:
         # The write pointer moved partway through, so our documents are split across the
         # old and new indexes and neither one received a complete pass.
