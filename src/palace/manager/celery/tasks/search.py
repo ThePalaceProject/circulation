@@ -192,12 +192,11 @@ def search_reindex(
         advances the read pointer.
     """
     index = task.services.search.index()
-    service = task.services.search.service()
     task_lock = TaskLock(task, lock_name="search_reindex")
 
     with task_lock.lock(release_on_exit=False, ignored_exceptions=(Retry, Ignore)):
         if target_index is None and offset == 0:
-            target_index = resolve_target_index(task, service)
+            target_index = resolve_target_index(task, task.services.search.service())
 
         task.log.info(
             f"Running search reindex at offset {offset} with batch size {batch_size}."
