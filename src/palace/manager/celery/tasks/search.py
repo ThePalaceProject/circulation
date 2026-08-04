@@ -120,6 +120,8 @@ def advance_read_pointer(task: Task, target_index: str | None) -> None:
     pass over that index publishes it. No caller has to remember to advance the pointer,
     and a run that dies partway through simply leaves the pointer where it was.
 
+    :param task: The task that completed the reindex, retried with a backoff if the
+        pointers cannot be read.
     :param target_index: The index the completed run was filling.
     """
     service = task.services.search.service()
@@ -161,7 +163,9 @@ def advance_read_pointer(task: Task, target_index: str | None) -> None:
     set_read_pointer(task, service, revision)
 
 
-@shared_task(queue=QueueNames.default, bind=True, max_retries=4)
+@shared_task(
+    queue=QueueNames.default, bind=True, max_retries=4, throws=(LockNotAcquired,)
+)
 def search_reindex(
     task: Task, offset: int = 0, batch_size: int = 500, target_index: str | None = None
 ) -> None:
