@@ -137,14 +137,16 @@ def search_reindex(
 
     :param target_index: The index this run is filling, carried across requeues so the final
         batch can tell whether the write pointer moved partway through. Resolved from the write
-        pointer when the run starts; callers should not pass it.
+        pointer when a run starts from the beginning; callers should not pass it. A run started
+        at a non-zero offset skips the works before it, so it leaves this unset and never
+        advances the read pointer.
     """
     index = task.services.search.index()
     service = task.services.search.service()
     task_lock = TaskLock(task, lock_name="search_reindex")
 
     with task_lock.lock(release_on_exit=False, ignored_exceptions=(Retry, Ignore)):
-        if target_index is None:
+        if target_index is None and offset == 0:
             write_pointer = service.write_pointer()
             target_index = write_pointer.index if write_pointer is not None else None
 
@@ -190,6 +192,12 @@ def update_read_pointer(task: Task) -> None:
     this is the manual override for the cases it deliberately declines to handle: publishing
     an index that no single reindex run filled end to end, or one filled by a run that
     started before the revision it ended up writing to existed.
+
+    It has no CLI entry point, since the usual repair is another full reindex
+    (bin/repair/search_index), which publishes the index when it finishes. To publish an
+    already-filled index without reindexing, queue this task directly:
+
+        celery -A "palace.manager.celery.app" call palace.manager.celery.tasks.search.update_read_pointer
     """
     task.log.info("Updating read pointer.")
     service = task.services.search.service()

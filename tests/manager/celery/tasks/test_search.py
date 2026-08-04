@@ -7,8 +7,6 @@ import pytest
 from celery.exceptions import MaxRetriesExceededError
 from opensearchpy import OpenSearchException
 
-from palace.util.exceptions import BasePalaceException
-
 from palace.manager.celery.tasks.search import (
     get_work_search_documents,
     index_works,
@@ -17,6 +15,7 @@ from palace.manager.celery.tasks.search import (
     update_read_pointer,
 )
 from palace.manager.scripts.initialization import InstanceInitializationScript
+from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.search.filter import Filter
 from palace.manager.search.service import SearchPointer
 from palace.manager.service.redis.models.lock import LockNotAcquired, TaskLock
@@ -438,18 +437,43 @@ def test_search_reindex_does_not_advance_read_pointer_for_another_index(
     fixture.assert_pointers(read=fixture.old_index, write=fixture.new_index)
 
 
+@patch("palace.manager.celery.tasks.search.random.uniform")
+@patch("palace.manager.celery.tasks.search.exponential_backoff")
 def test_search_reindex_does_not_advance_read_pointer_when_it_fails(
+    mock_backoff: MagicMock,
+    mock_random_uniform: MagicMock,
     celery_fixture: CeleryFixture,
-    search_reindex_task_lock_fixture: SearchReindexTaskLockFixture,
+    redis_fixture: RedisFixture,
+    search_migration_fixture: SearchMigrationFixture,
+):
+    fixture = search_migration_fixture
+    mock_backoff.return_value = 0
+    mock_random_uniform.return_value = 0
+
+    # The first batch lands, then the second fails through every retry, so the reindex
+    # dies with the new index partly filled. Reads stay where they were rather than
+    # moving to an index missing half its works.
+    with patch.object(
+        ExternalSearchIndex, "add_documents", autospec=True
+    ) as add_documents:
+        add_documents.side_effect = [None, *([OpenSearchException()] * 5)]
+        with pytest.raises(MaxRetriesExceededError):
+            search_reindex.delay(batch_size=5).wait()
+
+    assert add_documents.call_count == 6
+    fixture.assert_pointers(read=fixture.old_index, write=fixture.new_index)
+
+
+def test_search_reindex_does_not_advance_read_pointer_from_a_resumed_run(
+    celery_fixture: CeleryFixture,
+    redis_fixture: RedisFixture,
     search_migration_fixture: SearchMigrationFixture,
 ):
     fixture = search_migration_fixture
 
-    # A reindex that never reaches the end leaves reads where they were, rather than
-    # publishing a partially filled index.
-    search_reindex_task_lock_fixture.task_lock.acquire()
-    with pytest.raises(BasePalaceException):
-        search_reindex.delay().wait()
+    # A run started partway through never indexes the works before its offset, so it has
+    # not filled the new index and must not publish it.
+    search_reindex.delay(offset=5).wait()
 
     fixture.assert_pointers(read=fixture.old_index, write=fixture.new_index)
 
