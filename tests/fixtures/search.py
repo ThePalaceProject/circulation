@@ -11,7 +11,7 @@ from pydantic_settings import SettingsConfigDict
 
 from palace.util.log import LoggerMixin
 
-from palace.manager.celery.tasks.search import get_work_search_documents
+from palace.manager.celery.tasks.search import get_presentation_ready_work_ids
 from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.search.revision import SearchSchemaRevision
 from palace.manager.search.service import SearchServiceOpensearch1
@@ -126,7 +126,8 @@ class EndToEndSearchFixture:
     def populate_search_index(self):
         """Populate the search index with a set of works. The given callback is passed this fixture instance."""
         # Add all the works created in the setup to the search index.
-        documents = get_work_search_documents(self.db.session, 1000, 0)
+        work_ids = get_presentation_ready_work_ids(self.db.session, 1000, 0)
+        documents = Work.to_search_documents(self.db.session, work_ids)
         self.external_search_index.add_documents(documents)
         self.external_search.write_client.indices.refresh()
 

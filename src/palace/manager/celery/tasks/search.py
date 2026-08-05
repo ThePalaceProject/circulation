@@ -26,13 +26,18 @@ from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.backoff import exponential_backoff
 
 
-def get_work_search_documents(
+def get_presentation_ready_work_ids(
     session: Session, batch_size: int, offset: int
-) -> Sequence[dict[str, Any]]:
+) -> Sequence[int]:
     """
-    Get a batch of search documents for works that are presentation ready.
+    Get a batch of ids for works that are presentation ready.
+
+    A pass over the works pages by these ids rather than by the documents built from
+    them. `Work.to_search_documents` omits any work whose document it cannot build, so a
+    full batch of works can produce a short batch of documents, and a caller that treats
+    a short batch as the end of the works would stop there.
     """
-    works = [
+    return [
         w.id
         for w in session.execute(
             select(Work.id)
@@ -42,7 +47,6 @@ def get_work_search_documents(
             .offset(offset)
         )
     ]
-    return Work.to_search_documents(session, works)
 
 
 def add_documents_to_index(
@@ -193,11 +197,12 @@ def search_reindex(
                     skip_start=True,
                 ),
             ):
-                documents = get_work_search_documents(session, batch_size, offset)
+                work_ids = get_presentation_ready_work_ids(session, batch_size, offset)
+                documents = Work.to_search_documents(session, work_ids)
 
             add_documents_to_index(task.log, index, documents)
 
-            if len(documents) == batch_size:
+            if len(work_ids) == batch_size:
                 # This task is complete, but there are more works waiting to be indexed. Requeue ourselves
                 # to process the next batch. We add a random delay to avoid hammering the search service
                 # when this task is running in parallel on multiple workers.

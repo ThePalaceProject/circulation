@@ -1,14 +1,17 @@
 import json
 import math
 from collections import Counter
+from collections.abc import Sequence
+from typing import Any
 from unittest.mock import MagicMock, call, patch
 
 import pytest
 from celery.exceptions import MaxRetriesExceededError
 from opensearchpy import OpenSearchException
+from sqlalchemy.orm import Session
 
 from palace.manager.celery.tasks.search import (
-    get_work_search_documents,
+    get_presentation_ready_work_ids,
     index_works,
     search_indexing,
     search_reindex,
@@ -19,6 +22,7 @@ from palace.manager.search.filter import Filter
 from palace.manager.search.service import SearchPointer
 from palace.manager.service.redis.models.lock import LockNotAcquired, TaskLock
 from palace.manager.service.redis.models.search import WaitingForIndexing
+from palace.manager.sqlalchemy.model.work import Work
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.redis import RedisFixture
@@ -69,21 +73,19 @@ def mock_search_pointers(
     )
 
 
-def test_get_work_search_documents(db: DatabaseTransactionFixture) -> None:
+def test_get_presentation_ready_work_ids(db: DatabaseTransactionFixture) -> None:
     work1 = db.work(with_open_access_download=True)
     work2 = db.work(with_open_access_download=True)
     # This work is not presentation ready, because it has no open access download.
     work3 = db.work(with_open_access_download=False)
     work4 = db.work(with_open_access_download=True)
 
-    documents = get_work_search_documents(db.session, 2, 0)
-    assert {doc["_id"] for doc in documents} == {work1.id, work2.id}
-
-    documents = get_work_search_documents(db.session, 2, 2)
-    assert {doc["_id"] for doc in documents} == {work4.id}
-
-    documents = get_work_search_documents(db.session, 2, 4)
-    assert documents == []
+    assert set(get_presentation_ready_work_ids(db.session, 2, 0)) == {
+        work1.id,
+        work2.id,
+    }
+    assert set(get_presentation_ready_work_ids(db.session, 2, 2)) == {work4.id}
+    assert get_presentation_ready_work_ids(db.session, 2, 4) == []
 
 
 @pytest.mark.parametrize("batch_size", [2, 3, 500])
@@ -135,6 +137,43 @@ def test_search_reindex(
     end_to_end_search_fixture.expect_results([work1, work2, work4], "", ordered=False)
 
 
+@patch("palace.manager.celery.tasks.search.random")
+def test_search_reindex_indexes_the_works_after_one_that_cannot_be_indexed(
+    mock_random: MagicMock,
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+    search_reindex_task_lock_fixture: SearchReindexTaskLockFixture,
+    end_to_end_search_fixture: EndToEndSearchFixture,
+) -> None:
+    # Work.to_search_documents drops a work whose document it cannot build, so a full
+    # batch of works arrives as a short batch of documents. The run has to keep paging
+    # anyway: the works after the dropped one are the rest of the collection.
+    mock_random.uniform.return_value = 0.0
+    works = [db.work(with_open_access_download=True) for _ in range(4)]
+
+    to_search_documents = Work.to_search_documents
+    dropped: list[int] = []
+
+    def drop_one_document(
+        session: Session, work_ids: Sequence[int]
+    ) -> Sequence[dict[str, Any]]:
+        documents = to_search_documents(session, work_ids)
+        if not dropped and documents:
+            dropped.append(documents[0]["_id"])
+            return documents[1:]
+        return documents
+
+    # The first batch loses a document, so it has to be a batch that is not the last one.
+    with patch.object(Work, "to_search_documents", drop_one_document):
+        search_reindex.delay(batch_size=2).wait()
+
+    assert len(dropped) == 1
+    end_to_end_search_fixture.external_search.write_client.indices.refresh()
+    end_to_end_search_fixture.expect_results(
+        [work for work in works if work.id != dropped[0]], "", ordered=False
+    )
+
+
 def test_search_reindex_lock(
     db: DatabaseTransactionFixture,
     celery_fixture: CeleryFixture,
@@ -154,8 +193,10 @@ def test_fiction_query_returns_results(
 ) -> None:
     work1 = db.work(with_open_access_download=True, fiction=True)
     work2 = db.work(with_open_access_download=True, fiction=False)
-    documents = get_work_search_documents(db.session, 2, 0)
-    assert {doc["_id"] for doc in documents} == {work2.id, work1.id}
+    assert set(get_presentation_ready_work_ids(db.session, 2, 0)) == {
+        work2.id,
+        work1.id,
+    }
 
     end_to_end_search_fixture.populate_search_index()
     end_to_end_search_fixture.expect_results(
@@ -217,9 +258,9 @@ def test_search_reindex_failures(
 
 @patch("palace.manager.celery.tasks.search.random.uniform")
 @patch("palace.manager.celery.tasks.search.exponential_backoff")
-@patch("palace.manager.celery.tasks.search.get_work_search_documents")
+@patch("palace.manager.celery.tasks.search.get_presentation_ready_work_ids")
 def test_search_reindex_requeue_delay(
-    mock_get_work_search_documents: MagicMock,
+    mock_get_work_ids: MagicMock,
     mock_backoff: MagicMock,
     mock_random_uniform: MagicMock,
     celery_fixture: CeleryFixture,
@@ -232,10 +273,7 @@ def test_search_reindex_requeue_delay(
     mock_random_uniform.return_value = 0
 
     # Return a full batch to trigger requeueing, then an empty batch to stop
-    mock_get_work_search_documents.side_effect = [
-        [{"_id": 1}, {"_id": 2}],
-        [],
-    ]
+    mock_get_work_ids.side_effect = [[1, 2], []]
 
     # Ensure add_documents succeeds (returns no failed documents)
     services_fixture.search_index.add_documents.return_value = None
@@ -249,9 +287,9 @@ def test_search_reindex_requeue_delay(
 
 @patch("palace.manager.celery.tasks.search.random.uniform")
 @patch("palace.manager.celery.tasks.search.exponential_backoff")
-@patch("palace.manager.celery.tasks.search.get_work_search_documents")
+@patch("palace.manager.celery.tasks.search.get_presentation_ready_work_ids")
 def test_search_reindex_failures_multiple_batch(
-    mock_get_work_search_documents: MagicMock,
+    mock_get_work_ids: MagicMock,
     mock_backoff: MagicMock,
     mock_random_uniform: MagicMock,
     celery_fixture: CeleryFixture,
@@ -262,20 +300,10 @@ def test_search_reindex_failures_multiple_batch(
     # When a batch succeeds, the retry count is reset.
     mock_backoff.return_value = 0
     mock_random_uniform.return_value = 0
-    search_documents = [
-        {"_id": 1},
-        {"_id": 2},
-        {"_id": 3},
-        {"_id": 4},
-        {"_id": 5},
-        {"_id": 6},
-        {"_id": 7},
+    work_ids = [1, 2, 3, 4, 5, 6, 7]
+    mock_get_work_ids.side_effect = lambda session, batch_size, offset: work_ids[
+        offset : offset + batch_size
     ]
-    mock_get_work_search_documents.side_effect = (
-        lambda session, batch_size, offset: search_documents[
-            offset : offset + batch_size
-        ]
-    )
     add_documents_mock = services_fixture.search_index.add_documents
     add_documents_mock.side_effect = [
         # First batch
