@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from palace.util.exceptions import BasePalaceException
-from palace.util.log import elapsed_time_logging
+from palace.util.log import LoggerType, elapsed_time_logging
 
 from palace.manager.celery.task import Task
 from palace.manager.celery.utils import signature_with
@@ -46,7 +46,7 @@ def get_work_search_documents(
 
 
 def add_documents_to_index(
-    task: Task, index: ExternalSearchIndex, documents: Sequence[dict[str, Any]]
+    log: LoggerType, index: ExternalSearchIndex, documents: Sequence[dict[str, Any]]
 ) -> None:
     """
     Submit a batch of documents to the search index.
@@ -54,7 +54,7 @@ def add_documents_to_index(
     :raises FailedToIndex: If the index rejected some of the documents.
     """
     with elapsed_time_logging(
-        log_method=task.log.info,
+        log_method=log.info,
         message_prefix="Works added to index",
         skip_start=True,
     ):
@@ -67,18 +67,18 @@ class FailedToIndex(BasePalaceException): ...
 
 
 def set_read_pointer(
-    task: Task, service: SearchService, revision: SearchSchemaRevision
+    log: LoggerType, service: SearchService, revision: SearchSchemaRevision
 ) -> None:
     """
     Publish a revision's index for reads.
 
-    :param task: The task doing the update, used for logging.
+    :param log: The logger of the task doing the update.
     :param service: The search service whose read pointer is being moved.
     :param revision: The revision whose index should serve reads.
     :raises OpenSearchException: If OpenSearch rejects the alias update.
     """
     service.read_pointer_set(revision)
-    task.log.info(
+    log.info(
         f"Updated read pointer ({service.base_revision_name} v{revision.version})."
     )
 
@@ -95,7 +95,12 @@ def resolve_target_index(service: SearchService) -> str | None:
     return write_pointer.index if write_pointer is not None else None
 
 
-def advance_read_pointer(task: Task, target_index: str | None) -> None:
+def advance_read_pointer(
+    log: LoggerType,
+    service: SearchService,
+    revision: SearchSchemaRevision,
+    target_index: str | None,
+) -> None:
     """
     Point reads at the index a completed reindex just filled, if reads are still being
     served from an older one.
@@ -105,14 +110,13 @@ def advance_read_pointer(task: Task, target_index: str | None) -> None:
     pass over that index publishes it. No caller has to remember to advance the pointer,
     and a run that dies partway through simply leaves the pointer where it was.
 
-    :param task: The task that completed the reindex, used for logging and to look up the
-        search service.
+    :param log: The logger of the task that completed the reindex.
+    :param service: The search service whose pointers are being read and moved.
+    :param revision: The latest revision, whose index is the one worth publishing.
     :param target_index: The index the completed run was filling.
     :raises OpenSearchException: If the pointers cannot be read, or the read pointer cannot
         be updated.
     """
-    service = task.services.search.service()
-    revision = task.services.search.revision_directory().highest()
     latest_index = revision.name_for_index(service.base_revision_name)
 
     read_pointer = service.read_pointer()
@@ -124,13 +128,13 @@ def advance_read_pointer(task: Task, target_index: str | None) -> None:
     if target_index is None:
         # Either the run started partway through, or there was no write pointer for it to
         # record when it started.
-        task.log.warning(
+        log.warning(
             "Not advancing read pointer: this run did not record an index to fill."
         )
         return
 
     if target_index != latest_index:
-        task.log.warning(
+        log.warning(
             f"Not advancing read pointer: this reindex filled {target_index}, "
             f"but the latest revision is {latest_index}."
         )
@@ -139,14 +143,14 @@ def advance_read_pointer(task: Task, target_index: str | None) -> None:
     if write_pointer is None or write_pointer.index != target_index:
         # The write pointer moved partway through, so our documents are split across the
         # old and new indexes and neither one received a complete pass.
-        task.log.warning(
+        log.warning(
             f"Not advancing read pointer: the write pointer moved to "
             f"{write_pointer.index if write_pointer is not None else None} "
             f"while this reindex was filling {target_index}."
         )
         return
 
-    set_read_pointer(task, service, revision)
+    set_read_pointer(log, service, revision)
 
 
 @shared_task(
@@ -191,7 +195,7 @@ def search_reindex(
             ):
                 documents = get_work_search_documents(session, batch_size, offset)
 
-            add_documents_to_index(task, index, documents)
+            add_documents_to_index(task.log, index, documents)
 
             if len(documents) == batch_size:
                 # This task is complete, but there are more works waiting to be indexed. Requeue ourselves
@@ -204,7 +208,12 @@ def search_reindex(
                     ).set(countdown=delay)
                 )
 
-            advance_read_pointer(task, target_index)
+            advance_read_pointer(
+                task.log,
+                task.services.search.service(),
+                task.services.search.revision_directory().highest(),
+                target_index,
+            )
         except (FailedToIndex, OpenSearchException) as e:
             # A full pass takes days on a large collection, so a transient search failure
             # retries this batch rather than discarding the run's work. The retry happens
@@ -242,7 +251,7 @@ def update_read_pointer(task: Task) -> None:
     revision = revision_directory.highest()
 
     try:
-        set_read_pointer(task, service, revision)
+        set_read_pointer(task.log, service, revision)
     except OpenSearchException as e:
         wait_time = exponential_backoff(task.request.retries)
         task.log.exception(
@@ -296,7 +305,7 @@ def index_works(task: Task, works: Sequence[int]) -> None:
         documents = Work.to_search_documents(session, works)
 
     try:
-        add_documents_to_index(task, index, documents)
+        add_documents_to_index(task.log, index, documents)
     except (FailedToIndex, OpenSearchException) as e:
         wait_time = exponential_backoff(task.request.retries)
         task.log.exception(f"{e}. Retrying in {wait_time} seconds.")
