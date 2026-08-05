@@ -52,9 +52,11 @@ REAP_CRAWL_ALLOWANCE: float = 0.001
 REAP_CRAWL_ALLOWANCE_FLOOR: int = 10
 REAP_CRAWL_ALLOWANCE_CAP: int = 500
 
-# How long the reaper's identifier sets outlive their creation. Long enough that a
-# crawl of the largest collection cannot outlast the set it will be compared against,
-# and short enough that an abandoned run is cleaned up well before the next pass.
+# How long the reaper's identifier sets outlive their creation. A crawl of the largest
+# collection can span more than a day, and both halves of the comparison have to still
+# be there when it finishes. The sets are keyed on the run's task id, so an abandoned
+# run's keys cannot be picked up by the next pass -- they only take up space until they
+# expire.
 REAP_IDENTIFIER_SET_LIFETIME: datetime.timedelta = datetime.timedelta(hours=36)
 
 
@@ -520,6 +522,8 @@ def reap_collection(
     *,
     offset: int = 0,
     total_items: int | None = None,
+    previous_offset: int | None = None,
+    batch_size: int | None = None,
 ) -> IdentifierSet | None:
     """
     Enumerate the titles an Overdrive collection currently lists.
@@ -554,9 +558,27 @@ def reap_collection(
         :meth:`OverdriveAPI.next_product_offset`.
     :param total_items: Overdrive's collection size, as reported by the crawl's first
         page and carried across the remaining ones.
+    :param previous_offset: Where the previous page of the backwards walk started, so
+        this one can be shown to reach it. None on the first page of a walk, which has
+        nothing above it to join up with.
+    :param batch_size: Only ever set on a page queued by the previous per-title
+        reaper, whose ``offset`` meant something else entirely. Accepted so those
+        messages are discarded rather than failing to bind after a deploy; remove it
+        once no such message can still be in flight.
     :return: The identifiers the collection currently lists, or None if the crawl was
         skipped, aborted, or could not be verified as complete.
     """
+    if batch_size is not None:
+        # A page left over from the per-title reaper, whose `offset` was the last
+        # Identifier.id it processed. Running it as a product-list offset would crawl
+        # from an arbitrary point, so the run is dropped and the next scheduled one
+        # starts clean.
+        task.log.info(
+            f"Discarding a reap page queued by the previous reaper implementation "
+            f"for collection {collection_id}."
+        )
+        return None
+
     with workflow_lock_guard(
         task,
         collection_id,
@@ -612,6 +634,25 @@ def reap_collection(
             )
             identifier_set.delete()
             return None
+
+        if (
+            previous_offset is not None
+            and offset + len(result.listed) < previous_offset
+        ):
+            # The walk steps back by a page size, but a page is free to return fewer
+            # titles than that. When one does, the step overshoots and leaves a strip
+            # of the list uncrawled -- which reaches the completeness check as a
+            # shortfall indistinguishable from titles removed mid-crawl. Pages are
+            # only legitimately short at the end of the list, so every other page is
+            # required to reach the one before it.
+            task.log.error(
+                f"Overdrive reaper aborting for collection '{collection_name}': the "
+                f"page at offset {offset} returned {len(result.listed)} titles and so "
+                f"stops short of the region already crawled at {previous_offset}. "
+                f"Refusing to reap across a gap."
+            )
+            identifier_set.delete()
+            return None
         if marked:
             task.log.info(
                 f"Overdrive reaper marked {marked} title(s) Overdrive no longer owns "
@@ -624,7 +665,15 @@ def reap_collection(
                 f"{identifier_set.len()} of {total_items} titles seen."
             )
             raise task.replace(
-                signature_with(task, offset=next_offset, total_items=total_items)
+                signature_with(
+                    task,
+                    offset=next_offset,
+                    total_items=total_items,
+                    # The first page of a walk starts at 0 and is followed by a jump
+                    # to the end of the list, so the page after it has nothing to
+                    # join up with.
+                    previous_offset=offset or None,
+                )
             )
 
         crawled = identifier_set.len()

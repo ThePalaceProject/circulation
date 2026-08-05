@@ -1641,6 +1641,70 @@ class TestOverdriveReaper:
         mock_apply.delay.assert_called_once()
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
+    def test_reap_collection_aborts_on_a_gap_between_pages(
+        self,
+        mock_api_class: MagicMock,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        redis_fixture: RedisFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """A page that returns fewer titles than the walk stepped back by leaves a gap.
+
+        The step is a page size, but a page may return fewer than that, and the
+        uncrawled strip would otherwise reach the completeness check as a shortfall
+        indistinguishable from titles removed mid-crawl.
+        """
+        collection = overdrive_api_fixture.collection
+        caplog.set_level(LogLevel.error)
+        api = mock_crawl(
+            mock_api_class,
+            product_page(listed=overdrive_identifiers("id-one"), total_items=6000),
+            # Requested at offset 3000, but reaches only 3001 -- short of the 4000
+            # the previous page started at.
+            product_page(listed=overdrive_identifiers("id-two"), total_items=6000),
+        )
+        api.next_product_offset.side_effect = [4000, 3000, None]
+
+        async_result = overdrive.reap_collection.apply_async(
+            (collection.id,), {"offset": 3000, "previous_offset": 4000}
+        )
+
+        assert async_result.wait() is None
+        assert "Refusing to reap across a gap" in caplog.text
+        partial_set = IdentifierSet(
+            redis_fixture.client, reap_key(collection.id, async_result.id)
+        )
+        assert not partial_set.exists()
+
+    def test_reap_collection_discards_a_page_from_the_previous_reaper(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """Pages queued by the per-title reaper are dropped, not run.
+
+        Its `offset` was the last Identifier.id it had processed, so binding it as a
+        product-list offset would crawl from an arbitrary point in the collection.
+        """
+        collection = overdrive_api_fixture.collection
+        caplog.set_level(LogLevel.info)
+
+        with patch(
+            "palace.manager.celery.tasks.overdrive.OverdriveAPI"
+        ) as mock_api_class:
+            result = overdrive.reap_collection.apply_async(
+                (collection.id,), {"offset": 918273, "batch_size": 50}
+            ).wait()
+
+        assert result is None
+        mock_api_class.return_value.fetch_product_page.assert_not_called()
+        assert "previous reaper implementation" in caplog.text
+
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
     def test_reap_collection_skips_collection_marked_for_deletion(
         self,
         mock_api_class: MagicMock,
