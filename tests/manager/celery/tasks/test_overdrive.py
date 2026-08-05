@@ -16,7 +16,7 @@ from palace.manager.celery.importer import (
     reap_key,
     reap_workflow_lock,
 )
-from palace.manager.celery.tasks import overdrive
+from palace.manager.celery.tasks import identifiers, overdrive
 from palace.manager.celery.tasks.overdrive import import_collection_group
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.integration.license.overdrive.api import (
@@ -34,7 +34,7 @@ from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.sqlalchemy.model.licensing import LicensePool
+from palace.manager.sqlalchemy.model.licensing import LicensePool, LicensePoolStatus
 from palace.manager.util.http.exception import BadResponseException
 from tests.fixtures.celery import ApplyTaskFixture, CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -1655,6 +1655,161 @@ class TestOverdriveReaper:
             ).wait()
 
         assert result is not None
+
+    @pytest.mark.parametrize(
+        "crawled,total_items,single_page,expected",
+        [
+            pytest.param(1_000, 1_000, False, True, id="exact match"),
+            pytest.param(0, 5, False, True, id="floor covers a tiny collection"),
+            pytest.param(0, 100, False, False, id="shortfall beyond the floor"),
+            pytest.param(
+                4_000_000 - 400, 4_000_000, False, True, id="churn within the cap"
+            ),
+            pytest.param(
+                4_000_000 - 2_000,
+                4_000_000,
+                False,
+                False,
+                id="a lost page is not excused",
+            ),
+            pytest.param(1_000, 1_000, True, True, id="single page, counts agree"),
+            pytest.param(999, 1_000, True, False, id="single page, one short"),
+        ],
+    )
+    def test_crawl_is_complete(
+        self,
+        crawled: int,
+        total_items: int,
+        single_page: bool,
+        expected: bool,
+    ):
+        """The allowance absorbs churn during a crawl, but never a whole lost page.
+
+        It is capped because the churn it exists for does not scale with collection
+        size, while a proportional allowance does: 0.1% of a 4M-title collection would
+        be two full pages, so a crawl that silently dropped one would be accepted and
+        those titles reaped. A collection that arrived in a single response had no
+        window for churn at all, so its counts have to agree exactly.
+        """
+        assert (
+            overdrive._crawl_is_complete(
+                MagicMock(),
+                "collection name",
+                crawled,
+                total_items,
+                single_page=single_page,
+                page_limit=2000,
+            )
+            is expected
+        )
+
+    def test_crawl_allowance_stays_under_a_page(self):
+        """A lost page must never be excused, whatever page size Overdrive applied.
+
+        The allowance is meant to absorb churn during a crawl, and the crawl's first
+        backwards page has nothing above it to be checked against -- so if the
+        allowance ever reached a whole page, an empty response there would be
+        indistinguishable from titles removed mid-crawl.
+        """
+        for page_limit in (2000, 300, 25):
+            lost_page = 10_000_000
+            assert (
+                overdrive._crawl_is_complete(
+                    MagicMock(),
+                    "collection name",
+                    lost_page - page_limit,
+                    lost_page,
+                    single_page=False,
+                    page_limit=page_limit,
+                )
+                is False
+            )
+
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
+    def test_reap_collection_marks_titles_overdrive_no_longer_owns(
+        self,
+        mock_api_class: MagicMock,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        redis_fixture: RedisFixture,
+    ):
+        """Weeded titles are marked from Overdrive's flag, not from their absence.
+
+        Overdrive keeps weeded and expired titles in the product list, flagged
+        `isOwnedByCollections: false`. That is a statement that the title is gone, so
+        it is acted on directly rather than inferred from a set difference.
+        """
+        collection = overdrive_api_fixture.collection
+        overdrive_pool(db, collection, "id-weeded")
+        overdrive_pool(db, collection, "id-available")
+        # A weeded title whose copies are all checked out: still held, so still worth
+        # marking, and one the set difference can never reach.
+        on_loan = overdrive_pool(db, collection, "id-on-loan")
+        on_loan.licenses_available = 0
+        already_gone = overdrive_pool(db, collection, "id-already-gone")
+        already_gone.licenses_owned = already_gone.licenses_available = 0
+        db.session.flush()
+
+        listed = overdrive_identifiers(
+            "id-weeded", "id-available", "id-on-loan", "id-already-gone"
+        )
+        mock_crawl(
+            mock_api_class,
+            product_page(
+                listed=listed,
+                unowned=overdrive_identifiers(
+                    "id-weeded", "id-on-loan", "id-already-gone"
+                ),
+                total_items=4,
+            ),
+        )
+
+        with patch.object(identifiers, "circulation_apply") as mock_apply:
+            result = overdrive.reap_collection.delay(collection.id).wait()
+
+        # The title with no copies left is not re-marked, so the ones Overdrive goes
+        # on listing as unowned do not generate an apply task on every pass.
+        marked = {
+            call.kwargs["circulation"].primary_identifier_data.identifier
+            for call in mock_apply.delay.call_args_list
+        }
+        assert marked == {"id-weeded", "id-on-loan"}
+        circulation = mock_apply.delay.call_args.kwargs["circulation"]
+        assert circulation.licenses_owned == 0
+        assert circulation.licenses_available == 0
+        assert circulation.status == LicensePoolStatus.EXHAUSTED
+
+        # Unowned titles stay in the returned set, so the chord's set difference does
+        # not mark them a second time.
+        assert IdentifierSet(redis_fixture.client, result["key"]).get() == set(listed)
+
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
+    def test_reap_collection_marks_unowned_titles_on_an_incomplete_crawl(
+        self,
+        mock_api_class: MagicMock,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        redis_fixture: RedisFixture,
+    ):
+        """A crawl that cannot be verified still marks what Overdrive stated outright.
+
+        Only the half that acts on absence needs a complete crawl.
+        """
+        collection = overdrive_api_fixture.collection
+        overdrive_pool(db, collection, "id-weeded")
+        weeded = overdrive_identifiers("id-weeded")
+        mock_crawl(
+            mock_api_class,
+            product_page(listed=weeded, unowned=weeded, total_items=5000, limit=1),
+        )
+
+        with patch.object(identifiers, "circulation_apply") as mock_apply:
+            result = overdrive.reap_collection.delay(collection.id).wait()
+
+        assert result is None
+        mock_apply.delay.assert_called_once()
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
     def test_reap_collection_skips_collection_marked_for_deletion(

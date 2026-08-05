@@ -682,7 +682,6 @@ def reap_collection(
 
         if (
             offset == 0
-            and total_items is not None
             and total_items > result.limit
             and len(result.listed) < result.limit
         ):
@@ -810,7 +809,7 @@ def _crawl_is_complete(
     task: Task,
     collection_name: str,
     crawled: int,
-    total_items: int | None,
+    total_items: int,
     *,
     single_page: bool,
     page_limit: int,
@@ -832,13 +831,6 @@ def _crawl_is_complete(
         it so that a lost page can never be mistaken for churn -- including the crawl's
         first backwards page, which has nothing above it to be checked against.
     """
-    if total_items is None:
-        task.log.error(
-            f"Overdrive reaper aborting for collection '{collection_name}': "
-            f"Overdrive did not report totalItems, so the crawl cannot be verified."
-        )
-        return False
-
     allowance = (
         0
         if single_page
