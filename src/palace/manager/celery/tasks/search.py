@@ -48,19 +48,19 @@ def get_work_search_documents(
 def add_documents_to_index(
     task: Task, index: ExternalSearchIndex, documents: Sequence[dict[str, Any]]
 ) -> None:
-    try:
-        with elapsed_time_logging(
-            log_method=task.log.info,
-            message_prefix="Works added to index",
-            skip_start=True,
-        ):
-            failed_documents = index.add_documents(documents=documents)
-        if failed_documents:
-            raise FailedToIndex(f"Failed to index {len(failed_documents)} works.")
-    except (FailedToIndex, OpenSearchException) as e:
-        wait_time = exponential_backoff(task.request.retries)
-        task.log.error(f"{e}. Retrying in {wait_time} seconds.")
-        raise task.retry(countdown=wait_time)
+    """
+    Submit a batch of documents to the search index.
+
+    :raises FailedToIndex: If the index rejected some of the documents.
+    """
+    with elapsed_time_logging(
+        log_method=task.log.info,
+        message_prefix="Works added to index",
+        skip_start=True,
+    ):
+        failed_documents = index.add_documents(documents=documents)
+    if failed_documents:
+        raise FailedToIndex(f"Failed to index {len(failed_documents)} works.")
 
 
 class FailedToIndex(BasePalaceException): ...
@@ -72,41 +72,26 @@ def set_read_pointer(
     """
     Publish a revision's index for reads.
 
-    :param task: The task doing the update, retried with a backoff if OpenSearch rejects
-        the alias update.
+    :param task: The task doing the update, used for logging.
     :param service: The search service whose read pointer is being moved.
     :param revision: The revision whose index should serve reads.
+    :raises OpenSearchException: If OpenSearch rejects the alias update.
     """
-    try:
-        service.read_pointer_set(revision)
-    except OpenSearchException as e:
-        wait_time = exponential_backoff(task.request.retries)
-        task.log.error(
-            f"Failed to update read pointer: {e}. Retrying in {wait_time} seconds."
-        )
-        raise task.retry(countdown=wait_time)
+    service.read_pointer_set(revision)
     task.log.info(
         f"Updated read pointer ({service.base_revision_name} v{revision.version})."
     )
 
 
-def resolve_target_index(task: Task, service: SearchService) -> str | None:
+def resolve_target_index(service: SearchService) -> str | None:
     """
     Identify the index a reindex starting now is going to fill.
 
-    :param task: The task doing the reindex, retried with a backoff if OpenSearch cannot
-        be reached.
     :param service: The search service to read the write pointer from.
     :return: The index writes are currently going to, or None if there is no write pointer.
+    :raises OpenSearchException: If the write pointer cannot be read.
     """
-    try:
-        write_pointer = service.write_pointer()
-    except OpenSearchException as e:
-        wait_time = exponential_backoff(task.request.retries)
-        task.log.error(
-            f"Failed to read the write pointer: {e}. Retrying in {wait_time} seconds."
-        )
-        raise task.retry(countdown=wait_time)
+    write_pointer = service.write_pointer()
     return write_pointer.index if write_pointer is not None else None
 
 
@@ -120,25 +105,18 @@ def advance_read_pointer(task: Task, target_index: str | None) -> None:
     pass over that index publishes it. No caller has to remember to advance the pointer,
     and a run that dies partway through simply leaves the pointer where it was.
 
-    :param task: The task that completed the reindex, retried with a backoff if the
-        pointers cannot be read.
+    :param task: The task that completed the reindex, used for logging and to look up the
+        search service.
     :param target_index: The index the completed run was filling.
+    :raises OpenSearchException: If the pointers cannot be read, or the read pointer cannot
+        be updated.
     """
     service = task.services.search.service()
     revision = task.services.search.revision_directory().highest()
     latest_index = revision.name_for_index(service.base_revision_name)
 
-    try:
-        read_pointer = service.read_pointer()
-        write_pointer = service.write_pointer()
-    except OpenSearchException as e:
-        # A full pass takes days on a large collection, so a transient failure reading the
-        # pointers is worth retrying rather than discarding the run's work.
-        wait_time = exponential_backoff(task.request.retries)
-        task.log.error(
-            f"Failed to read search pointers: {e}. Retrying in {wait_time} seconds."
-        )
-        raise task.retry(countdown=wait_time)
+    read_pointer = service.read_pointer()
+    write_pointer = service.write_pointer()
 
     if read_pointer is not None and read_pointer.version >= revision.version:
         return
@@ -195,37 +173,47 @@ def search_reindex(
     task_lock = TaskLock(task, lock_name="search_reindex")
 
     with task_lock.lock(release_on_exit=False, ignored_exceptions=(Retry, Ignore)):
-        if target_index is None and offset == 0:
-            target_index = resolve_target_index(task, task.services.search.service())
+        try:
+            if target_index is None and offset == 0:
+                target_index = resolve_target_index(task.services.search.service())
 
-        task.log.info(
-            f"Running search reindex at offset {offset} with batch size {batch_size}."
-        )
-
-        with (
-            task.session() as session,
-            elapsed_time_logging(
-                log_method=task.log.info,
-                message_prefix="Works queried from database",
-                skip_start=True,
-            ),
-        ):
-            documents = get_work_search_documents(session, batch_size, offset)
-
-        add_documents_to_index(task, index, documents)
-
-        if len(documents) == batch_size:
-            # This task is complete, but there are more works waiting to be indexed. Requeue ourselves
-            # to process the next batch. We add a random delay to avoid hammering the search service
-            # when this task is running in parallel on multiple workers.
-            delay = random.uniform(5, 15)
-            raise task.replace(
-                signature_with(
-                    task, offset=offset + batch_size, target_index=target_index
-                ).set(countdown=delay)
+            task.log.info(
+                f"Running search reindex at offset {offset} with batch size {batch_size}."
             )
 
-        advance_read_pointer(task, target_index)
+            with (
+                task.session() as session,
+                elapsed_time_logging(
+                    log_method=task.log.info,
+                    message_prefix="Works queried from database",
+                    skip_start=True,
+                ),
+            ):
+                documents = get_work_search_documents(session, batch_size, offset)
+
+            add_documents_to_index(task, index, documents)
+
+            if len(documents) == batch_size:
+                # This task is complete, but there are more works waiting to be indexed. Requeue ourselves
+                # to process the next batch. We add a random delay to avoid hammering the search service
+                # when this task is running in parallel on multiple workers.
+                delay = random.uniform(5, 15)
+                raise task.replace(
+                    signature_with(
+                        task, offset=offset + batch_size, target_index=target_index
+                    ).set(countdown=delay)
+                )
+
+            advance_read_pointer(task, target_index)
+        except (FailedToIndex, OpenSearchException) as e:
+            # A full pass takes days on a large collection, so a transient search failure
+            # retries this batch rather than discarding the run's work. The retry happens
+            # here, inside the lock, so the run keeps the lock while it waits.
+            wait_time = exponential_backoff(task.request.retries)
+            task.log.exception(
+                f"Search reindex failed ({e}). Retrying in {wait_time} seconds."
+            )
+            raise task.retry(countdown=wait_time)
 
     task.log.info("Finished search reindex.")
     task_lock.release()
@@ -252,7 +240,15 @@ def update_read_pointer(task: Task) -> None:
     service = task.services.search.service()
     revision_directory = task.services.search.revision_directory()
     revision = revision_directory.highest()
-    set_read_pointer(task, service, revision)
+
+    try:
+        set_read_pointer(task, service, revision)
+    except OpenSearchException as e:
+        wait_time = exponential_backoff(task.request.retries)
+        task.log.exception(
+            f"Failed to update read pointer: {e}. Retrying in {wait_time} seconds."
+        )
+        raise task.retry(countdown=wait_time)
 
 
 @shared_task(queue=QueueNames.default, bind=True, throws=(LockNotAcquired,))
@@ -299,4 +295,9 @@ def index_works(task: Task, works: Sequence[int]) -> None:
     ):
         documents = Work.to_search_documents(session, works)
 
-    add_documents_to_index(task, index, documents)
+    try:
+        add_documents_to_index(task, index, documents)
+    except (FailedToIndex, OpenSearchException) as e:
+        wait_time = exponential_backoff(task.request.retries)
+        task.log.exception(f"{e}. Retrying in {wait_time} seconds.")
+        raise task.retry(countdown=wait_time)
