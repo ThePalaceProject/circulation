@@ -1421,7 +1421,7 @@ class TestOverdriveReaper:
         result = overdrive.reap_collection.delay(collection.id).wait()
 
         assert result is None
-        assert "did not report totalItems" in caplog.text
+        assert "no usable totalItems or page size" in caplog.text
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
     def test_reap_collection_tolerates_small_shortfall(
@@ -1432,15 +1432,21 @@ class TestOverdriveReaper:
         overdrive_api_fixture: OverdriveAPIFixture,
         redis_fixture: RedisFixture,
     ):
-        """Titles added or removed mid-crawl move totalItems, which is not a failure."""
+        """Titles added or removed mid-crawl move totalItems, which is not a failure.
+
+        The allowance only applies to a crawl that spanned more than one response --
+        that is the only kind with a window for the collection to change underneath
+        it.
+        """
         collection = overdrive_api_fixture.collection
-        listed = overdrive_identifiers("id-one", "id-two")
+        first_page = overdrive_identifiers("id-one", "id-two")
+        second_page = overdrive_identifiers("id-three")
+        listed = first_page + second_page
+        total_items = len(listed) + overdrive.REAP_CRAWL_ALLOWANCE_FLOOR
         mock_crawl(
             mock_api_class,
-            product_page(
-                listed=listed,
-                total_items=len(listed) + overdrive.REAP_CRAWL_ALLOWANCE_FLOOR,
-            ),
+            product_page(listed=first_page, total_items=total_items),
+            product_page(listed=second_page, total_items=total_items),
         )
 
         result = overdrive.reap_collection.delay(collection.id).wait()
@@ -1448,32 +1454,112 @@ class TestOverdriveReaper:
         assert result is not None
         assert IdentifierSet(redis_fixture.client, result["key"]).get() == set(listed)
 
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
+    def test_reap_collection_requires_an_exact_count_for_a_single_page(
+        self,
+        mock_api_class: MagicMock,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        redis_fixture: RedisFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """A collection that arrives in one response had no window for churn.
+
+        Its products and its totalItems were produced together, so a shortfall is
+        Overdrive truncating the response rather than the collection moving, and the
+        allowance for churn should not excuse it.
+        """
+        collection = overdrive_api_fixture.collection
+        caplog.set_level(LogLevel.error)
+        mock_crawl(
+            mock_api_class,
+            product_page(listed=overdrive_identifiers("id-one"), total_items=2),
+        )
+
+        result = overdrive.reap_collection.delay(collection.id).wait()
+
+        assert result is None
+        assert "Refusing to reap on an incomplete crawl" in caplog.text
+
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
+    def test_reap_collection_aborts_when_a_page_cannot_be_paged_from(
+        self,
+        mock_api_class: MagicMock,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        redis_fixture: RedisFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """Giving up mid-walk is not the same as reaching the start of the list.
+
+        A page that arrives without the fields the walk needs stops the crawl at an
+        unknown point, so it aborts outright rather than letting the shortfall be
+        weighed against an allowance meant for churn.
+        """
+        collection = overdrive_api_fixture.collection
+        caplog.set_level(LogLevel.error)
+        api = mock_crawl(
+            mock_api_class,
+            product_page(listed=overdrive_identifiers("id-one"), total_items=2005),
+            product_page(listed=(), total_items=None, limit=0),
+        )
+        # The walk would otherwise read the second page as "collection covered".
+        api.next_product_offset.side_effect = [5, None]
+
+        async_result = overdrive.reap_collection.delay(collection.id)
+
+        assert async_result.wait() is None
+        assert "cannot be continued or verified" in caplog.text
+        partial_set = IdentifierSet(
+            redis_fixture.client, reap_key(collection.id, async_result.id)
+        )
+        assert not partial_set.exists()
+
     @pytest.mark.parametrize(
-        "crawled,total_items,expected",
+        "crawled,total_items,single_page,expected",
         [
-            pytest.param(1_000, None, False, id="totalItems missing"),
-            pytest.param(1_000, 1_000, True, id="exact match"),
-            pytest.param(0, 5, True, id="floor covers a tiny collection"),
-            pytest.param(0, 100, False, id="shortfall beyond the floor"),
-            pytest.param(4_000_000 - 400, 4_000_000, True, id="churn within the cap"),
+            pytest.param(1_000, None, False, False, id="totalItems missing"),
+            pytest.param(1_000, 1_000, False, True, id="exact match"),
+            pytest.param(0, 5, False, True, id="floor covers a tiny collection"),
+            pytest.param(0, 100, False, False, id="shortfall beyond the floor"),
             pytest.param(
-                4_000_000 - 2_000, 4_000_000, False, id="a lost page is not excused"
+                4_000_000 - 400, 4_000_000, False, True, id="churn within the cap"
             ),
+            pytest.param(
+                4_000_000 - 2_000,
+                4_000_000,
+                False,
+                False,
+                id="a lost page is not excused",
+            ),
+            pytest.param(1_000, 1_000, True, True, id="single page, counts agree"),
+            pytest.param(999, 1_000, True, False, id="single page, one short"),
         ],
     )
     def test_crawl_is_complete(
-        self, crawled: int, total_items: int | None, expected: bool
+        self,
+        crawled: int,
+        total_items: int | None,
+        single_page: bool,
+        expected: bool,
     ):
         """The allowance absorbs churn during a crawl, but never a whole lost page.
 
         It is capped because the churn it exists for does not scale with collection
         size, while a proportional allowance does: 0.1% of a 4M-title collection would
         be two full pages, so a crawl that silently dropped one would be accepted and
-        those titles reaped.
+        those titles reaped. A collection that arrived in a single response had no
+        window for churn at all, so its counts have to agree exactly.
         """
         assert (
             overdrive._crawl_is_complete(
-                MagicMock(), "collection name", crawled, total_items
+                MagicMock(),
+                "collection name",
+                crawled,
+                total_items,
+                single_page=single_page,
             )
             is expected
         )

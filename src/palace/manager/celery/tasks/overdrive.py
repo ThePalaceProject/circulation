@@ -523,7 +523,7 @@ def reap_collection(
     ``task.replace()`` until the crawl is complete, and collects the identifiers into
     a Redis set. Only ids and ownership are read -- no metadata or availability
     lookups -- so a whole collection costs a handful of requests rather than one per
-    title. See :meth:`OverdriveAPI.next_product_page` for how the crawl is paged.
+    title. See :meth:`OverdriveAPI.next_product_offset` for how the crawl is paged.
 
     Titles are removed from a collection in two ways, and this handles them
     differently:
@@ -589,6 +589,17 @@ def reap_collection(
         identifier_set.add(*result.listed)
         if total_items is None:
             total_items = result.total_items
+        if not result.pageable:
+            # The crawl stopped somewhere unknown rather than at the start of the
+            # list, so how much it covered is not a question the allowance for churn
+            # can answer.
+            task.log.error(
+                f"Overdrive reaper aborting for collection '{collection_name}': the "
+                f"page at offset {offset} carries no usable totalItems or page size, "
+                f"so the crawl cannot be continued or verified."
+            )
+            identifier_set.delete()
+            return None
         if marked:
             task.log.info(
                 f"Overdrive reaper marked {marked} title(s) Overdrive no longer owns "
@@ -605,7 +616,9 @@ def reap_collection(
             )
 
         crawled = identifier_set.len()
-        if not _crawl_is_complete(task, collection_name, crawled, total_items):
+        if not _crawl_is_complete(
+            task, collection_name, crawled, total_items, single_page=offset == 0
+        ):
             identifier_set.delete()
             return None
 
@@ -663,7 +676,12 @@ def _mark_unowned_identifiers(
 
 
 def _crawl_is_complete(
-    task: Task, collection_name: str, crawled: int, total_items: int | None
+    task: Task,
+    collection_name: str,
+    crawled: int,
+    total_items: int | None,
+    *,
+    single_page: bool,
 ) -> bool:
     """Decide whether a finished crawl covered the whole collection.
 
@@ -674,6 +692,10 @@ def _crawl_is_complete(
     small discrepancy against ``totalItems`` is expected -- titles added or removed
     mid-crawl move the count. A large shortfall means pages were missed, and reaping on
     that would mark live titles as gone.
+
+    :param single_page: Whether the whole collection arrived in one response. There is
+        no window for churn in that case -- the products and the count were produced
+        together -- so they are required to agree exactly.
     """
     if total_items is None:
         task.log.error(
@@ -682,9 +704,13 @@ def _crawl_is_complete(
         )
         return False
 
-    allowance = min(
-        REAP_CRAWL_ALLOWANCE_CAP,
-        max(REAP_CRAWL_ALLOWANCE_FLOOR, int(total_items * REAP_CRAWL_ALLOWANCE)),
+    allowance = (
+        0
+        if single_page
+        else min(
+            REAP_CRAWL_ALLOWANCE_CAP,
+            max(REAP_CRAWL_ALLOWANCE_FLOOR, int(total_items * REAP_CRAWL_ALLOWANCE)),
+        )
     )
     if crawled + allowance < total_items:
         task.log.error(

@@ -95,11 +95,15 @@ class TestOverdriveAPI:
         mock_reap.s.assert_called_once_with(collection_id)
         # Overdrive drops titles when a lease ends, so a missing title means the
         # copies are gone, not that outstanding loans and holds should be revoked.
+        # The crawl runs for hours on a large collection, so the set it will be
+        # compared against has to outlive the default expiry.
         mock_chord.assert_called_once_with(
             collection_id,
             mock_reap.s.return_value,
             status=LicensePoolStatus.EXHAUSTED,
+            expire_time=int(OverdriveAPI.REAP_IDENTIFIER_SET_LIFETIME.total_seconds()),
         )
+        assert OverdriveAPI.REAP_IDENTIFIER_SET_LIFETIME > timedelta(hours=12)
         assert result == mock_chord.return_value
 
     def test_product_page_endpoint(

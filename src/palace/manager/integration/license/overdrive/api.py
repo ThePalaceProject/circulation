@@ -161,6 +161,16 @@ class ProductPage:
     total_items: int | None
     limit: int
 
+    @property
+    def pageable(self) -> bool:
+        """Whether a crawl can work out where to go next from this page.
+
+        Distinct from having reached the end of the collection: a crawl that stops
+        because a page arrived without the fields it needs has covered an unknown
+        amount of the list, and must not be judged by the allowance for churn.
+        """
+        return self.total_items is not None and self.limit > 0
+
 
 class OverdriveAPI(
     PatronActivityCirculationAPI[OverdriveSettings, OverdriveLibrarySettings],
@@ -280,6 +290,12 @@ class OverdriveAPI(
     # nothing but ids, so the response stays manageable.
     PRODUCTS_PAGE_SIZE_LIMIT = 2000
 
+    # How long the reaper's identifier sets outlive their creation. Long enough that
+    # a crawl of the largest collection cannot outlast the set it will be compared
+    # against, and short enough that an abandoned run is cleaned up well before the
+    # next daily pass.
+    REAP_IDENTIFIER_SET_LIFETIME = datetime.timedelta(hours=36)
+
     # How much of a page consecutive crawl pages share. See `next_product_offset`
     # for what the overlap absorbs; it is a fraction so that it scales with whatever
     # page size Overdrive actually applies.
@@ -293,7 +309,7 @@ class OverdriveAPI(
     # consistently: the same offsets return the same titles across repeated requests,
     # across page sizes, and across whole crawls. dateAdded is also immutable, so
     # nothing the crawl reads can move a title from one position to another mid-run.
-    # See `next_product_page` for titles removed mid-crawl.
+    # See `next_product_offset` for titles removed mid-crawl.
     PRODUCTS_CRAWL_SORT = "dateAdded:asc"
 
     EVENT_SOURCE = "Overdrive"
@@ -354,6 +370,10 @@ class OverdriveAPI(
             # missing title means "no copies here now" rather than "revoke
             # outstanding loans and holds".
             status=LicensePoolStatus.EXHAUSTED,
+            # The crawl walks a page at a time through the shared queue, so the
+            # largest collections take hours. The other half of the chord is built
+            # once, at the start, and has to still be there at the end.
+            expire_time=int(cls.REAP_IDENTIFIER_SET_LIFETIME.total_seconds()),
         )
 
     def __init__(self, _db: Session, collection: Collection) -> None:

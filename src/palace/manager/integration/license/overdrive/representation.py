@@ -276,14 +276,14 @@ class OverdriveRepresentationExtractor(LoggerMixin):
         # The current behavior will respond to errors other than
         # NotFound by leaving the book alone, but this might not be
         # the right behavior.
-        if availability.error_code == "NotFound":
-            licenses_owned = 0
-            licenses_available = 0
-            patrons_in_hold_queue = 0
-        elif availability.is_owned_by_collections is False:
-            # Overdrive keeps weeded and expired titles in a collection's responses,
-            # flagged as no longer owned, so this is a statement that the collection
-            # has no copies -- not merely a document that omits the counts.
+        if (
+            availability.error_code == "NotFound"
+            or availability.is_owned_by_collections is False
+        ):
+            # Either Overdrive does not have the title at all, or it is one of the
+            # weeded and expired titles Overdrive keeps in a collection's responses
+            # flagged as no longer owned. Both state that the collection has no
+            # copies, rather than being a document that omits the counts.
             licenses_owned = 0
             licenses_available = 0
             patrons_in_hold_queue = 0

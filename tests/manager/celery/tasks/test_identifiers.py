@@ -388,6 +388,37 @@ class TestCreateMarkUnavailableChord:
         # Check that we didn't leave any redis keys behind
         assert redis_fixture.keys() == []
 
+    def test_expire_time_covers_a_long_running_active_side(
+        self,
+        db: DatabaseTransactionFixture,
+        redis_fixture: RedisFixture,
+        identifier_tasks_fixture: IdentifierTasksFixture,
+    ) -> None:
+        """The existing-identifier set has to outlive the other half of the chord.
+
+        It is built once, at the start, and never touched again, so a distributor
+        whose active-side task runs for hours would otherwise find it expired and
+        discard the whole run.
+        """
+        collection = db.collection()
+        identifier_tasks_fixture.license_pools(collection=collection, count=2)
+        expire_time = 36 * 60 * 60
+
+        response = identifiers.existing_available_identifiers.delay(
+            collection.id, expire_time=expire_time
+        ).wait()
+
+        # The lifetime travels with the set, so the chord body rebuilds it unchanged.
+        assert response["expire_time"] == expire_time
+        default_lifetime = IdentifierSet(
+            identifier_tasks_fixture.redis_client
+        ).expire_time
+        assert expire_time > default_lifetime.total_seconds()
+
+        identifier_set = identifier_tasks_fixture.set_from_response(response)
+        assert identifier_set.exists()
+        identifier_set.delete()
+
     def test_exception(
         self,
         db: DatabaseTransactionFixture,

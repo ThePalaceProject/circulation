@@ -104,7 +104,9 @@ def queue_unavailable_updates(
 
 
 @shared_task(queue=QueueNames.default, bind=True)
-def existing_available_identifiers(task: Task, collection_id: int) -> IdentifierSet:
+def existing_available_identifiers(
+    task: Task, collection_id: int, *, expire_time: int | None = None
+) -> IdentifierSet:
     """
     Retrieves all identifiers in the specified collection whose license pools are
     currently available, returning them as a Redis IdentifierSet.
@@ -114,11 +116,23 @@ def existing_available_identifiers(task: Task, collection_id: int) -> Identifier
     This function is designed to be used as part of a chord operation that identifies and
     marks identifiers not present in a distributor's feed as unavailable.
 
+    :param expire_time: How long, in seconds, the set should outlive its creation.
+        This set is built once at the start of the chord and not touched again, so it
+        must outlast the other half of the chord however long that takes to run. The
+        default suits a feed that is walked in minutes; a distributor whose active-side
+        task runs for hours needs to say so.
+
     See: `create_mark_unavailable_chord`.
     """
 
     redis_client = task.services.redis().client()
-    identifier_set = IdentifierSet(redis_client, [task.name, task.request.id])
+    identifier_set = (
+        IdentifierSet(redis_client, [task.name, task.request.id])
+        if expire_time is None
+        else IdentifierSet(
+            redis_client, [task.name, task.request.id], expire_time=expire_time
+        )
+    )
 
     try:
         with task.session() as session:
@@ -186,7 +200,9 @@ def mark_identifiers_unavailable(
 
     try:
         if not existing_identifiers.exists():
-            task.log.warning(
+            # Logged as an error because this discards a completed run: the active-side
+            # task did its work and there is now nothing to compare it against.
+            task.log.error(
                 "Existing identifiers set does not exist in Redis. No identifiers to mark as unavailable."
             )
             return False
@@ -226,6 +242,7 @@ def create_mark_unavailable_chord(
     active_identifiers_sig: Signature,
     *,
     status: LicensePoolStatus = LicensePoolStatus.REMOVED,
+    expire_time: int | None = None,
 ) -> Signature:
     """
     Creates a Celery chord that identifies and marks as unavailable any identifiers that were not
@@ -247,10 +264,16 @@ def create_mark_unavailable_chord(
         long as it ultimately returns an IdentifierSet.
     :param status: The status to record on the affected license pools. See
         `mark_identifiers_unavailable`.
+    :param expire_time: How long, in seconds, the existing-identifier set should live.
+        The two halves of the chord start together but the existing side finishes
+        immediately, so this has to cover however long `active_identifiers_sig` runs
+        for. See `existing_available_identifiers`.
 
     :return: A Celery chord signature that can be executed to perform the unavailable identifier marking process.
     """
-    existing_identifiers_sig = existing_available_identifiers.s(collection_id)
+    existing_identifiers_sig = existing_available_identifiers.s(
+        collection_id, expire_time=expire_time
+    )
     mark_identifiers_sig = mark_identifiers_unavailable.s(
         collection_id=collection_id, status=status
     )
