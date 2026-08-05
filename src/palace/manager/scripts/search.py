@@ -1,8 +1,13 @@
 import argparse
+import time
+from collections.abc import Sequence
+from typing import Any
 
+from opensearchpy import OpenSearchException
 from sqlalchemy.orm import Session
 
 from palace.manager.celery.tasks.search import (
+    FailedToIndex,
     add_documents_to_index,
     advance_read_pointer,
     get_presentation_ready_work_ids,
@@ -14,6 +19,7 @@ from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.service.container import Services
 from palace.manager.service.redis.models.lock import LockError, TaskLock
 from palace.manager.sqlalchemy.model.work import Work
+from palace.manager.util.backoff import exponential_backoff
 
 
 def _batch_size(value: str) -> int:
@@ -32,6 +38,10 @@ def _batch_size(value: str) -> int:
 
 class RebuildSearchIndexScript(Script):
     """Completely delete the search index and recreate it."""
+
+    # As many attempts at a batch as search_reindex gets, for the same reason: a
+    # transient search failure shouldn't cost a pass that has been running for hours.
+    MAX_RETRIES = 4
 
     def __init__(
         self,
@@ -139,13 +149,9 @@ class RebuildSearchIndexScript(Script):
                     self._db, self.batch_size, offset
                 )
                 documents = Work.to_search_documents(self._db, work_ids)
-                add_documents_to_index(self.log, self.search, documents)
+                self.index_batch(documents, lock)
                 self._db.commit()
-                if not lock.extend_timeout():
-                    # Someone else can take the lock the moment ours expires, so carrying
-                    # on would mean indexing, and then publishing, alongside the very run
-                    # we took the lock to keep out.
-                    raise LockError(f"Lost the {lock.key} lock during the rebuild.")
+                self.extend_lock(lock)
                 offset += len(work_ids)
                 indexed += len(documents)
                 if len(work_ids) < self.batch_size:
@@ -156,6 +162,43 @@ class RebuildSearchIndexScript(Script):
 
             revision = self.services.search.revision_directory().highest()
             advance_read_pointer(self.log, service, revision, target_index)
+
+    def index_batch(self, documents: Sequence[dict[str, Any]], lock: TaskLock) -> None:
+        """
+        Submit a batch to the index, retrying a failure the way the task does.
+
+        search_reindex answers a transient search failure by retrying the batch, which
+        costs it one requeue. Here the same failure would cost the whole pass: there is
+        no offset to resume from, so a rebuild that has been running for hours would
+        start again from the first work.
+
+        :raises FailedToIndex: If the index kept rejecting documents.
+        :raises OpenSearchException: If the index kept rejecting the request.
+        """
+        for retries in range(self.MAX_RETRIES + 1):
+            try:
+                add_documents_to_index(self.log, self.search, documents)
+                return
+            except (FailedToIndex, OpenSearchException) as e:
+                if retries == self.MAX_RETRIES:
+                    raise
+                wait_time = exponential_backoff(retries)
+                self.log.exception(f"Batch failed ({e}). Retrying in {wait_time}s.")
+                time.sleep(wait_time)
+                # Waiting counts against the lock like anything else does, and a long
+                # enough run of failures would otherwise outlive it while we sleep.
+                self.extend_lock(lock)
+
+    def extend_lock(self, lock: TaskLock) -> None:
+        """
+        Keep holding the reindex lock, or stop.
+
+        :raises LockError: If the lock is no longer ours. Something else can take it the
+            moment it expires, so carrying on would mean indexing, and then publishing,
+            alongside the very run we took the lock to keep out.
+        """
+        if not lock.extend_timeout():
+            raise LockError(f"Lost the {lock.key} lock during the rebuild.")
 
     def take_lock(self, lock: TaskLock) -> None:
         """

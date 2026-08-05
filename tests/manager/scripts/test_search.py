@@ -5,9 +5,11 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+from opensearchpy import OpenSearchException
 from sqlalchemy.orm import Session
 
 from palace.manager.scripts.search import RebuildSearchIndexScript
+from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.service.redis.models.lock import (
     LockError,
     LockNotAcquired,
@@ -212,6 +214,50 @@ class TestRebuildSearchIndexScript:
 
         lock.release()
         script.do_run()
+
+    @patch("palace.manager.scripts.search.exponential_backoff")
+    def test_do_run_blocking_retries_a_failed_batch(
+        self,
+        mock_backoff: MagicMock,
+        db: DatabaseTransactionFixture,
+        redis_fixture: RedisFixture,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+    ):
+        # A rebuild has no offset to resume from, so a transient search failure would
+        # cost the whole pass rather than the one batch it landed in.
+        mock_backoff.return_value = 0
+        work = db.work(with_open_access_download=True)
+
+        with patch.object(
+            ExternalSearchIndex, "add_documents", autospec=True
+        ) as add_documents:
+            # Rejected documents and a failed request are both worth another go.
+            add_documents.side_effect = [[work.id], OpenSearchException(), None]
+            RebuildSearchIndexScript(db.session, cmd_args=["--blocking"]).do_run()
+
+        assert add_documents.call_count == 3
+
+    @patch("palace.manager.scripts.search.exponential_backoff")
+    def test_do_run_blocking_gives_up_on_a_batch_that_keeps_failing(
+        self,
+        mock_backoff: MagicMock,
+        db: DatabaseTransactionFixture,
+        redis_fixture: RedisFixture,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+    ):
+        # A search that is down rather than blipping ends the rebuild, with the failure
+        # it ended on rather than one of our own.
+        mock_backoff.return_value = 0
+        db.work(with_open_access_download=True)
+
+        with patch.object(
+            ExternalSearchIndex, "add_documents", autospec=True
+        ) as add_documents:
+            add_documents.side_effect = OpenSearchException()
+            with pytest.raises(OpenSearchException):
+                RebuildSearchIndexScript(db.session, cmd_args=["--blocking"]).do_run()
+
+        assert add_documents.call_count == 5
 
     def test_do_run_blocking_stops_if_it_loses_the_lock(
         self,
