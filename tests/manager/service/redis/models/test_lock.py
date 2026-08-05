@@ -256,8 +256,10 @@ class TestTaskLock:
             == task_lock.key
         )
 
-        # Without a task there is no name to fall back on, and no client to borrow.
+        # Without a task there is no name to fall back on, and no client to borrow. Both
+        # of these are rejected by the overloads too, hence the ignores: the checks are
+        # here for callers the type checker doesn't see.
         with pytest.raises(LockValueError):
-            TaskLock(redis_client=redis_fixture.client)
+            TaskLock(redis_client=redis_fixture.client)  # type: ignore[call-overload]
         with pytest.raises(LockValueError):
-            TaskLock(lock_name="test_lock")
+            TaskLock(lock_name="test_lock")  # type: ignore[call-overload]

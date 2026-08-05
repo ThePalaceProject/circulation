@@ -5,7 +5,7 @@ from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from datetime import timedelta
 from functools import cached_property
-from typing import cast
+from typing import cast, overload
 from uuid import uuid4
 
 from palace.util.exceptions import BasePalaceException
@@ -258,8 +258,29 @@ class TaskLock(RedisLock):
     code outside Celery can contend for the same lock as a task. That is for callers
     doing a task's work themselves rather than merely touching the same resource - a
     script reindexing in process, say - which need to hold off the scheduled task while
-    they do it.
+    they do it. Those are the only two shapes: with a task, everything else can be
+    inferred; without one, both of the things it stands in for have to be supplied.
     """
+
+    @overload
+    def __init__(
+        self,
+        task: Task,
+        redis_client: Redis | None = None,
+        lock_name: str | None = None,
+        lock_timeout: timedelta | None = timedelta(minutes=5),
+        retry_delay: float = 0.2,
+    ): ...
+
+    @overload
+    def __init__(
+        self,
+        *,
+        redis_client: Redis,
+        lock_name: str,
+        lock_timeout: timedelta | None = timedelta(minutes=5),
+        retry_delay: float = 0.2,
+    ): ...
 
     def __init__(
         self,
