@@ -42,12 +42,41 @@ class TestRebuildSearchIndexScript:
         self,
         mock_search_reindex: MagicMock,
         db: DatabaseTransactionFixture,
+        redis_fixture: RedisFixture,
         services_fixture: ServicesFixture,
     ):
         # If we are called with the --delete argument, we clear the index before rebuilding.
         RebuildSearchIndexScript(db.session, cmd_args=["--delete"]).do_run()
         services_fixture.search_index.clear_search_documents.assert_called_once_with()
         mock_search_reindex.s.return_value.delay.assert_called_once_with()
+
+        # The lock is given back before the task is queued, since the task has to take it.
+        lock = TaskLock(redis_client=redis_fixture.client, lock_name="search_reindex")
+        assert lock.locked() is False
+
+    @pytest.mark.parametrize("blocking", [[], ["--blocking"]])
+    @patch("palace.manager.scripts.search.search_reindex")
+    def test_do_run_delete_leaves_the_index_alone_when_the_lock_is_held(
+        self,
+        mock_search_reindex: MagicMock,
+        blocking: list[str],
+        db: DatabaseTransactionFixture,
+        redis_fixture: RedisFixture,
+        services_fixture: ServicesFixture,
+    ):
+        # Emptying the index under a running reindex would leave reads served from an
+        # empty index until that reindex finished refilling it, which is days away on the
+        # managers this script is for. Both ways of running it wait for the lock instead.
+        lock = TaskLock(redis_client=redis_fixture.client, lock_name="search_reindex")
+        assert lock.acquire() is True
+
+        with pytest.raises(LockNotAcquired):
+            RebuildSearchIndexScript(
+                db.session, cmd_args=["--delete", *blocking]
+            ).do_run()
+
+        services_fixture.search_index.clear_search_documents.assert_not_called()
+        mock_search_reindex.s.return_value.delay.assert_not_called()
 
     def test_force_requires_blocking(
         self,

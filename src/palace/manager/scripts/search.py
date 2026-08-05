@@ -99,19 +99,38 @@ class RebuildSearchIndexScript(Script):
 
     def do_run(self) -> None:
         """Delete all search documents, then rebuild the search index."""
-        if self.delete:
-            self.log.info("Deleting all search documents.")
-            self.search.clear_search_documents()
-
         self.log.info("Rebuilding search index.")
 
         if self.blocking:
             self.rebuild_locally()
         else:
-            task = search_reindex.s(batch_size=self.batch_size).delay()
-            self.log.info(
-                f"Search index rebuild started (Task ID: {task.id}). The reindex will run in the background."
-            )
+            self.queue_rebuild()
+
+    def reindex_lock(self) -> TaskLock:
+        """The lock search_reindex takes, so that we contend with it for the index."""
+        return TaskLock(
+            redis_client=self.services.redis.client(), lock_name="search_reindex"
+        )
+
+    def delete_documents(self) -> None:
+        """Empty the index. Only ever called holding the reindex lock."""
+        self.log.info("Deleting all search documents.")
+        self.search.clear_search_documents()
+
+    def queue_rebuild(self) -> None:
+        """Hand the rebuild to a Celery worker."""
+        if self.delete:
+            # Emptying the index gets in a running reindex's way as much as rebuilding
+            # does, so it waits for the same lock rather than pulling the index out from
+            # under one. We give the lock back before queueing, because the task we are
+            # queueing has to be able to take it.
+            with self.reindex_lock().lock():
+                self.delete_documents()
+
+        task = search_reindex.s(batch_size=self.batch_size).delay()
+        self.log.info(
+            f"Search index rebuild started (Task ID: {task.id}). The reindex will run in the background."
+        )
 
     def rebuild_locally(self) -> None:
         """
@@ -125,9 +144,11 @@ class RebuildSearchIndexScript(Script):
 
         We take the task's own lock so the scheduled reindex can't run against the index
         at the same time, and extend it every batch, since nothing else will while we
-        hold it. That means a reindex already running holds us off, which is the wrong
-        way round when a manager is down and the running reindex is the days-long one
-        we are trying to get ahead of: --force takes the lock from it instead.
+        hold it. --delete happens under that lock too, so a rebuild that cannot get the
+        lock leaves the index alone rather than emptying it and then stopping. That
+        means a reindex already running holds us off, which is the wrong way round when
+        a manager is down and the running reindex is the days-long one we are trying to
+        get ahead of: --force takes the lock from it instead.
 
         Each batch ends its transaction, so a pass that runs for hours doesn't hold one
         snapshot open for all of it and keep autovacuum off the tables the rest of the
@@ -136,12 +157,13 @@ class RebuildSearchIndexScript(Script):
         service = self.services.search.service()
         target_index = resolve_target_index(service)
 
-        lock = TaskLock(
-            redis_client=self.services.redis.client(), lock_name="search_reindex"
-        )
+        lock = self.reindex_lock()
         if self.force:
             self.take_lock(lock)
         with lock.lock():
+            if self.delete:
+                self.delete_documents()
+
             offset = 0
             indexed = 0
             while True:
