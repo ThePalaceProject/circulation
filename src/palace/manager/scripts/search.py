@@ -15,6 +15,20 @@ from palace.manager.service.container import Services
 from palace.manager.service.redis.models.lock import TaskLock
 
 
+def _batch_size(value: str) -> int:
+    """
+    Parse a batch size, which has to be at least one work.
+
+    A batch of zero pages forever: the query comes back empty every time, so neither the
+    script's loop nor the task's requeue ever reaches the short batch that stops it, and
+    both go on holding the reindex lock.
+    """
+    batch_size = int(value)
+    if batch_size < 1:
+        raise argparse.ArgumentTypeError(f"must be at least 1, got {batch_size}")
+    return batch_size
+
+
 class RebuildSearchIndexScript(Script):
     """Completely delete the search index and recreate it."""
 
@@ -52,7 +66,7 @@ class RebuildSearchIndexScript(Script):
         )
         parser.add_argument(
             "--batch-size",
-            type=int,
+            type=_batch_size,
             default=500,
             help="How many works to index per batch. (default: %(default)s)",
         )

@@ -39,6 +39,20 @@ class TestRebuildSearchIndexScript:
         services_fixture.search_index.clear_search_documents.assert_called_once_with()
         mock_search_reindex.s.return_value.delay.assert_called_once_with()
 
+    @pytest.mark.parametrize("batch_size", ["0", "-1"])
+    def test_batch_size_must_be_at_least_one(
+        self,
+        batch_size: str,
+        db: DatabaseTransactionFixture,
+        services_fixture: ServicesFixture,
+    ):
+        # An empty batch never reaches the short batch that stops a rebuild, so both the
+        # blocking loop and the requeued task would page forever holding the lock.
+        with pytest.raises(SystemExit):
+            RebuildSearchIndexScript(
+                db.session, cmd_args=[f"--batch-size={batch_size}"]
+            )
+
     @pytest.mark.parametrize("batch_size", ["2", "3", "500"])
     def test_do_run_blocking(
         self,
