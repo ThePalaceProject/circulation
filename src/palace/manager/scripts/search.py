@@ -82,14 +82,14 @@ class RebuildSearchIndexScript(Script):
         self.log.info("Rebuilding search index.")
 
         if self.blocking:
-            self.rebuild_in_process()
+            self.rebuild_locally()
         else:
             task = search_reindex.s(batch_size=self.batch_size).delay()
             self.log.info(
                 f"Search index rebuild started (Task ID: {task.id}). The reindex will run in the background."
             )
 
-    def rebuild_in_process(self) -> None:
+    def rebuild_locally(self) -> None:
         """
         Index every presentation-ready work here, rather than in a Celery worker.
 
