@@ -266,10 +266,10 @@ class TaskLock(RedisLock):
     def __init__(
         self,
         task: Task,
-        redis_client: Redis | None = None,
-        lock_name: str | None = None,
-        lock_timeout: timedelta | None = timedelta(minutes=5),
-        retry_delay: float = 0.2,
+        redis_client: Redis | None = ...,
+        lock_name: str | None = ...,
+        lock_timeout: timedelta | None = ...,
+        retry_delay: float = ...,
     ): ...
 
     @overload
@@ -278,8 +278,8 @@ class TaskLock(RedisLock):
         *,
         redis_client: Redis,
         lock_name: str,
-        lock_timeout: timedelta | None = timedelta(minutes=5),
-        retry_delay: float = 0.2,
+        lock_timeout: timedelta | None = ...,
+        retry_delay: float = ...,
     ): ...
 
     def __init__(
