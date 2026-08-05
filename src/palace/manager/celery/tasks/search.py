@@ -189,12 +189,6 @@ def search_reindex(
         advances the read pointer.
     """
     index = task.services.search.index()
-    # The lock is only extended when a batch actually runs, so its timeout has to
-    # cover the wait between batches, not just the work a batch does. On a busy
-    # `default` queue that wait is dominated by queue latency and can reach tens of
-    # minutes; if the lock lapses in that window a beat-scheduled reindex can start
-    # a second run, and whichever run next fails to reacquire the lock dies and
-    # loses all of its progress.
     task_lock = TaskLock(
         task, lock_name="search_reindex", lock_timeout=SEARCH_REINDEX_LOCK_TIMEOUT
     )

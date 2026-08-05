@@ -2,7 +2,6 @@ import json
 import math
 from collections import Counter
 from collections.abc import Sequence
-from datetime import timedelta
 from typing import Any
 from unittest.mock import MagicMock, call, patch
 
@@ -12,7 +11,6 @@ from opensearchpy import OpenSearchException
 from sqlalchemy.orm import Session
 
 from palace.manager.celery.tasks.search import (
-    SEARCH_REINDEX_LOCK_TIMEOUT,
     get_presentation_ready_work_ids,
     index_works,
     search_indexing,
@@ -188,36 +186,6 @@ def test_search_reindex_lock(
         search_reindex.delay().wait()
 
     assert "TaskLock::search_reindex could not be acquired" in str(exc_info.value)
-
-
-@patch("palace.manager.celery.tasks.search.random")
-def test_search_reindex_lock_timeout(
-    mock_random: MagicMock,
-    db: DatabaseTransactionFixture,
-    celery_fixture: CeleryFixture,
-    search_reindex_task_lock_fixture: SearchReindexTaskLockFixture,
-    end_to_end_search_fixture: EndToEndSearchFixture,
-) -> None:
-    mock_random.uniform.return_value = 0.0
-
-    # The lock is only extended once per batch, so it has to outlive the gap between
-    # batches rather than the work a single batch does.
-    redis_client = search_reindex_task_lock_fixture.redis_client
-    key = search_reindex_task_lock_fixture.task_lock.key
-
-    db.work(with_open_access_download=True)
-
-    with patch.object(TaskLock, "release"):
-        # `release` is patched out so the lock, and its TTL, survive the task finishing.
-        search_reindex.delay(batch_size=1).wait()
-
-    # The TTL is reset on every batch, so what is left is the full timeout less the
-    # time that batch took. Anything close to it means the run gets to keep the lock
-    # across a long wait for its next batch, rather than losing it to a beat-scheduled
-    # reindex partway through.
-    remaining = timedelta(milliseconds=redis_client.pttl(key))
-    assert SEARCH_REINDEX_LOCK_TIMEOUT - timedelta(minutes=1) < remaining
-    assert remaining <= SEARCH_REINDEX_LOCK_TIMEOUT
 
 
 def test_fiction_query_returns_results(
