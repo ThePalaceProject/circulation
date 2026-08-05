@@ -5,7 +5,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from palace.manager.scripts.search import RebuildSearchIndexScript
-from palace.manager.service.redis.models.lock import LockNotAcquired, TaskLock
+from palace.manager.service.redis.models.lock import (
+    LockError,
+    LockNotAcquired,
+    TaskLock,
+)
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.redis import RedisFixture
 from tests.fixtures.search import EndToEndSearchFixture
@@ -86,6 +90,40 @@ class TestRebuildSearchIndexScript:
             [work1, work2, work4], "", ordered=False
         )
 
+    def test_do_run_blocking_advances_the_read_pointer(
+        self,
+        db: DatabaseTransactionFixture,
+        redis_fixture: RedisFixture,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+    ):
+        # Having filled the index end to end, a blocking rebuild publishes it for reads,
+        # which is what makes it a repair for a manager whose reads are stuck on an
+        # older index.
+        service = end_to_end_search_fixture.external_search.service
+        client = end_to_end_search_fixture.external_search.write_client
+        db.work(with_open_access_download=True)
+
+        # Take the read pointer away, so reads are being served from nothing at all.
+        client.indices.update_aliases(
+            body={
+                "actions": [
+                    {"remove": {"index": "*", "alias": service.read_pointer_name()}}
+                ]
+            }
+        )
+        assert service.read_pointer() is None
+
+        RebuildSearchIndexScript(db.session, cmd_args=["--blocking"]).do_run()
+
+        read_pointer = service.read_pointer()
+        assert read_pointer is not None
+        assert (
+            read_pointer.index
+            == end_to_end_search_fixture.external_search.revision.name_for_index(
+                service.base_revision_name
+            )
+        )
+
     def test_do_run_blocking_takes_the_reindex_lock(
         self,
         db: DatabaseTransactionFixture,
@@ -103,3 +141,19 @@ class TestRebuildSearchIndexScript:
 
         lock.release()
         script.do_run()
+
+    def test_do_run_blocking_stops_if_it_loses_the_lock(
+        self,
+        db: DatabaseTransactionFixture,
+        redis_fixture: RedisFixture,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+    ):
+        # Once the lock is gone the scheduled reindex is free to start against the same
+        # index, so a rebuild that can no longer extend it stops rather than carry on
+        # indexing and publishing beside it.
+        db.work(with_open_access_download=True)
+        script = RebuildSearchIndexScript(db.session, cmd_args=["--blocking"])
+
+        with patch.object(TaskLock, "extend_timeout", return_value=False):
+            with pytest.raises(LockError, match="Lost the"):
+                script.do_run()

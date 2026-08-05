@@ -12,7 +12,7 @@ from palace.manager.celery.tasks.search import (
 from palace.manager.scripts.base import Script
 from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.service.container import Services
-from palace.manager.service.redis.models.lock import TaskLock
+from palace.manager.service.redis.models.lock import LockError, TaskLock
 
 
 def _batch_size(value: str) -> int:
@@ -94,13 +94,17 @@ class RebuildSearchIndexScript(Script):
 
         `search_reindex` requeues itself once per batch, so its throughput is set by how
         long a trip through the `default` queue takes rather than by how long indexing
-        takes. On a manager whose queue carries a backlog that is minutes per batch, and
-        a full pass can run for days. Doing the same work in one process costs a couple
-        of hours instead, at the price of tying up whoever ran the script.
+        takes. On a manager whose queue carries a backlog that is minutes per batch, a
+        full pass can run for days. Doing the same work in one process costs a couple of
+        hours instead, at the price of tying up whoever ran the script.
 
         We take the task's own lock so the scheduled reindex can't run against the index
         at the same time, and extend it every batch, since nothing else will while we
         hold it.
+
+        Each batch ends its transaction, so a pass that runs for hours doesn't hold one
+        snapshot open for all of it and keep autovacuum off the tables the rest of the
+        application is writing to.
         """
         service = self.services.search.service()
         target_index = resolve_target_index(service)
@@ -115,7 +119,12 @@ class RebuildSearchIndexScript(Script):
                     self._db, self.batch_size, indexed
                 )
                 add_documents_to_index(self.log, self.search, documents)
-                lock.extend_timeout()
+                self._db.commit()
+                if not lock.extend_timeout():
+                    # Someone else can take the lock the moment ours expires, so carrying
+                    # on would mean indexing, and then publishing, alongside the very run
+                    # we took the lock to keep out.
+                    raise LockError(f"Lost the {lock.key} lock during the rebuild.")
                 indexed += len(documents)
                 if len(documents) < self.batch_size:
                     break
