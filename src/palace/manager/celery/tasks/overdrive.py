@@ -698,21 +698,27 @@ def reap_collection(
             identifier_set.delete()
             return None
 
+        must_reach = min(result.total_items, total_items)
         if (
             previous_offset is None
             and offset != 0
-            and offset + len(result.listed) < result.total_items
+            and offset + len(result.listed) < must_reach
         ):
             # The walk's first backwards page runs to the end of the list, and is the
             # one page with nothing above it to be checked against. Its reach is
             # exactly knowable for that same reason: it has to arrive at the end.
-            # Measured against the count this page reports rather than the one the
-            # crawl started with, so a collection that shrank mid-crawl still passes.
+            #
+            # Which end depends on what the collection did in between. Titles removed
+            # since the first page shorten the list, so the smaller count is the one
+            # to insist on; titles added lengthen it, and under dateAdded:asc they
+            # land beyond where this page starts, so they are not this page's to
+            # reach -- nor can they be falsely reaped, being absent from the snapshot
+            # the chord took of what we hold.
             task.log.error(
                 f"Overdrive reaper aborting for collection '{collection_name}': the "
                 f"page at offset {offset} returned {len(result.listed)} titles and so "
-                f"stops short of the {result.total_items} Overdrive reports. Refusing "
-                f"to reap across a gap."
+                f"stops short of the {must_reach} Overdrive reports. Refusing to reap "
+                f"across a gap."
             )
             identifier_set.delete()
             return None

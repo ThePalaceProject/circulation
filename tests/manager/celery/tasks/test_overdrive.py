@@ -1496,6 +1496,56 @@ class TestOverdriveReaper:
         )
         assert not partial_set.exists()
 
+    @pytest.mark.parametrize(
+        "reported_now,returned,aborts",
+        [
+            pytest.param(6000, 2000, False, id="unchanged, full page"),
+            pytest.param(6001, 2000, False, id="a title added since the first page"),
+            pytest.param(6100, 2000, False, id="many titles added"),
+            pytest.param(5990, 1990, False, id="titles removed since the first page"),
+            pytest.param(6000, 1990, True, id="page truncated"),
+        ],
+    )
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
+    def test_reap_collection_first_backwards_page_tolerates_a_growing_collection(
+        self,
+        mock_api_class: MagicMock,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        redis_fixture: RedisFixture,
+        caplog: pytest.LogCaptureFixture,
+        reported_now: int,
+        returned: int,
+        aborts: bool,
+    ):
+        """Which end the first backwards page must reach depends on what changed.
+
+        It starts one page back from where the collection ended when the crawl began,
+        so a full page arrives exactly at that count. Titles added since then sit
+        beyond it -- not this page's to reach, and absent from the snapshot the chord
+        took of what we hold, so they cannot be falsely reaped. Titles removed shorten
+        the list, and that shorter count is the one it has to reach.
+        """
+        collection = overdrive_api_fixture.collection
+        caplog.set_level(LogLevel.error)
+        mock_crawl(
+            mock_api_class,
+            product_page(
+                listed=overdrive_identifiers(*(f"id-{i}" for i in range(returned))),
+                total_items=reported_now,
+                limit=2000,
+            ),
+        )
+
+        overdrive.reap_collection.delay(
+            collection.id, offset=4000, total_items=6000, page_limit=2000
+        ).wait()
+
+        # Asserted on this check rather than the run's outcome: a single mocked page
+        # is not a complete crawl, so the run ends either way.
+        assert ("Refusing to reap across a gap" in caplog.text) is aborts
+
     @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
     def test_reap_collection_aborts_on_a_gap_between_pages(
         self,
