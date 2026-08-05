@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+from sqlalchemy.orm import Session
 
 from palace.manager.scripts.search import RebuildSearchIndexScript
 from palace.manager.service.redis.models.lock import (
@@ -10,6 +13,7 @@ from palace.manager.service.redis.models.lock import (
     LockNotAcquired,
     TaskLock,
 )
+from palace.manager.sqlalchemy.model.work import Work
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.redis import RedisFixture
 from tests.fixtures.search import EndToEndSearchFixture
@@ -88,6 +92,41 @@ class TestRebuildSearchIndexScript:
         client.indices.refresh()
         end_to_end_search_fixture.expect_results(
             [work1, work2, work4], "", ordered=False
+        )
+
+    def test_do_run_blocking_indexes_the_works_after_one_that_cannot_be_indexed(
+        self,
+        db: DatabaseTransactionFixture,
+        redis_fixture: RedisFixture,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+    ):
+        # Work.to_search_documents drops a work whose document it cannot build, so a full
+        # batch of works arrives as a short batch of documents. The rebuild pages by the
+        # works it asked for, so it carries on to the works after the dropped one.
+        works = [db.work(with_open_access_download=True) for _ in range(4)]
+
+        to_search_documents = Work.to_search_documents
+        dropped: list[int] = []
+
+        def drop_one_document(
+            session: Session, work_ids: Sequence[int]
+        ) -> Sequence[dict[str, Any]]:
+            documents = to_search_documents(session, work_ids)
+            if not dropped and documents:
+                dropped.append(documents[0]["_id"])
+                return documents[1:]
+            return documents
+
+        # The document is lost from the first batch, so it cannot be the last one.
+        with patch.object(Work, "to_search_documents", drop_one_document):
+            RebuildSearchIndexScript(
+                db.session, cmd_args=["--blocking", "--batch-size", "2"]
+            ).do_run()
+
+        assert len(dropped) == 1
+        end_to_end_search_fixture.external_search.write_client.indices.refresh()
+        end_to_end_search_fixture.expect_results(
+            [work for work in works if work.id != dropped[0]], "", ordered=False
         )
 
     def test_do_run_blocking_advances_the_read_pointer(

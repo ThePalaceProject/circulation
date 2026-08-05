@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from palace.manager.celery.tasks.search import (
     add_documents_to_index,
     advance_read_pointer,
-    get_work_search_documents,
+    get_presentation_ready_work_ids,
     resolve_target_index,
     search_reindex,
 )
@@ -13,6 +13,7 @@ from palace.manager.scripts.base import Script
 from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.service.container import Services
 from palace.manager.service.redis.models.lock import LockError, TaskLock
+from palace.manager.sqlalchemy.model.work import Work
 
 
 def _batch_size(value: str) -> int:
@@ -113,11 +114,13 @@ class RebuildSearchIndexScript(Script):
             redis_client=self.services.redis.client(), lock_name="search_reindex"
         )
         with lock.lock():
+            offset = 0
             indexed = 0
             while True:
-                documents = get_work_search_documents(
-                    self._db, self.batch_size, indexed
+                work_ids = get_presentation_ready_work_ids(
+                    self._db, self.batch_size, offset
                 )
+                documents = Work.to_search_documents(self._db, work_ids)
                 add_documents_to_index(self.log, self.search, documents)
                 self._db.commit()
                 if not lock.extend_timeout():
@@ -125,10 +128,11 @@ class RebuildSearchIndexScript(Script):
                     # on would mean indexing, and then publishing, alongside the very run
                     # we took the lock to keep out.
                     raise LockError(f"Lost the {lock.key} lock during the rebuild.")
+                offset += len(work_ids)
                 indexed += len(documents)
-                if len(documents) < self.batch_size:
+                if len(work_ids) < self.batch_size:
                     break
-                self.log.info(f"Indexed {indexed} works.")
+                self.log.info(f"Indexed {indexed} of {offset} works.")
 
             self.log.info(f"Finished search reindex. Indexed {indexed} works.")
 
