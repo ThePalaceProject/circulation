@@ -363,6 +363,22 @@ class SearchMigrationFixture:
             self.service, self.new_revision
         )
 
+    def remove_read_pointer(self) -> None:
+        """Leave the index with no read pointer at all, serving no reads."""
+        self.client.indices.update_aliases(
+            body={
+                "actions": [
+                    {
+                        "remove": {
+                            "index": "*",
+                            "alias": self.service.read_pointer_name(),
+                        }
+                    }
+                ]
+            }
+        )
+        assert self.service.read_pointer() is None
+
     def assert_pointers(self, read: str, write: str) -> None:
         read_pointer = self.service.read_pointer()
         write_pointer = self.service.write_pointer()
@@ -402,6 +418,22 @@ def test_search_reindex_advances_read_pointer(
 
     fixture.client.indices.refresh()
     end_to_end_search_fixture.expect_results(fixture.works, "", ordered=False)
+
+
+def test_search_reindex_advances_read_pointer_when_there_is_none(
+    celery_fixture: CeleryFixture,
+    redis_fixture: RedisFixture,
+    search_migration_fixture: SearchMigrationFixture,
+):
+    fixture = search_migration_fixture
+
+    # An index serving no reads at all is not "already current", so a completed pass
+    # publishes it rather than leaving search with nothing to read from.
+    fixture.remove_read_pointer()
+
+    search_reindex.delay().wait()
+
+    fixture.assert_pointers(read=fixture.new_index, write=fixture.new_index)
 
 
 @patch("palace.manager.celery.tasks.search.random.uniform")

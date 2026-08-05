@@ -154,9 +154,9 @@ class InstanceInitializationScript(LoggerMixin):
             self.migrate_search(service, revision)
         elif read_pointer.version < revision.version:
             self.log.info(
-                f"Search read pointer is out-of-date (v{read_pointer.version}). Latest is v{revision.version}."
-                f"This likely means that the reindexing task is in progress. If there is no reindexing task "
-                f"running, you may need to repair the search index."
+                f"Search read pointer is out-of-date (v{read_pointer.version}). Latest is v{revision.version}. "
+                f"This likely means that the reindexing task is in progress. The first run to complete a "
+                f"full pass over the new index will publish it for reads."
             )
         elif (
             read_pointer.version > revision.version
