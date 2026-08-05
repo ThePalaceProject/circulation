@@ -188,6 +188,24 @@ class RedisLock(BaseRedisLock):
 
         return previous_value is None or previous_value == self._random_value
 
+    def acquire_force(self) -> str | None:
+        """
+        Take the lock, whether or not anything else is holding it.
+
+        Nothing tells the previous holder. It finds out the next time it tries to take
+        or extend the lock, so a holder that takes the lock once per unit of work carries
+        on until the end of the one it is doing, and both it and the caller are working
+        until then.
+
+        :return: What the previous holder had stored, or None if the lock was free.
+        """
+        return cast(
+            str | None,
+            self._redis_client.set(
+                self.key, self._random_value, px=self._lock_timeout, get=True
+            ),
+        )
+
     def acquire_blocking(self, timeout: float | int = -1) -> bool:
         """
         Acquire the lock. Blocks until the lock is acquired or the timeout is reached.

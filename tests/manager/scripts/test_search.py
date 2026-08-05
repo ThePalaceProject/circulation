@@ -47,6 +47,16 @@ class TestRebuildSearchIndexScript:
         services_fixture.search_index.clear_search_documents.assert_called_once_with()
         mock_search_reindex.s.return_value.delay.assert_called_once_with()
 
+    def test_force_requires_blocking(
+        self,
+        db: DatabaseTransactionFixture,
+        services_fixture: ServicesFixture,
+    ):
+        # A queued rebuild has no lock of its own to take, so --force without --blocking
+        # would do nothing at all.
+        with pytest.raises(SystemExit):
+            RebuildSearchIndexScript(db.session, cmd_args=["--force"])
+
     @pytest.mark.parametrize("batch_size", ["0", "-1"])
     def test_batch_size_must_be_at_least_one(
         self,
@@ -162,6 +172,28 @@ class TestRebuildSearchIndexScript:
                 service.base_revision_name
             )
         )
+
+    def test_do_run_blocking_force_takes_the_lock_from_a_running_reindex(
+        self,
+        db: DatabaseTransactionFixture,
+        redis_fixture: RedisFixture,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+    ):
+        # When the running reindex is the days-long one we are trying to get ahead of,
+        # waiting for it is the wrong answer: --force takes the lock and rebuilds now.
+        work = db.work(with_open_access_download=True)
+        lock = TaskLock(redis_client=redis_fixture.client, lock_name="search_reindex")
+        assert lock.acquire() is True
+
+        RebuildSearchIndexScript(
+            db.session, cmd_args=["--blocking", "--force"]
+        ).do_run()
+
+        # The rebuild ran, and the reindex it took the lock from is not holding it any
+        # more, so it stops when it comes back for its next batch.
+        assert lock.extend_timeout() is False
+        end_to_end_search_fixture.external_search.write_client.indices.refresh()
+        end_to_end_search_fixture.expect_results([work], "", ordered=False)
 
     def test_do_run_blocking_takes_the_reindex_lock(
         self,

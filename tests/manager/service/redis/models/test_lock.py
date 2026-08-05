@@ -63,6 +63,25 @@ class TestRedisLock:
         assert not redis_lock_fixture.lock.acquire_blocking(timeout=0.1)
         assert redis_lock_fixture.lock.acquire_blocking(timeout=2)
 
+    def test_acquire_force(
+        self, redis_lock_fixture: RedisLockFixture, redis_fixture: RedisFixture
+    ):
+        # Taking a lock nothing holds reports that nothing held it.
+        assert redis_lock_fixture.lock.acquire_force() is None
+        assert redis_lock_fixture.lock.locked(by_us=True) is True
+
+        # Taking a lock someone else holds reports what they had stored, and hands the
+        # lock to us, timeout and all.
+        held_by = redis_lock_fixture.other_lock.acquire_force()
+        assert held_by == redis_lock_fixture.lock._random_value
+        assert redis_lock_fixture.other_lock.locked(by_us=True) is True
+        assert redis_fixture.client.ttl(redis_lock_fixture.other_lock.key) > 0
+
+        # The previous holder is not told, but it finds out: it can no longer extend the
+        # lock, or take it back, until we are done with it.
+        assert redis_lock_fixture.lock.extend_timeout() is False
+        assert redis_lock_fixture.lock.acquire() is False
+
     def test_release(
         self, redis_lock_fixture: RedisLockFixture, redis_fixture: RedisFixture
     ):

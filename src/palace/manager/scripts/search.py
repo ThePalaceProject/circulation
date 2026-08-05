@@ -45,7 +45,14 @@ class RebuildSearchIndexScript(Script):
         args = self.parse_command_line(self._db, cmd_args=cmd_args)
         self.blocking: bool = args.blocking
         self.delete: bool = args.delete
+        self.force: bool = args.force
         self.batch_size: int = args.batch_size
+
+        if self.force and not self.blocking:
+            # A queued rebuild is the scheduled reindex, so there is nothing for it to
+            # take the lock from, and silently ignoring the flag would leave whoever is
+            # trying to take a manager back believing they had.
+            self.arg_parser(self._db).error("--force can only be used with --blocking.")
 
     @classmethod
     def arg_parser(cls, _db: Session) -> argparse.ArgumentParser:
@@ -64,6 +71,13 @@ class RebuildSearchIndexScript(Script):
             "--delete",
             action="store_true",
             help="Delete the search index before rebuilding.",
+        )
+        parser.add_argument(
+            "-f",
+            "--force",
+            action="store_true",
+            help="Take the reindex lock from whatever is holding it, stopping a running "
+            "reindex at its next batch. Only valid with --blocking.",
         )
         parser.add_argument(
             "--batch-size",
@@ -101,7 +115,9 @@ class RebuildSearchIndexScript(Script):
 
         We take the task's own lock so the scheduled reindex can't run against the index
         at the same time, and extend it every batch, since nothing else will while we
-        hold it.
+        hold it. That means a reindex already running holds us off, which is the wrong
+        way round when a manager is down and the running reindex is the days-long one
+        we are trying to get ahead of: --force takes the lock from it instead.
 
         Each batch ends its transaction, so a pass that runs for hours doesn't hold one
         snapshot open for all of it and keep autovacuum off the tables the rest of the
@@ -113,6 +129,8 @@ class RebuildSearchIndexScript(Script):
         lock = TaskLock(
             redis_client=self.services.redis.client(), lock_name="search_reindex"
         )
+        if self.force:
+            self.take_lock(lock)
         with lock.lock():
             offset = 0
             indexed = 0
@@ -138,3 +156,20 @@ class RebuildSearchIndexScript(Script):
 
             revision = self.services.search.revision_directory().highest()
             advance_read_pointer(self.log, service, revision, target_index)
+
+    def take_lock(self, lock: TaskLock) -> None:
+        """
+        Take the reindex lock away from a reindex that is already running.
+
+        The running reindex is not interrupted. It takes the lock once per batch, so it
+        stops when it comes back for the next one, and until then it is indexing the same
+        works into the same index as this rebuild - wasteful, but not harmful, since both
+        are writing the same documents.
+        """
+        held_by = lock.acquire_force()
+        if held_by is None:
+            self.log.info(f"Nothing was holding {lock.key}.")
+        else:
+            self.log.warning(
+                f"Took {lock.key} from {held_by}, which will stop at its next batch."
+            )
