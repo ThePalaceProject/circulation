@@ -50,7 +50,7 @@ IMPORT_SKIPPED: str = "import_skipped"
 # a whole page must never be excused.
 REAP_CRAWL_ALLOWANCE: float = 0.001
 REAP_CRAWL_ALLOWANCE_FLOOR: int = 10
-REAP_CRAWL_ALLOWANCE_CAP: int = 500
+REAP_CRAWL_ALLOWANCE_CAP: int = OverdriveAPI.PRODUCTS_PAGE_SIZE_LIMIT // 4
 
 # How long the reaper's identifier sets outlive their creation. A crawl of the largest
 # collection can span more than a day, and both halves of the comparison have to still
@@ -523,6 +523,7 @@ def reap_collection(
     offset: int = 0,
     total_items: int | None = None,
     previous_offset: int | None = None,
+    page_limit: int | None = None,
     batch_size: int | None = None,
 ) -> IdentifierSet | None:
     """
@@ -561,6 +562,9 @@ def reap_collection(
     :param previous_offset: Where the previous page of the backwards walk started, so
         this one can be shown to reach it. None on the first page of a walk, which has
         nothing above it to join up with.
+    :param page_limit: The page size Overdrive applied to the crawl's first page,
+        carried like ``total_items``. Every gap check is expressed in terms of it, so
+        the walk's arithmetic only holds while it stays the same.
     :param batch_size: Only ever set on a page queued by the previous per-title
         reaper, whose ``offset`` meant something else entirely. Accepted so those
         messages are discarded rather than failing to bind after a deploy; remove it
@@ -647,6 +651,12 @@ def reap_collection(
             else 0
         )
 
+        if marked:
+            task.log.info(
+                f"Overdrive reaper marked {marked} title(s) Overdrive no longer owns "
+                f"in collection '{collection_name}'."
+            )
+
         identifier_set.add(*result.listed)
         if total_items is None:
             total_items = result.total_items
@@ -658,6 +668,23 @@ def reap_collection(
                 f"Overdrive reaper aborting for collection '{collection_name}': the "
                 f"page at offset {offset} carries no usable totalItems or page size, "
                 f"so the crawl cannot be continued or verified."
+            )
+            identifier_set.delete()
+            return None
+
+        if page_limit is None:
+            page_limit = result.limit
+        elif result.limit != page_limit:
+            # Where a page reaches, and so where the walk can stop, is measured in
+            # page sizes. Overdrive echoes the size it applied, and the crawl asks
+            # for the same one every time, so a change mid-crawl means the arithmetic
+            # the gap checks rely on no longer describes the list.
+            task.log.error(
+                f"Overdrive reaper aborting for collection '{collection_name}': the "
+                f"page at offset {offset} was returned with a page size of "
+                f"{result.limit}, but the crawl has been walking in steps of "
+                f"{page_limit}. Refusing to reap on a crawl whose paging changed "
+                f"underneath it."
             )
             identifier_set.delete()
             return None
@@ -699,11 +726,6 @@ def reap_collection(
             )
             identifier_set.delete()
             return None
-        if marked:
-            task.log.info(
-                f"Overdrive reaper marked {marked} title(s) Overdrive no longer owns "
-                f"in collection '{collection_name}'."
-            )
 
         if next_offset is not None:
             task.log.info(
@@ -719,6 +741,7 @@ def reap_collection(
                     # to the end of the list, so the page after it has nothing to
                     # join up with.
                     previous_offset=offset or None,
+                    page_limit=page_limit,
                 )
             )
 

@@ -906,8 +906,12 @@ class OverdriveAPI(
             listed=listed,
             unowned=unowned,
             total_items=data.get("totalItems"),
-            # Overdrive caps the page size it applies, and echoes what it used.
-            limit=data.get("limit") or len(products),
+            # Overdrive caps the page size it applies, and echoes the one it used --
+            # the requested size, not the number of titles returned, so a short page
+            # still reports a full limit. Every gap check in the crawl is expressed
+            # against this, so a response without it is unusable rather than
+            # something to infer from the products themselves.
+            limit=data.get("limit") or 0,
         )
 
     async def fetch_book_info_list(

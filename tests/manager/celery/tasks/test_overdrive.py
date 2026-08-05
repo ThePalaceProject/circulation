@@ -1714,6 +1714,40 @@ class TestOverdriveReaper:
         assert result is None
         assert "cannot join back onto it" in caplog.text
 
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
+    def test_reap_collection_aborts_when_the_page_size_changes(
+        self,
+        mock_api_class: MagicMock,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        redis_fixture: RedisFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """Every gap check measures in page sizes, so one that changes invalidates them.
+
+        Overdrive echoes the size it applied -- the requested one, not the number of
+        titles returned -- and the crawl asks for the same size every time, so a
+        change means the walk's arithmetic no longer describes the list.
+        """
+        collection = overdrive_api_fixture.collection
+        caplog.set_level(LogLevel.error)
+        api = mock_crawl(
+            mock_api_class,
+            product_page(
+                listed=overdrive_identifiers("id-one"), total_items=6000, limit=1
+            ),
+            product_page(
+                listed=overdrive_identifiers("id-two"), total_items=6000, limit=500
+            ),
+        )
+        api.next_product_offset.side_effect = [4000, None]
+
+        result = overdrive.reap_collection.delay(collection.id).wait()
+
+        assert result is None
+        assert "whose paging changed underneath it" in caplog.text
+
     def test_reap_collection_discards_a_page_from_the_previous_reaper(
         self,
         db: DatabaseTransactionFixture,
