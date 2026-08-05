@@ -43,7 +43,7 @@ class TestOverdriveReaperScript:
             )
             mock.assert_called_once_with(collection.id)
             mock.return_value.apply_async.assert_called_once_with()
-            assert '"reap_collection" task has been queued' in caplog.text
+            assert "A reap has been queued" in caplog.text
 
     def test_reap_collection_wrong_protocol(
         self,

@@ -48,7 +48,7 @@ class OverdriveReaperScript(Script):
                 )
             OverdriveAPI.reap_task(collection.id).apply_async()
             self.log.info(
-                f'The "reap_collection" task has been queued for collection '
+                f"A reap has been queued for collection "
                 f"'{parsed.collection_name}'. See the celery logs for details."
             )
         else:

@@ -52,6 +52,11 @@ REAP_CRAWL_ALLOWANCE: float = 0.001
 REAP_CRAWL_ALLOWANCE_FLOOR: int = 10
 REAP_CRAWL_ALLOWANCE_CAP: int = 500
 
+# How long the reaper's identifier sets outlive their creation. Long enough that a
+# crawl of the largest collection cannot outlast the set it will be compared against,
+# and short enough that an abandoned run is cleaned up well before the next pass.
+REAP_IDENTIFIER_SET_LIFETIME: datetime.timedelta = datetime.timedelta(hours=36)
+
 
 class ImportSkippedPayload(TypedDict):
     """Payload returned when import is skipped (workflow lock already held)."""
@@ -562,12 +567,19 @@ def reap_collection(
             return None
 
         redis = task.services.redis().client()
-        identifier_set = IdentifierSet(redis, reap_key(collection_id, task.request.id))
+        identifier_set = IdentifierSet(
+            redis,
+            reap_key(collection_id, task.request.id),
+            # The crawl outlives the default expiry on a large collection, and its
+            # earlier pages have to still be there when the last one finishes. Matches
+            # the lifetime given to the set it will be compared against.
+            expire_time=REAP_IDENTIFIER_SET_LIFETIME,
+        )
 
-        # The crawl reads the collection and queues apply tasks for what it finds. It
-        # writes nothing itself, so it does not hold a transaction open across the
-        # request for each page.
-        with task.session() as session:
+        # Committed rather than read-only: resolving the collection token refreshes
+        # the cached library document, and a crawl that discarded that write would
+        # re-fetch it from Overdrive on every page.
+        with task.transaction() as session:
             collection = load_from_id(session, Collection, collection_id)
             collection_name = collection.name
 

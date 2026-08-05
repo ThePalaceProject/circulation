@@ -200,11 +200,26 @@ def mark_identifiers_unavailable(
 
     try:
         if not existing_identifiers.exists():
-            # Logged as an error because this discards a completed run: the active-side
-            # task did its work and there is now nothing to compare it against.
-            task.log.error(
-                "Existing identifiers set does not exist in Redis. No identifiers to mark as unavailable."
-            )
+            # An empty set is never materialised in Redis, so this is either a
+            # collection with nothing available to reap -- normal, and marking nothing
+            # is the right outcome -- or a set that expired before the other half of
+            # the chord finished, which throws away a completed run. Only the second
+            # is worth waking anyone up for.
+            with task.session() as session:
+                collection_has_identifiers = (
+                    session.execute(
+                        available_identifiers_query(collection_id).limit(1)
+                    ).first()
+                    is not None
+                )
+            message = "Existing identifiers set does not exist in Redis. No identifiers to mark as unavailable."
+            if collection_has_identifiers:
+                task.log.error(
+                    f"{message} The collection does have available identifiers, so a "
+                    f"completed run has been discarded."
+                )
+            else:
+                task.log.info(f"{message} The collection has none to mark.")
             return False
 
         if not active_identifiers.exists():

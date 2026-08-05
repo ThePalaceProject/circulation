@@ -101,9 +101,11 @@ class TestOverdriveAPI:
             collection_id,
             mock_reap.s.return_value,
             status=LicensePoolStatus.EXHAUSTED,
-            expire_time=int(OverdriveAPI.REAP_IDENTIFIER_SET_LIFETIME.total_seconds()),
+            expire_time=int(
+                overdrive_celery.REAP_IDENTIFIER_SET_LIFETIME.total_seconds()
+            ),
         )
-        assert OverdriveAPI.REAP_IDENTIFIER_SET_LIFETIME > timedelta(hours=12)
+        assert overdrive_celery.REAP_IDENTIFIER_SET_LIFETIME > timedelta(hours=12)
         assert result == mock_chord.return_value
 
     def test_product_page_endpoint(

@@ -290,12 +290,6 @@ class OverdriveAPI(
     # nothing but ids, so the response stays manageable.
     PRODUCTS_PAGE_SIZE_LIMIT = 2000
 
-    # How long the reaper's identifier sets outlive their creation. Long enough that
-    # a crawl of the largest collection cannot outlast the set it will be compared
-    # against, and short enough that an abandoned run is cleaned up well before the
-    # next daily pass.
-    REAP_IDENTIFIER_SET_LIFETIME = datetime.timedelta(hours=36)
-
     # How much of a page consecutive crawl pages share. See `next_product_offset`
     # for what the overlap absorbs; it is a fraction so that it scales with whatever
     # page size Overdrive actually applies.
@@ -360,7 +354,10 @@ class OverdriveAPI(
         from palace.manager.celery.tasks.identifiers import (
             create_mark_unavailable_chord,
         )
-        from palace.manager.celery.tasks.overdrive import reap_collection
+        from palace.manager.celery.tasks.overdrive import (
+            REAP_IDENTIFIER_SET_LIFETIME,
+            reap_collection,
+        )
 
         return create_mark_unavailable_chord(
             collection_id,
@@ -373,7 +370,7 @@ class OverdriveAPI(
             # The crawl walks a page at a time through the shared queue, so the
             # largest collections take hours. The other half of the chord is built
             # once, at the start, and has to still be there at the end.
-            expire_time=int(cls.REAP_IDENTIFIER_SET_LIFETIME.total_seconds()),
+            expire_time=int(REAP_IDENTIFIER_SET_LIFETIME.total_seconds()),
         )
 
     def __init__(self, _db: Session, collection: Collection) -> None:
