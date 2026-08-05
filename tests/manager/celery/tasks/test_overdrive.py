@@ -1385,9 +1385,13 @@ class TestOverdriveReaper:
         """
         collection = overdrive_api_fixture.collection
         caplog.set_level(LogLevel.error)
+        # The page returned everything its own limit allowed, so the structural
+        # checks pass and the shortfall is left to the completeness gate.
         mock_crawl(
             mock_api_class,
-            product_page(listed=overdrive_identifiers("id-one"), total_items=5000),
+            product_page(
+                listed=overdrive_identifiers("id-one"), total_items=5000, limit=1
+            ),
         )
 
         async_result = overdrive.reap_collection.delay(collection.id)
@@ -1502,7 +1506,9 @@ class TestOverdriveReaper:
         caplog.set_level(LogLevel.error)
         api = mock_crawl(
             mock_api_class,
-            product_page(listed=overdrive_identifiers("id-one"), total_items=2005),
+            product_page(
+                listed=overdrive_identifiers("id-one"), total_items=2005, limit=1
+            ),
             product_page(listed=(), total_items=None, limit=0),
         )
         # The walk would otherwise read the second page as "collection covered".
@@ -1677,6 +1683,36 @@ class TestOverdriveReaper:
             redis_fixture.client, reap_key(collection.id, async_result.id)
         )
         assert not partial_set.exists()
+
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
+    def test_reap_collection_aborts_on_a_short_first_page(
+        self,
+        mock_api_class: MagicMock,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        redis_fixture: RedisFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """The walk joins back onto the first page using the page size.
+
+        A first page that returned fewer titles than that does not reach where the
+        walk stops, so the strip in between would never be crawled -- the same gap
+        the per-page check catches everywhere else in the walk.
+        """
+        collection = overdrive_api_fixture.collection
+        caplog.set_level(LogLevel.error)
+        mock_crawl(
+            mock_api_class,
+            product_page(
+                listed=overdrive_identifiers("id-one"), total_items=6000, limit=2000
+            ),
+        )
+
+        result = overdrive.reap_collection.delay(collection.id).wait()
+
+        assert result is None
+        assert "cannot join back onto it" in caplog.text
 
     def test_reap_collection_discards_a_page_from_the_previous_reaper(
         self,

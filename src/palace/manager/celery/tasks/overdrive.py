@@ -616,9 +616,36 @@ def reap_collection(
             api = OverdriveAPI(session, collection)
             result = api.fetch_product_page(api.product_page_endpoint(offset))
             next_offset = api.next_product_offset(result, offset)
-            marked = _mark_unowned_identifiers(
-                task, session, collection, result.unowned
+            unowned_to_mark = _unowned_identifiers_to_mark(
+                session, collection_id, result.unowned
             )
+            data_source_name = (
+                validate_not_none(
+                    collection.data_source,
+                    message="Collection has no data source! (data_source is None).",
+                ).name
+                if unowned_to_mark
+                else None
+            )
+
+        # Queued outside the transaction, as `mark_identifiers_unavailable` does: a
+        # run of broker publishes should not be holding a write transaction open.
+        marked = (
+            queue_unavailable_updates(
+                unowned_to_mark,
+                collection_id=collection_id,
+                collection_name=collection_name,
+                data_source_name=data_source_name,
+                # Overdrive drops titles from a collection when a lease ends or a
+                # purchase is returned, not only when a title is withdrawn, so this
+                # means "no copies here now" rather than "revoke outstanding loans
+                # and holds".
+                status=LicensePoolStatus.EXHAUSTED,
+                log=task.log,
+            )
+            if unowned_to_mark and data_source_name is not None
+            else 0
+        )
 
         identifier_set.add(*result.listed)
         if total_items is None:
@@ -631,6 +658,25 @@ def reap_collection(
                 f"Overdrive reaper aborting for collection '{collection_name}': the "
                 f"page at offset {offset} carries no usable totalItems or page size, "
                 f"so the crawl cannot be continued or verified."
+            )
+            identifier_set.delete()
+            return None
+
+        if (
+            offset == 0
+            and total_items is not None
+            and total_items > result.limit
+            and len(result.listed) < result.limit
+        ):
+            # The walk finishes by stepping back into the region this page covered,
+            # and uses the page size to decide how far that reaches. A first page
+            # that came back short does not reach that far, leaving the strip between
+            # where it ended and where the walk stopped uncrawled.
+            task.log.error(
+                f"Overdrive reaper aborting for collection '{collection_name}': the "
+                f"first page returned {len(result.listed)} titles of a possible "
+                f"{result.limit}, so the walk cannot join back onto it. Refusing to "
+                f"reap across a gap."
             )
             identifier_set.delete()
             return None
@@ -690,50 +736,33 @@ def reap_collection(
         return identifier_set
 
 
-def _mark_unowned_identifiers(
-    task: Task,
+def _unowned_identifiers_to_mark(
     session: Session,
-    collection: Collection,
+    collection_id: int,
     unowned: tuple[IdentifierData, ...],
-) -> int:
-    """Mark the titles on a crawled page that Overdrive reports it no longer owns.
+) -> list[IdentifierData]:
+    """Which titles on a crawled page Overdrive has stopped owning, that we still hold.
 
     Overdrive keeps weeded and expired titles in the product list rather than dropping
     them, so this is a statement that a title is gone rather than an inference from its
-    absence -- which is why it does not wait on the crawl being shown complete.
+    absence -- which is why the caller acts on it without waiting for the crawl to be
+    shown complete.
 
-    Only titles we still record as available are marked, so the titles Overdrive keeps
+    Titles we already record as unavailable are left out, so the ones Overdrive keeps
     listing as unowned do not generate an apply task on every pass.
     """
     if not unowned:
-        return 0
+        return []
 
     identifiers = session.scalars(
-        available_identifiers_query(collection.id).where(
+        available_identifiers_query(collection_id).where(
             Identifier.type == Identifier.OVERDRIVE_ID,
             Identifier.identifier.in_(
                 [identifier.identifier for identifier in unowned]
             ),
         )
     ).all()
-    if not identifiers:
-        return 0
-
-    data_source = validate_not_none(
-        collection.data_source,
-        message="Collection has no data source! (data_source is None).",
-    )
-    return queue_unavailable_updates(
-        (IdentifierData.from_identifier(identifier) for identifier in identifiers),
-        collection_id=collection.id,
-        collection_name=collection.name,
-        data_source_name=data_source.name,
-        # Overdrive drops titles from a collection when a lease ends or a purchase is
-        # returned, not only when a title is withdrawn, so this means "no copies here
-        # now" rather than "revoke outstanding loans and holds".
-        status=LicensePoolStatus.EXHAUSTED,
-        log=task.log,
-    )
+    return [IdentifierData.from_identifier(identifier) for identifier in identifiers]
 
 
 def _crawl_is_complete(

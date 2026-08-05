@@ -857,13 +857,12 @@ class OverdriveAPI(
             needed to walk the rest of the crawl.
         """
         status_code, headers, content = self.get(endpoint.url)
-        if status_code != 200:
-            # This endpoint returns the occasional transient 404, which self.get()
-            # allows through. Raising a retryable error lets the page be retried
-            # rather than discarding a crawl that may have been running for hours.
-            raise BadResponseException(
+
+        def unusable(message: str) -> BadResponseException:
+            """A page the crawl can't use, as an error its task will retry."""
+            return BadResponseException(
                 endpoint.url,
-                f"Unexpected status code {status_code} fetching Overdrive product page.",
+                message,
                 ResponseData(
                     status_code=status_code,
                     url=endpoint.url,
@@ -873,7 +872,22 @@ class OverdriveAPI(
                     extensions={},
                 ),
             )
-        data = json.loads(content)
+
+        if status_code != 200:
+            # This endpoint returns the occasional transient 404, which self.get()
+            # allows through. Raising a retryable error lets the page be retried
+            # rather than discarding a crawl that may have been running for hours.
+            raise unusable(
+                f"Unexpected status code {status_code} fetching Overdrive product page."
+            )
+
+        try:
+            data = json.loads(content)
+        except json.JSONDecodeError as exception:
+            # A 200 carrying something that isn't JSON -- an intermediary's error
+            # page, say -- is the same class of blip as the status codes above, and
+            # is worth the same retry rather than killing the crawl outright.
+            raise unusable("Overdrive product page was not valid JSON.") from exception
 
         products = data.get("products") or []
         listed = tuple(

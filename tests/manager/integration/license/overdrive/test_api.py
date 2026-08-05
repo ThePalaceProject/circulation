@@ -260,6 +260,25 @@ class TestOverdriveAPI:
         assert excinfo.value.response.status_code == 404
         assert BadResponseException in overdrive_celery.reap_collection.autoretry_for
 
+    def test_fetch_product_page_raises_on_a_body_that_is_not_json(
+        self, overdrive_api_fixture: OverdriveAPIFixture
+    ) -> None:
+        """A 200 carrying something other than JSON is the same class of blip.
+
+        An intermediary's error page would otherwise raise JSONDecodeError, which is
+        outside the task's retry policy, and kill a crawl of several hours.
+        """
+        overdrive_api_fixture.mock_http.queue_response(
+            200, content=b"<html>not json</html>"
+        )
+
+        with pytest.raises(BadResponseException) as excinfo:
+            overdrive_api_fixture.api.fetch_product_page(
+                BookInfoEndpoint("http://products/")
+            )
+
+        assert "was not valid JSON" in str(excinfo.value)
+
     def test_fetch_product_page_normalizes_identifier_case(
         self,
         overdrive_api_fixture: OverdriveAPIFixture,
