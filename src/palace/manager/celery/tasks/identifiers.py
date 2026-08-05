@@ -310,10 +310,13 @@ def create_mark_unavailable_chord(
 
     :return: A Celery chord signature that can be executed to perform the unavailable identifier marking process.
     """
-    # Both kwargs are omitted at their defaults so that the signatures a caller that
-    # wants neither produces still bind on a worker running the previous release. A
-    # rolling deploy has new code queueing work that old workers pick up, and a kwarg
-    # they have never heard of fails the whole reap rather than one page of it.
+    # Both kwargs are omitted at their defaults, so that a caller wanting neither
+    # produces signatures that still bind on a worker running the previous release: a
+    # rolling deploy has new code queueing work old workers pick up, and a kwarg they
+    # have never heard of fails the whole reap rather than one page of it. This covers
+    # the callers that pass neither, which is every OPDS reaper. A caller that wants
+    # one of them -- Overdrive wants both -- is exposed for the length of the deploy,
+    # though its chord body is queued hours later, when the crawl finishes.
     existing_identifiers_sig = existing_available_identifiers.s(
         collection_id,
         **({} if expire_time is None else {"expire_time": expire_time}),

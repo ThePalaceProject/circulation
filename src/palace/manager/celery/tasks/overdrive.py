@@ -54,12 +54,14 @@ REAP_CRAWL_ALLOWANCE_FLOOR: int = 10
 # one Overdrive applied rather than the one asked for.
 REAP_CRAWL_ALLOWANCE_PAGE_FRACTION: float = 0.25
 
-# How long the reaper's identifier sets outlive their creation. A crawl of the largest
-# collection can span more than a day, and both halves of the comparison have to still
-# be there when it finishes. The sets are keyed on the run's task id, so an abandoned
-# run's keys cannot be picked up by the next pass -- they only take up space until they
-# expire.
-REAP_IDENTIFIER_SET_LIFETIME: datetime.timedelta = datetime.timedelta(hours=36)
+# How long the reaper's identifier sets outlive their creation, between two bounds.
+# Long enough to outlast a crawl of the largest collection, since the set built at the
+# start has to still be there at the end -- hours, against the default of twelve.
+# Shorter than the daily schedule, because a crawl that dies without reaching the chord
+# body leaves its sets behind: keyed on the run's task id, they cannot be picked up by
+# the next pass, so a collection that fails repeatedly would otherwise stack up a set
+# per run.
+REAP_IDENTIFIER_SET_LIFETIME: datetime.timedelta = datetime.timedelta(hours=20)
 
 
 class ImportSkippedPayload(TypedDict):
