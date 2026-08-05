@@ -30,22 +30,27 @@ from palace.manager.sqlalchemy.model.licensing import (
 )
 
 
-def available_identifiers_query(collection_id: int) -> Select:
+def _identifiers_query(collection_id: int, *, borrowable: bool) -> Select:
     """
-    Select the identifiers in a collection whose license pools are currently available.
+    Select the identifiers in a collection whose license pools hold copies.
 
-    A pool is considered available if it is an UNLIMITED pool with ACTIVE status,
-    or a metered/aggregated pool with non-zero owned and available license counts.
-    UNLIMITED pools always have licenses_owned and licenses_available set to 0,
-    so they need to be matched on status instead.
-
-    Callers that only care about particular identifiers can narrow the returned
-    query further, which is how a distributor that reports its own removals checks
-    whether a title it has flagged is still available to us.
+    UNLIMITED pools always have licenses_owned and licenses_available set to 0, so
+    they are matched on status instead, and the distinction below does not apply to
+    them.
 
     No relationships are loaded: callers want the identifiers themselves, and the
     query is run over whole collections.
+
+    :param borrowable: Whether a metered pool must also have a copy free to borrow.
+        See the two callers below for why that distinction matters.
     """
+    metered = [
+        LicensePool.type != LicensePoolType.UNLIMITED,
+        LicensePool.licenses_owned != 0,
+    ]
+    if borrowable:
+        metered.append(LicensePool.licenses_available != 0)
+
     return (
         select(Identifier)
         .options(raiseload("*"))
@@ -57,14 +62,21 @@ def available_identifiers_query(collection_id: int) -> Select:
                     LicensePool.type == LicensePoolType.UNLIMITED,
                     LicensePool.status == LicensePoolStatus.ACTIVE,
                 ),
-                and_(
-                    LicensePool.type != LicensePoolType.UNLIMITED,
-                    LicensePool.licenses_available != 0,
-                    LicensePool.licenses_owned != 0,
-                ),
+                and_(*metered),
             ),
         )
     )
+
+
+def available_identifiers_query(collection_id: int) -> Select:
+    """
+    Select the identifiers in a collection that a patron could borrow right now.
+
+    This is the set a distributor's feed is compared against, so it is deliberately
+    the narrow one: a title with no copy free to borrow is already unavailable to
+    patrons, and marking it again would be a no-op.
+    """
+    return _identifiers_query(collection_id, borrowable=True)
 
 
 def held_identifiers_query(collection_id: int) -> Select:
@@ -75,27 +87,8 @@ def held_identifiers_query(collection_id: int) -> Select:
     free to borrow. A metered pool whose copies are all checked out still says we hold
     the title, and a distributor that reports its own removals has to be able to act on
     one: a title can be withdrawn while every copy of it is out on loan.
-
-    No relationships are loaded, for the same reason as its sibling.
     """
-    return (
-        select(Identifier)
-        .options(raiseload("*"))
-        .join(LicensePool)
-        .where(
-            LicensePool.collection_id == collection_id,
-            or_(
-                and_(
-                    LicensePool.type == LicensePoolType.UNLIMITED,
-                    LicensePool.status == LicensePoolStatus.ACTIVE,
-                ),
-                and_(
-                    LicensePool.type != LicensePoolType.UNLIMITED,
-                    LicensePool.licenses_owned != 0,
-                ),
-            ),
-        )
-    )
+    return _identifiers_query(collection_id, borrowable=False)
 
 
 def queue_unavailable_updates(
@@ -317,11 +310,17 @@ def create_mark_unavailable_chord(
 
     :return: A Celery chord signature that can be executed to perform the unavailable identifier marking process.
     """
+    # Both kwargs are omitted at their defaults so that the signatures a caller that
+    # wants neither produces still bind on a worker running the previous release. A
+    # rolling deploy has new code queueing work that old workers pick up, and a kwarg
+    # they have never heard of fails the whole reap rather than one page of it.
     existing_identifiers_sig = existing_available_identifiers.s(
-        collection_id, expire_time=expire_time
+        collection_id,
+        **({} if expire_time is None else {"expire_time": expire_time}),
     )
     mark_identifiers_sig = mark_identifiers_unavailable.s(
-        collection_id=collection_id, status=status
+        collection_id=collection_id,
+        **({} if status is LicensePoolStatus.REMOVED else {"status": status}),
     )
 
     chord_header = [existing_identifiers_sig, active_identifiers_sig]

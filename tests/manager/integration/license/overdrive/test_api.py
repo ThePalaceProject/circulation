@@ -141,8 +141,6 @@ class TestOverdriveAPI:
             pytest.param(2500, 2000, 5000, 600, id="steps back from a ragged offset"),
             pytest.param(1000, 2000, 5000, None, id="stops inside the first page"),
             pytest.param(2000, 2000, 5000, None, id="stops at the first page boundary"),
-            pytest.param(0, 2000, None, None, id="no totalItems to walk with"),
-            pytest.param(0, 0, 5000, None, id="no limit to walk with"),
         ],
     )
     def test_next_product_offset(
@@ -150,7 +148,7 @@ class TestOverdriveAPI:
         overdrive_api_fixture: OverdriveAPIFixture,
         offset: int,
         limit: int,
-        total_items: int | None,
+        total_items: int,
         expected: int | None,
     ) -> None:
         page = ProductPage(listed=(), unowned=(), total_items=total_items, limit=limit)
@@ -278,6 +276,36 @@ class TestOverdriveAPI:
             )
 
         assert "was not valid JSON" in str(excinfo.value)
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            pytest.param({"products": [], "limit": 2000}, id="no totalItems"),
+            pytest.param({"products": [], "totalItems": 10}, id="no limit"),
+            pytest.param(
+                {"products": [], "totalItems": 10, "limit": 0}, id="zero limit"
+            ),
+        ],
+    )
+    def test_fetch_product_page_raises_without_paging_fields(
+        self, overdrive_api_fixture: OverdriveAPIFixture, payload: dict[str, object]
+    ) -> None:
+        """A page the crawl cannot walk from is retried, not reasoned about.
+
+        Every gap check the crawl makes is expressed in terms of these two fields, so
+        a response missing either is as unusable as a bad status code -- and is the
+        same class of blip, deserving the same retry rather than the loss of a crawl.
+        """
+        overdrive_api_fixture.mock_http.queue_response(
+            200, content=json.dumps(payload).encode()
+        )
+
+        with pytest.raises(BadResponseException) as excinfo:
+            overdrive_api_fixture.api.fetch_product_page(
+                BookInfoEndpoint("http://products/")
+            )
+
+        assert "no usable totalItems or page size" in str(excinfo.value)
 
     def test_fetch_product_page_normalizes_identifier_case(
         self,

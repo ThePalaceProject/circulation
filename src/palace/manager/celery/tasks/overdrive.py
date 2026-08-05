@@ -663,18 +663,6 @@ def reap_collection(
         identifier_set.add(*result.listed)
         if total_items is None:
             total_items = result.total_items
-        if not result.pageable:
-            # The crawl stopped somewhere unknown rather than at the start of the
-            # list, so how much it covered is not a question the allowance for churn
-            # can answer.
-            task.log.error(
-                f"Overdrive reaper aborting for collection '{collection_name}': the "
-                f"page at offset {offset} carries no usable totalItems or page size, "
-                f"so the crawl cannot be continued or verified."
-            )
-            identifier_set.delete()
-            return None
-
         if page_limit is None:
             page_limit = result.limit
         elif result.limit != page_limit:
@@ -707,6 +695,25 @@ def reap_collection(
                 f"first page returned {len(result.listed)} titles of a possible "
                 f"{result.limit}, so the walk cannot join back onto it. Refusing to "
                 f"reap across a gap."
+            )
+            identifier_set.delete()
+            return None
+
+        if (
+            previous_offset is None
+            and offset != 0
+            and offset + len(result.listed) < result.total_items
+        ):
+            # The walk's first backwards page runs to the end of the list, and is the
+            # one page with nothing above it to be checked against. Its reach is
+            # exactly knowable for that same reason: it has to arrive at the end.
+            # Measured against the count this page reports rather than the one the
+            # crawl started with, so a collection that shrank mid-crawl still passes.
+            task.log.error(
+                f"Overdrive reaper aborting for collection '{collection_name}': the "
+                f"page at offset {offset} returned {len(result.listed)} titles and so "
+                f"stops short of the {result.total_items} Overdrive reports. Refusing "
+                f"to reap across a gap."
             )
             identifier_set.delete()
             return None

@@ -153,23 +153,14 @@ class ProductPage:
         title is gone, as opposed to the inference drawn from an identifier's absence.
     :param total_items: Overdrive's count of the whole result set.
     :param limit: The page size Overdrive applied, which may be smaller than the one
-        requested.
+        requested. Always the size applied, never the number of titles returned, so a
+        page at the end of the list still reports a full one.
     """
 
     listed: tuple[IdentifierData, ...]
     unowned: tuple[IdentifierData, ...]
-    total_items: int | None
+    total_items: int
     limit: int
-
-    @property
-    def pageable(self) -> bool:
-        """Whether a crawl can work out where to go next from this page.
-
-        Distinct from having reached the end of the collection: a crawl that stops
-        because a page arrived without the fields it needs has covered an unknown
-        amount of the list, and must not be judged by the allowance for churn.
-        """
-        return self.total_items is not None and self.limit > 0
 
 
 class OverdriveAPI(
@@ -825,10 +816,6 @@ class OverdriveAPI(
         :param offset: The offset that page was requested at. Taken from the caller
             rather than the response so the walk cannot be talked into standing still.
         """
-        if page.total_items is None or page.limit <= 0:
-            # Nothing to page with. The caller's completeness check refuses a crawl
-            # that cannot be shown to have covered the collection.
-            return None
         if offset == 0:
             if page.total_items <= page.limit:
                 return None
@@ -889,6 +876,19 @@ class OverdriveAPI(
             # is worth the same retry rather than killing the crawl outright.
             raise unusable("Overdrive product page was not valid JSON.") from exception
 
+        # Overdrive caps the page size it applies and echoes the one it used -- the
+        # requested size, not the number of titles returned, so a short page still
+        # reports a full limit. Every gap check in the crawl is expressed against
+        # these two, and a page carrying neither is one more shape a blip can take:
+        # it gets the same retry, rather than being inferred from the body or taken
+        # as a reason to abandon the crawl.
+        total_items = data.get("totalItems")
+        limit = data.get("limit")
+        if total_items is None or not limit:
+            raise unusable(
+                "Overdrive product page carried no usable totalItems or page size."
+            )
+
         products = data.get("products") or []
         listed = tuple(
             IdentifierData(
@@ -905,13 +905,8 @@ class OverdriveAPI(
         return ProductPage(
             listed=listed,
             unowned=unowned,
-            total_items=data.get("totalItems"),
-            # Overdrive caps the page size it applies, and echoes the one it used --
-            # the requested size, not the number of titles returned, so a short page
-            # still reports a full limit. Every gap check in the crawl is expressed
-            # against this, so a response without it is unusable rather than
-            # something to infer from the products themselves.
-            limit=data.get("limit") or 0,
+            total_items=total_items,
+            limit=limit,
         )
 
     async def fetch_book_info_list(
