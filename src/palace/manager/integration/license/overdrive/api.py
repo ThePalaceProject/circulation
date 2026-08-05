@@ -152,7 +152,6 @@ class ProductPage:
         the product list rather than dropping them, so this is direct evidence that a
         title is gone, as opposed to the inference drawn from an identifier's absence.
     :param total_items: Overdrive's count of the whole result set.
-    :param offset: Where this page starts in the result set, as echoed by Overdrive.
     :param limit: The page size Overdrive applied, which may be smaller than the one
         requested.
     """
@@ -160,7 +159,6 @@ class ProductPage:
     listed: tuple[IdentifierData, ...]
     unowned: tuple[IdentifierData, ...]
     total_items: int | None
-    offset: int
     limit: int
 
 
@@ -281,6 +279,11 @@ class OverdriveAPI(
     # silently capped. Only the reaper asks for pages this large, and it reads
     # nothing but ids, so the response stays manageable.
     PRODUCTS_PAGE_SIZE_LIMIT = 2000
+
+    # How much of a page consecutive crawl pages share. See `next_product_offset`
+    # for what the overlap absorbs; it is a fraction so that it scales with whatever
+    # page size Overdrive actually applies.
+    PRODUCTS_CRAWL_OVERLAP = 0.05
 
     # The reaper's crawl pages through offsets, so it needs an ordering that does
     # not shift under it. Ties cannot be broken from here: Overdrive rejects every
@@ -779,12 +782,12 @@ class OverdriveAPI(
         )
         return BookInfoEndpoint(_make_link_safe(url))
 
-    def next_product_page(self, page: ProductPage) -> BookInfoEndpoint | None:
-        """The next page of a reaper crawl, or None once the collection is covered.
+    def next_product_offset(self, page: ProductPage, offset: int) -> int | None:
+        """Where a reaper crawl goes next, or None once the collection is covered.
 
         The crawl walks the product list *backwards*: the first page is fetched at
-        offset 0 to learn ``totalItems``, and from there each page steps back one
-        page-length until the start of the list is reached.
+        offset 0 to learn ``totalItems``, and from there each page steps back towards
+        the start of the list.
 
         Walking forwards -- following Overdrive's ``next`` links -- would lose a
         title every time one was removed mid-crawl. Removing a title shifts every
@@ -793,23 +796,31 @@ class OverdriveAPI(
         indistinguishable from one that left the collection. Walking backwards, a
         removal below the cursor can only shift a not-yet-crawled title further into
         the region still being walked, and a removal above it cannot move that region
-        at all: titles are re-seen at worst, never skipped. The last page overlaps the
-        first, which is harmless because the identifiers are collected into a set.
+        at all.
+
+        The step back is shorter than a page, so consecutive pages overlap. That
+        covers the mirror image of the same problem -- a title *inserted* below the
+        cursor pushes its neighbours up, one of them into the region already
+        crawled -- along with any ordering jitter within a tie group. Overlapping is
+        free: the identifiers are collected into a set.
 
         :param page: The page just fetched.
+        :param offset: The offset that page was requested at. Taken from the caller
+            rather than the response so the walk cannot be talked into standing still.
         """
         if page.total_items is None or page.limit <= 0:
             # Nothing to page with. The caller's completeness check refuses a crawl
             # that cannot be shown to have covered the collection.
             return None
-        if page.offset == 0:
+        if offset == 0:
             if page.total_items <= page.limit:
                 return None
-            return self.product_page_endpoint(page.total_items - page.limit)
-        if page.offset <= page.limit:
+            return page.total_items - page.limit
+        if offset <= page.limit:
             # The first page already covered everything below this one.
             return None
-        return self.product_page_endpoint(page.offset - page.limit)
+        step = max(1, page.limit - int(page.limit * self.PRODUCTS_CRAWL_OVERLAP))
+        return max(0, offset - step)
 
     def fetch_product_page(self, endpoint: BookInfoEndpoint) -> ProductPage:
         """Fetch a single page of the collection's product list.
@@ -864,7 +875,6 @@ class OverdriveAPI(
             listed=listed,
             unowned=unowned,
             total_items=data.get("totalItems"),
-            offset=data.get("offset") or 0,
             # Overdrive caps the page size it applies, and echoes what it used.
             limit=data.get("limit") or len(products),
         )

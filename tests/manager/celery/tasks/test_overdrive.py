@@ -1232,7 +1232,6 @@ def product_page(
     listed: tuple[IdentifierData, ...] = (),
     unowned: tuple[IdentifierData, ...] = (),
     total_items: int | None = None,
-    offset: int = 0,
     limit: int = 2000,
 ) -> ProductPage:
     """Build a ProductPage.
@@ -1244,7 +1243,6 @@ def product_page(
         listed=listed,
         unowned=unowned,
         total_items=total_items,
-        offset=offset,
         limit=limit,
     )
 
@@ -1253,13 +1251,12 @@ def mock_crawl(mock_api_class: MagicMock, *pages: ProductPage) -> MagicMock:
     """Point a mocked OverdriveAPI at the given pages, walked in order.
 
     The mocked API has to be told where the walk ends; otherwise
-    `next_product_page` returns a truthy Mock and the crawl never finishes.
+    `next_product_offset` returns a Mock and the crawl never finishes.
     """
     api = mock_api_class.return_value
     api.fetch_product_page.side_effect = list(pages)
-    api.next_product_page.side_effect = [
-        BookInfoEndpoint(f"http://od/products?offset={index + 1}")
-        for index in range(len(pages) - 1)
+    api.next_product_offset.side_effect = [
+        (index + 1) * 100 for index in range(len(pages) - 1)
     ] + [None]
     return api
 
@@ -1357,17 +1354,16 @@ class TestOverdriveReaper:
         second_page = overdrive_identifiers("id-three")
         api = mock_crawl(
             mock_api_class,
-            product_page(listed=first_page, total_items=3, offset=0, limit=2),
-            product_page(listed=second_page, total_items=3, offset=2, limit=2),
+            product_page(listed=first_page, total_items=3, limit=2),
+            product_page(listed=second_page, total_items=3, limit=2),
         )
 
         result = overdrive.reap_collection.delay(collection.id).wait()
 
         assert api.fetch_product_page.call_count == 2
-        # The second page was fetched from the url the walk handed back.
-        assert api.fetch_product_page.call_args_list[1].args[0] == BookInfoEndpoint(
-            "http://od/products?offset=1"
-        )
+        # Each page was requested at the offset the walk handed back, so a crawl
+        # cannot be talked into re-requesting the page it just fetched.
+        assert api.product_page_endpoint.call_args_list == [call(0), call(100)]
         identifier_set = IdentifierSet(redis_fixture.client, result["key"])
         assert identifier_set.get() == set(first_page) | set(second_page)
 

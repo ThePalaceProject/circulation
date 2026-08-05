@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, create_autospec, patch
-from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
@@ -125,39 +124,32 @@ class TestOverdriveAPI:
         assert f"limit={OverdriveAPI.PRODUCTS_PAGE_SIZE_LIMIT}" in endpoint.url
 
     @pytest.mark.parametrize(
-        "offset,limit,total_items,expected_offset",
+        "offset,limit,total_items,expected",
         [
             pytest.param(0, 2000, 1500, None, id="first page covers the collection"),
             pytest.param(
                 0, 2000, 2000, None, id="first page is exactly the collection"
             ),
             pytest.param(0, 2000, 5000, 3000, id="first page jumps to the end"),
-            pytest.param(3000, 2000, 5000, 1000, id="walks backwards"),
+            pytest.param(3000, 2000, 5000, 1100, id="steps back by less than a page"),
+            pytest.param(2500, 2000, 5000, 600, id="steps back from a ragged offset"),
             pytest.param(1000, 2000, 5000, None, id="stops inside the first page"),
             pytest.param(2000, 2000, 5000, None, id="stops at the first page boundary"),
             pytest.param(0, 2000, None, None, id="no totalItems to walk with"),
             pytest.param(0, 0, 5000, None, id="no limit to walk with"),
         ],
     )
-    def test_next_product_page(
+    def test_next_product_offset(
         self,
         overdrive_api_fixture: OverdriveAPIFixture,
         offset: int,
         limit: int,
         total_items: int | None,
-        expected_offset: int | None,
+        expected: int | None,
     ) -> None:
-        page = ProductPage(
-            listed=(), unowned=(), total_items=total_items, offset=offset, limit=limit
-        )
+        page = ProductPage(listed=(), unowned=(), total_items=total_items, limit=limit)
 
-        next_page = overdrive_api_fixture.api.next_product_page(page)
-
-        if expected_offset is None:
-            assert next_page is None
-        else:
-            assert next_page is not None
-            assert f"offset={expected_offset}" in next_page.url
+        assert overdrive_api_fixture.api.next_product_offset(page, offset) == expected
 
     @pytest.mark.parametrize(
         "total_items,limit",
@@ -169,32 +161,27 @@ class TestOverdriveAPI:
             pytest.param(101, 100, id="one title past the first page"),
         ],
     )
-    def test_next_product_page_leaves_no_gap(
+    def test_next_product_offset_leaves_no_gap(
         self, overdrive_api_fixture: OverdriveAPIFixture, total_items: int, limit: int
     ) -> None:
         """Walking the pages must cover every offset in the collection.
 
         A gap would be indistinguishable from titles that left the collection, and
-        the reaper would mark them as gone.
+        the reaper would mark them as gone. The walk must also terminate, so every
+        step after the first has to move towards the start of the list.
         """
         api = overdrive_api_fixture.api
+        page = ProductPage(listed=(), unowned=(), total_items=total_items, limit=limit)
         covered: set[int] = set()
         offset = 0
 
         for _ in range(100):
             covered.update(range(offset, min(offset + limit, total_items)))
-            next_page = api.next_product_page(
-                ProductPage(
-                    listed=(),
-                    unowned=(),
-                    total_items=total_items,
-                    offset=offset,
-                    limit=limit,
-                )
-            )
-            if next_page is None:
+            next_offset = api.next_product_offset(page, offset)
+            if next_offset is None:
                 break
-            offset = int(parse_qs(urlsplit(next_page.url).query)["offset"][0])
+            assert offset == 0 or next_offset < offset
+            offset = next_offset
         else:
             pytest.fail("The crawl never reached the start of the collection.")
 
@@ -227,10 +214,9 @@ class TestOverdriveAPI:
     def test_fetch_product_page_reads_paging_from_response(
         self, overdrive_api_fixture: OverdriveAPIFixture
     ) -> None:
-        """The crawl pages by offset, so it uses the values Overdrive echoes back.
+        """The walk steps by the page size Overdrive applied, not the one requested.
 
-        Overdrive caps the page size it applies, so the requested limit is not
-        necessarily the one that was used.
+        Overdrive caps the page size, so the two are not necessarily the same.
         """
         data, raw = overdrive_api_fixture.sample_json(
             "overdrive_product_page_last.json"
@@ -241,7 +227,6 @@ class TestOverdriveAPI:
             BookInfoEndpoint("http://products/")
         )
 
-        assert page.offset == raw["offset"] == 38432
         assert page.limit == raw["limit"] == 2
         assert len(page.listed) == 2
         assert page.unowned == ()

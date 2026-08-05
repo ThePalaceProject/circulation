@@ -513,7 +513,7 @@ def reap_collection(
     task: Task,
     collection_id: int,
     *,
-    page: str | None = None,
+    offset: int = 0,
     total_items: int | None = None,
 ) -> IdentifierSet | None:
     """
@@ -544,7 +544,9 @@ def reap_collection(
     governed by :func:`~palace.manager.celery.importer.workflow_lock_guard`.
 
     :param collection_id: The ID of the Overdrive collection to reap.
-    :param page: The product-list page to fetch, as a url. None starts a new crawl.
+    :param offset: Where in the product list to fetch the next page from. A crawl
+        starts at 0 and walks backwards from the end; see
+        :meth:`OverdriveAPI.next_product_offset`.
     :param total_items: Overdrive's collection size, as reported by the crawl's first
         page and carried across the remaining ones.
     :return: The identifiers the collection currently lists, or None if the crawl was
@@ -562,7 +564,10 @@ def reap_collection(
         redis = task.services.redis().client()
         identifier_set = IdentifierSet(redis, reap_key(collection_id, task.request.id))
 
-        with task.transaction() as session:
+        # The crawl reads the collection and queues apply tasks for what it finds. It
+        # writes nothing itself, so it does not hold a transaction open across the
+        # request for each page.
+        with task.session() as session:
             collection = load_from_id(session, Collection, collection_id)
             collection_name = collection.name
 
@@ -575,9 +580,8 @@ def reap_collection(
                 return None
 
             api = OverdriveAPI(session, collection)
-            endpoint = BookInfoEndpoint(page) if page else api.product_page_endpoint()
-            result = api.fetch_product_page(endpoint)
-            next_page = api.next_product_page(result)
+            result = api.fetch_product_page(api.product_page_endpoint(offset))
+            next_offset = api.next_product_offset(result, offset)
             marked = _mark_unowned_identifiers(
                 task, session, collection, result.unowned
             )
@@ -591,13 +595,13 @@ def reap_collection(
                 f"in collection '{collection_name}'."
             )
 
-        if next_page is not None:
+        if next_offset is not None:
             task.log.info(
                 f"Overdrive reaper crawling '{collection_name}': "
                 f"{identifier_set.len()} of {total_items} titles seen."
             )
             raise task.replace(
-                signature_with(task, page=next_page.url, total_items=total_items)
+                signature_with(task, offset=next_offset, total_items=total_items)
             )
 
         crawled = identifier_set.len()
