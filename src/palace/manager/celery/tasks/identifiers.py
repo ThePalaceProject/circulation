@@ -67,6 +67,37 @@ def available_identifiers_query(collection_id: int) -> Select:
     )
 
 
+def held_identifiers_query(collection_id: int) -> Select:
+    """
+    Select the identifiers in a collection whose license pools still record copies.
+
+    Wider than `available_identifiers_query`, which additionally requires a copy to be
+    free to borrow. A metered pool whose copies are all checked out still says we hold
+    the title, and a distributor that reports its own removals has to be able to act on
+    one: a title can be withdrawn while every copy of it is out on loan.
+
+    No relationships are loaded, for the same reason as its sibling.
+    """
+    return (
+        select(Identifier)
+        .options(raiseload("*"))
+        .join(LicensePool)
+        .where(
+            LicensePool.collection_id == collection_id,
+            or_(
+                and_(
+                    LicensePool.type == LicensePoolType.UNLIMITED,
+                    LicensePool.status == LicensePoolStatus.ACTIVE,
+                ),
+                and_(
+                    LicensePool.type != LicensePoolType.UNLIMITED,
+                    LicensePool.licenses_owned != 0,
+                ),
+            ),
+        )
+    )
+
+
 def queue_unavailable_updates(
     identifiers: Iterable[IdentifierData],
     *,

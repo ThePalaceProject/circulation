@@ -1566,9 +1566,32 @@ class TestOverdriveReaper:
                 crawled,
                 total_items,
                 single_page=single_page,
+                page_limit=2000,
             )
             is expected
         )
+
+    def test_crawl_allowance_stays_under_a_page(self):
+        """A lost page must never be excused, whatever page size Overdrive applied.
+
+        The allowance is meant to absorb churn during a crawl, and the crawl's first
+        backwards page has nothing above it to be checked against -- so if the
+        allowance ever reached a whole page, an empty response there would be
+        indistinguishable from titles removed mid-crawl.
+        """
+        for page_limit in (2000, 300, 25):
+            lost_page = 10_000_000
+            assert (
+                overdrive._crawl_is_complete(
+                    MagicMock(),
+                    "collection name",
+                    lost_page - page_limit,
+                    lost_page,
+                    single_page=False,
+                    page_limit=page_limit,
+                )
+                is False
+            )
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
     def test_reap_collection_marks_titles_overdrive_no_longer_owns(
@@ -1673,8 +1696,14 @@ class TestOverdriveReaper:
         )
         api.next_product_offset.side_effect = [4000, 3000, None]
 
-        async_result = overdrive.reap_collection.apply_async(
-            (collection.id,), {"offset": 3000, "previous_offset": 4000}
+        # Mid-crawl pages carry the crawl's state, which is also what tells them apart
+        # from a page left over from the previous reaper.
+        async_result = overdrive.reap_collection.delay(
+            collection.id,
+            offset=3000,
+            previous_offset=4000,
+            total_items=6000,
+            page_limit=2000,
         )
 
         assert async_result.wait() is None
@@ -1758,7 +1787,10 @@ class TestOverdriveReaper:
         """Pages queued by the per-title reaper are dropped, not run.
 
         Its `offset` was the last Identifier.id it had processed, so binding it as a
-        product-list offset would crawl from an arbitrary point in the collection.
+        product-list offset would crawl from an arbitrary point in the collection. It
+        re-queued itself with only a collection id and an offset -- never a
+        `batch_size`, which was left at its default -- so the absence of the crawl
+        state this reaper always carries is what identifies one.
         """
         collection = overdrive_api_fixture.collection
         caplog.set_level(LogLevel.info)
@@ -1766,13 +1798,36 @@ class TestOverdriveReaper:
         with patch(
             "palace.manager.celery.tasks.overdrive.OverdriveAPI"
         ) as mock_api_class:
-            result = overdrive.reap_collection.apply_async(
-                (collection.id,), {"offset": 918273, "batch_size": 50}
+            result = overdrive.reap_collection.delay(
+                collection.id, offset=918273
             ).wait()
 
         assert result is None
         mock_api_class.return_value.fetch_product_page.assert_not_called()
         assert "previous reaper implementation" in caplog.text
+
+    def test_reap_collection_binds_a_page_carrying_batch_size(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        redis_fixture: RedisFixture,
+    ):
+        """A message carrying the old reaper's parameter still binds, and is ignored."""
+        collection = overdrive_api_fixture.collection
+
+        with patch(
+            "palace.manager.celery.tasks.overdrive.OverdriveAPI"
+        ) as mock_api_class:
+            mock_crawl(
+                mock_api_class,
+                product_page(listed=overdrive_identifiers("id-one"), total_items=1),
+            )
+            result = overdrive.reap_collection.delay(
+                collection.id, batch_size=50
+            ).wait()
+
+        assert result is not None
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
     def test_reap_collection_skips_collection_marked_for_deletion(

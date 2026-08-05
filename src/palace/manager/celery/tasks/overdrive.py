@@ -18,7 +18,7 @@ from palace.manager.celery.importer import (
 from palace.manager.celery.task import Task
 from palace.manager.celery.tasks import apply
 from palace.manager.celery.tasks.identifiers import (
-    available_identifiers_query,
+    held_identifiers_query,
     queue_unavailable_updates,
 )
 from palace.manager.celery.utils import load_from_id, signature_with, validate_not_none
@@ -50,7 +50,9 @@ IMPORT_SKIPPED: str = "import_skipped"
 # a whole page must never be excused.
 REAP_CRAWL_ALLOWANCE: float = 0.001
 REAP_CRAWL_ALLOWANCE_FLOOR: int = 10
-REAP_CRAWL_ALLOWANCE_CAP: int = OverdriveAPI.PRODUCTS_PAGE_SIZE_LIMIT // 4
+# Capped as a fraction of the page size the crawl is actually walking in, which is the
+# one Overdrive applied rather than the one asked for.
+REAP_CRAWL_ALLOWANCE_PAGE_FRACTION: float = 0.25
 
 # How long the reaper's identifier sets outlive their creation. A crawl of the largest
 # collection can span more than a day, and both halves of the comparison have to still
@@ -565,18 +567,19 @@ def reap_collection(
     :param page_limit: The page size Overdrive applied to the crawl's first page,
         carried like ``total_items``. Every gap check is expressed in terms of it, so
         the walk's arithmetic only holds while it stays the same.
-    :param batch_size: Only ever set on a page queued by the previous per-title
-        reaper, whose ``offset`` meant something else entirely. Accepted so those
-        messages are discarded rather than failing to bind after a deploy; remove it
-        once no such message can still be in flight.
+    :param batch_size: Belonged to the previous per-title reaper and is ignored.
+        Accepted only so that a message carrying it still binds after a deploy; remove
+        it once no such message can be in flight.
     :return: The identifiers the collection currently lists, or None if the crawl was
         skipped, aborted, or could not be verified as complete.
     """
-    if batch_size is not None:
+    if offset != 0 and total_items is None and page_limit is None:
         # A page left over from the per-title reaper, whose `offset` was the last
-        # Identifier.id it processed. Running it as a product-list offset would crawl
-        # from an arbitrary point, so the run is dropped and the next scheduled one
-        # starts clean.
+        # Identifier.id it had processed. Every page this reaper queues carries the
+        # crawl's totalItems and page size along with the offset, so their absence at
+        # a non-zero offset is what identifies one. Running it as a product-list
+        # offset would crawl from an arbitrary point, so the run is dropped and the
+        # next scheduled one starts clean.
         task.log.info(
             f"Discarding a reap page queued by the previous reaper implementation "
             f"for collection {collection_id}."
@@ -747,7 +750,12 @@ def reap_collection(
 
         crawled = identifier_set.len()
         if not _crawl_is_complete(
-            task, collection_name, crawled, total_items, single_page=offset == 0
+            task,
+            collection_name,
+            crawled,
+            total_items,
+            single_page=offset == 0,
+            page_limit=page_limit,
         ):
             identifier_set.delete()
             return None
@@ -771,14 +779,17 @@ def _unowned_identifiers_to_mark(
     absence -- which is why the caller acts on it without waiting for the crawl to be
     shown complete.
 
-    Titles we already record as unavailable are left out, so the ones Overdrive keeps
-    listing as unowned do not generate an apply task on every pass.
+    Titles we already record as holding no copies are left out, so the ones Overdrive
+    keeps listing as unowned do not generate an apply task on every pass. The test is
+    whether we still record copies, not whether one is free to borrow: a weeded title
+    whose copies are all checked out is exactly the case worth marking, and it is one
+    the set difference can never catch, since Overdrive goes on listing it.
     """
     if not unowned:
         return []
 
     identifiers = session.scalars(
-        available_identifiers_query(collection_id).where(
+        held_identifiers_query(collection_id).where(
             Identifier.type == Identifier.OVERDRIVE_ID,
             Identifier.identifier.in_(
                 [identifier.identifier for identifier in unowned]
@@ -795,6 +806,7 @@ def _crawl_is_complete(
     total_items: int | None,
     *,
     single_page: bool,
+    page_limit: int,
 ) -> bool:
     """Decide whether a finished crawl covered the whole collection.
 
@@ -809,6 +821,9 @@ def _crawl_is_complete(
     :param single_page: Whether the whole collection arrived in one response. There is
         no window for churn in that case -- the products and the count were produced
         together -- so they are required to agree exactly.
+    :param page_limit: The page size the crawl walked in. The allowance is held below
+        it so that a lost page can never be mistaken for churn -- including the crawl's
+        first backwards page, which has nothing above it to be checked against.
     """
     if total_items is None:
         task.log.error(
@@ -821,7 +836,7 @@ def _crawl_is_complete(
         0
         if single_page
         else min(
-            REAP_CRAWL_ALLOWANCE_CAP,
+            max(1, int(page_limit * REAP_CRAWL_ALLOWANCE_PAGE_FRACTION)),
             max(REAP_CRAWL_ALLOWANCE_FLOOR, int(total_items * REAP_CRAWL_ALLOWANCE)),
         )
     )
