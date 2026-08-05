@@ -52,6 +52,7 @@ def add_documents_to_index(
     Submit a batch of documents to the search index.
 
     :raises FailedToIndex: If the index rejected some of the documents.
+    :raises OpenSearchException: If the index rejected the request.
     """
     with elapsed_time_logging(
         log_method=log.info,
@@ -120,8 +121,6 @@ def advance_read_pointer(
     latest_index = revision.name_for_index(service.base_revision_name)
 
     read_pointer = service.read_pointer()
-    write_pointer = service.write_pointer()
-
     if read_pointer is not None and read_pointer.version >= revision.version:
         return
 
@@ -140,6 +139,7 @@ def advance_read_pointer(
         )
         return
 
+    write_pointer = service.write_pointer()
     if write_pointer is None or write_pointer.index != target_index:
         # The write pointer moved partway through, so our documents are split across the
         # old and new indexes and neither one received a complete pass.

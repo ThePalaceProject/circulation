@@ -125,9 +125,9 @@ class InstanceInitializationScript(LoggerMixin):
         revision: SearchSchemaRevision,
     ) -> None:
         # The revision is not the most recent. We need to create a new index.
-        # and start reindexing our data into it asynchronously. The reindex advances
-        # the read pointer itself once it has filled the new index, so a run that never
-        # finishes leaves reads on the old index rather than half-migrating.
+        # and start reindexing our data into it asynchronously. When the reindex
+        # is complete, we will switch the read pointer to the new index. The normal
+        # search_reindex task handles this transition.
         cls.logger().info(f"Creating a new index for revision (v{revision.version}).")
         cls.create_search_index(service, revision)
         task = search_reindex.apply_async()
