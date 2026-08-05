@@ -12,7 +12,6 @@ from palace.manager.celery.tasks.search import (
     index_works,
     search_indexing,
     search_reindex,
-    update_read_pointer,
 )
 from palace.manager.scripts.initialization import InstanceInitializationScript
 from palace.manager.search.external_search import ExternalSearchIndex
@@ -49,11 +48,8 @@ def search_reindex_task_lock_fixture(redis_fixture: RedisFixture):
 def mock_search_pointers(
     services_fixture: ServicesFixture, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Point the mocked search service at a single index at the latest revision.
-
-    A reindex reads both pointers to decide whether to advance the read pointer, and an
-    unconfigured autospec hands back mocks that can neither be compared nor serialized
-    into the task's requeue.
+    """
+    Point the mocked search service at a single index at the latest revision.
     """
     base_name = "test_index"
     revision = MockSearchSchemaRevisionLatest(42)
@@ -301,54 +297,6 @@ def test_search_reindex_failures_multiple_batch(
     search_reindex.delay(batch_size=2).wait()
     assert add_documents_mock.call_count == 11
     assert search_reindex_task_lock_fixture.task_lock.locked() is False
-
-
-def test_update_read_pointer(
-    db: DatabaseTransactionFixture,
-    celery_fixture: CeleryFixture,
-    end_to_end_search_fixture: EndToEndSearchFixture,
-):
-    client = end_to_end_search_fixture.external_search.write_client
-    service = end_to_end_search_fixture.external_search.service
-
-    # Remove the read pointer
-    alias_name = service.read_pointer_name()
-    action = {
-        "actions": [
-            {"remove": {"index": "*", "alias": alias_name}},
-        ]
-    }
-    client.indices.update_aliases(body=action)
-
-    # Verify that the read pointer is gone
-    assert service.read_pointer() is None
-
-    # Update the read pointer
-    update_read_pointer.delay().wait()
-
-    # Verify that the read pointer is set
-    assert service.read_pointer() is not None
-
-
-@patch("palace.manager.celery.tasks.search.exponential_backoff")
-def test_update_read_pointer_failures(
-    mock_backoff: MagicMock,
-    celery_fixture: CeleryFixture,
-    services_fixture: ServicesFixture,
-):
-    # Make sure our backoff function doesn't delay the test.
-    mock_backoff.return_value = 0
-
-    read_pointer_set_mock = services_fixture.search_service.read_pointer_set
-    read_pointer_set_mock.side_effect = OpenSearchException()
-    with pytest.raises(MaxRetriesExceededError):
-        update_read_pointer.delay().wait()
-    assert read_pointer_set_mock.call_count == 5
-
-    read_pointer_set_mock.reset_mock()
-    read_pointer_set_mock.side_effect = [OpenSearchException(), None]
-    update_read_pointer.delay().wait()
-    assert read_pointer_set_mock.call_count == 2
 
 
 class SearchMigrationFixture:

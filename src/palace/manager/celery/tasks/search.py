@@ -228,38 +228,6 @@ def search_reindex(
     task_lock.release()
 
 
-@shared_task(queue=QueueNames.default, bind=True, max_retries=4)
-def update_read_pointer(task: Task) -> None:
-    """
-    Update the read pointer to the latest revision, unconditionally.
-
-    search_reindex advances the read pointer itself once it has filled the latest index, so
-    this is the manual override for the cases it deliberately declines to handle: publishing
-    an index that no single reindex run filled end to end, or one filled by a run that
-    started before the revision it ended up writing to existed.
-
-    It has no CLI entry point, because the repair is normally just a completed reindex:
-    whichever run finishes a full pass publishes the index itself. To publish an index that
-    is already filled, without waiting for a pass to finish, queue this task by its
-    registered name (gen_task_name strips the module prefix, so it is not the import path):
-
-        celery -A "palace.manager.celery.app" call search.update_read_pointer
-    """
-    task.log.info("Updating read pointer.")
-    service = task.services.search.service()
-    revision_directory = task.services.search.revision_directory()
-    revision = revision_directory.highest()
-
-    try:
-        set_read_pointer(task.log, service, revision)
-    except OpenSearchException as e:
-        wait_time = exponential_backoff(task.request.retries)
-        task.log.exception(
-            f"Failed to update read pointer: {e}. Retrying in {wait_time} seconds."
-        )
-        raise task.retry(countdown=wait_time)
-
-
 @shared_task(queue=QueueNames.default, bind=True, throws=(LockNotAcquired,))
 def search_indexing(task: Task, batch_size: int = 500) -> None:
     redis_client = task.services.redis.client()
