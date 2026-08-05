@@ -256,10 +256,7 @@ class TaskLock(RedisLock):
 
     `task` may be omitted, as long as `lock_name` and `redis_client` are given, so that
     code outside Celery can contend for the same lock as a task. That is for callers
-    doing a task's work themselves rather than merely touching the same resource - a
-    script reindexing in process, say - which need to hold off the scheduled task while
-    they do it. Those are the only two shapes: with a task, everything else can be
-    inferred; without one, both of the things it stands in for have to be supplied.
+    doing a task's work themselves rather than merely touching the same resource.
     """
 
     @overload

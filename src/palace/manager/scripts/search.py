@@ -135,24 +135,6 @@ class RebuildSearchIndexScript(Script):
     def rebuild_locally(self) -> None:
         """
         Index every presentation-ready work here, rather than in a Celery worker.
-
-        `search_reindex` requeues itself once per batch, so its throughput is set by how
-        long a trip through the `default` queue takes rather than by how long indexing
-        takes. On a manager whose queue carries a backlog that is minutes per batch, a
-        full pass can run for days. Doing the same work in one process costs a couple of
-        hours instead, at the price of tying up whoever ran the script.
-
-        We take the task's own lock so the scheduled reindex can't run against the index
-        at the same time, and extend it every batch, since nothing else will while we
-        hold it. --delete happens under that lock too, so a rebuild that cannot get the
-        lock leaves the index alone rather than emptying it and then stopping. That
-        means a reindex already running holds us off, which is the wrong way round when
-        a manager is down and the running reindex is the days-long one we are trying to
-        get ahead of: --force takes the lock from it instead.
-
-        Each batch ends its transaction, so a pass that runs for hours doesn't hold one
-        snapshot open for all of it and keep autovacuum off the tables the rest of the
-        application is writing to.
         """
         service = self.services.search.service()
         target_index = resolve_target_index(service)
