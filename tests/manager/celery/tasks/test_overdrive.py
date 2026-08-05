@@ -16,7 +16,7 @@ from palace.manager.celery.importer import (
     reap_key,
     reap_workflow_lock,
 )
-from palace.manager.celery.tasks import overdrive
+from palace.manager.celery.tasks import identifiers, overdrive
 from palace.manager.celery.tasks.overdrive import import_collection_group
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.integration.license.overdrive.api import (
@@ -32,7 +32,9 @@ from palace.manager.service.redis.models.set import IdentifierSet
 from palace.manager.sqlalchemy.constants import IdentifierType
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.coverage import Timestamp
+from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
+from palace.manager.sqlalchemy.model.licensing import LicensePool, LicensePoolStatus
 from palace.manager.util.http.exception import BadResponseException
 from tests.fixtures.celery import ApplyTaskFixture, CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -1227,28 +1229,62 @@ class TestIntegration:
 
 def product_page(
     *,
-    active: tuple[IdentifierData, ...] = (),
-    seen: int | None = None,
+    listed: tuple[IdentifierData, ...] = (),
+    unowned: tuple[IdentifierData, ...] = (),
     total_items: int | None = None,
-    next_page: BookInfoEndpoint | None = None,
+    offset: int = 0,
+    limit: int = 2000,
 ) -> ProductPage:
-    """Build a ProductPage, defaulting `seen` to the number of active identifiers.
+    """Build a ProductPage.
 
     `total_items` is passed through as given, so a test can ask for the case where
     Overdrive omits it.
     """
     return ProductPage(
-        active=active,
-        seen=len(active) if seen is None else seen,
+        listed=listed,
+        unowned=unowned,
         total_items=total_items,
-        next_page=next_page,
+        offset=offset,
+        limit=limit,
     )
+
+
+def mock_crawl(mock_api_class: MagicMock, *pages: ProductPage) -> MagicMock:
+    """Point a mocked OverdriveAPI at the given pages, walked in order.
+
+    The mocked API has to be told where the walk ends; otherwise
+    `next_product_page` returns a truthy Mock and the crawl never finishes.
+    """
+    api = mock_api_class.return_value
+    api.fetch_product_page.side_effect = list(pages)
+    api.next_product_page.side_effect = [
+        BookInfoEndpoint(f"http://od/products?offset={index + 1}")
+        for index in range(len(pages) - 1)
+    ] + [None]
+    return api
 
 
 def overdrive_identifiers(*identifiers: str) -> tuple[IdentifierData, ...]:
     return tuple(
         IdentifierData(type=Identifier.OVERDRIVE_ID, identifier=identifier)
         for identifier in identifiers
+    )
+
+
+def overdrive_pool(
+    db: DatabaseTransactionFixture, collection: Collection, identifier: str
+) -> LicensePool:
+    """Create an available Overdrive license pool with the given identifier."""
+    edition = db.edition(
+        data_source_name=DataSource.OVERDRIVE,
+        identifier_type=Identifier.OVERDRIVE_ID,
+        identifier_id=identifier,
+    )
+    return db.licensepool(
+        edition,
+        collection=collection,
+        data_source_name=DataSource.OVERDRIVE,
+        open_access=False,
     )
 
 
@@ -1282,7 +1318,7 @@ class TestOverdriveReaper:
         assert mock_reap_task.return_value.apply_async.call_count == 3
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
-    def test_reap_collection_returns_owned_identifiers(
+    def test_reap_collection_returns_listed_identifiers(
         self,
         mock_api_class: MagicMock,
         db: DatabaseTransactionFixture,
@@ -1290,17 +1326,15 @@ class TestOverdriveReaper:
         overdrive_api_fixture: OverdriveAPIFixture,
         redis_fixture: RedisFixture,
     ):
-        """A completed crawl returns the identifiers the collection still holds."""
+        """A completed crawl returns every identifier the collection still lists."""
         collection = overdrive_api_fixture.collection
-        active = overdrive_identifiers("id-one", "id-two")
-        mock_api_class.return_value.fetch_product_page.return_value = product_page(
-            active=active, seen=3, total_items=3
-        )
+        listed = overdrive_identifiers("id-one", "id-two")
+        mock_crawl(mock_api_class, product_page(listed=listed, total_items=2))
 
         result = overdrive.reap_collection.delay(collection.id).wait()
 
         identifier_set = IdentifierSet(redis_fixture.client, result["key"])
-        assert identifier_set.get() == set(active)
+        assert identifier_set.get() == set(listed)
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
     def test_reap_collection_pages_until_crawl_completes(
@@ -1311,23 +1345,31 @@ class TestOverdriveReaper:
         overdrive_api_fixture: OverdriveAPIFixture,
         redis_fixture: RedisFixture,
     ):
-        """A page with a successor re-queues the task with the next url and running count."""
+        """The identifiers from every page end up in one set.
+
+        Each page runs as a fresh task via task.replace(), and the set is keyed on the
+        task id, which Celery preserves across that hand-off. If it ever stopped doing
+        so, the crawl would return only its final page and the reaper would mark
+        almost the whole collection as gone.
+        """
         collection = overdrive_api_fixture.collection
-        mock_api_class.return_value.fetch_product_page.return_value = product_page(
-            active=overdrive_identifiers("id-one"),
-            seen=2,
-            total_items=10,
-            next_page=BookInfoEndpoint("http://od/products?offset=2"),
+        first_page = overdrive_identifiers("id-one", "id-two")
+        second_page = overdrive_identifiers("id-three")
+        api = mock_crawl(
+            mock_api_class,
+            product_page(listed=first_page, total_items=3, offset=0, limit=2),
+            product_page(listed=second_page, total_items=3, offset=2, limit=2),
         )
 
-        with patch.object(overdrive.reap_collection, "replace") as mock_replace:
-            mock_replace.side_effect = Exception("replaced")
-            with pytest.raises(Exception, match="replaced"):
-                overdrive.reap_collection.delay(collection.id).wait()
+        result = overdrive.reap_collection.delay(collection.id).wait()
 
-        replace_sig = mock_replace.call_args[0][0]
-        assert replace_sig.kwargs["page"] == "http://od/products?offset=2"
-        assert replace_sig.kwargs["seen"] == 2
+        assert api.fetch_product_page.call_count == 2
+        # The second page was fetched from the url the walk handed back.
+        assert api.fetch_product_page.call_args_list[1].args[0] == BookInfoEndpoint(
+            "http://od/products?offset=1"
+        )
+        identifier_set = IdentifierSet(redis_fixture.client, result["key"])
+        assert identifier_set.get() == set(first_page) | set(second_page)
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
     def test_reap_collection_aborts_on_incomplete_crawl(
@@ -1347,8 +1389,9 @@ class TestOverdriveReaper:
         """
         collection = overdrive_api_fixture.collection
         caplog.set_level(LogLevel.error)
-        mock_api_class.return_value.fetch_product_page.return_value = product_page(
-            active=overdrive_identifiers("id-one"), seen=1, total_items=5000
+        mock_crawl(
+            mock_api_class,
+            product_page(listed=overdrive_identifiers("id-one"), total_items=5000),
         )
 
         async_result = overdrive.reap_collection.delay(collection.id)
@@ -1374,8 +1417,9 @@ class TestOverdriveReaper:
         """Without totalItems there is no way to show the crawl was complete."""
         collection = overdrive_api_fixture.collection
         caplog.set_level(LogLevel.error)
-        mock_api_class.return_value.fetch_product_page.return_value = product_page(
-            active=overdrive_identifiers("id-one"), seen=1, total_items=None
+        mock_crawl(
+            mock_api_class,
+            product_page(listed=overdrive_identifiers("id-one"), total_items=None),
         )
 
         result = overdrive.reap_collection.delay(collection.id).wait()
@@ -1394,17 +1438,125 @@ class TestOverdriveReaper:
     ):
         """Titles added or removed mid-crawl move totalItems, which is not a failure."""
         collection = overdrive_api_fixture.collection
-        active = overdrive_identifiers("id-one", "id-two")
-        mock_api_class.return_value.fetch_product_page.return_value = product_page(
-            active=active,
-            seen=1000,
-            total_items=1000 + overdrive.REAP_CRAWL_ALLOWANCE_FLOOR,
+        listed = overdrive_identifiers("id-one", "id-two")
+        mock_crawl(
+            mock_api_class,
+            product_page(
+                listed=listed,
+                total_items=len(listed) + overdrive.REAP_CRAWL_ALLOWANCE_FLOOR,
+            ),
         )
 
         result = overdrive.reap_collection.delay(collection.id).wait()
 
         assert result is not None
-        assert IdentifierSet(redis_fixture.client, result["key"]).get() == set(active)
+        assert IdentifierSet(redis_fixture.client, result["key"]).get() == set(listed)
+
+    @pytest.mark.parametrize(
+        "crawled,total_items,expected",
+        [
+            pytest.param(1_000, None, False, id="totalItems missing"),
+            pytest.param(1_000, 1_000, True, id="exact match"),
+            pytest.param(0, 5, True, id="floor covers a tiny collection"),
+            pytest.param(0, 100, False, id="shortfall beyond the floor"),
+            pytest.param(4_000_000 - 400, 4_000_000, True, id="churn within the cap"),
+            pytest.param(
+                4_000_000 - 2_000, 4_000_000, False, id="a lost page is not excused"
+            ),
+        ],
+    )
+    def test_crawl_is_complete(
+        self, crawled: int, total_items: int | None, expected: bool
+    ):
+        """The allowance absorbs churn during a crawl, but never a whole lost page.
+
+        It is capped because the churn it exists for does not scale with collection
+        size, while a proportional allowance does: 0.1% of a 4M-title collection would
+        be two full pages, so a crawl that silently dropped one would be accepted and
+        those titles reaped.
+        """
+        assert (
+            overdrive._crawl_is_complete(
+                MagicMock(), "collection name", crawled, total_items
+            )
+            is expected
+        )
+
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
+    def test_reap_collection_marks_titles_overdrive_no_longer_owns(
+        self,
+        mock_api_class: MagicMock,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        redis_fixture: RedisFixture,
+    ):
+        """Weeded titles are marked from Overdrive's flag, not from their absence.
+
+        Overdrive keeps weeded and expired titles in the product list, flagged
+        `isOwnedByCollections: false`. That is a statement that the title is gone, so
+        it is acted on directly rather than inferred from a set difference.
+        """
+        collection = overdrive_api_fixture.collection
+        overdrive_pool(db, collection, "id-weeded")
+        overdrive_pool(db, collection, "id-available")
+        already_gone = overdrive_pool(db, collection, "id-already-gone")
+        already_gone.licenses_owned = already_gone.licenses_available = 0
+        db.session.flush()
+
+        listed = overdrive_identifiers("id-weeded", "id-available", "id-already-gone")
+        mock_crawl(
+            mock_api_class,
+            product_page(
+                listed=listed,
+                unowned=overdrive_identifiers("id-weeded", "id-already-gone"),
+                total_items=3,
+            ),
+        )
+
+        with patch.object(identifiers, "circulation_apply") as mock_apply:
+            result = overdrive.reap_collection.delay(collection.id).wait()
+
+        # Only the weeded title we still record as available is marked. The one that is
+        # already unavailable is left alone, so the titles Overdrive goes on listing as
+        # unowned do not generate an apply task on every pass.
+        mock_apply.delay.assert_called_once()
+        circulation = mock_apply.delay.call_args.kwargs["circulation"]
+        assert circulation.primary_identifier_data.identifier == "id-weeded"
+        assert circulation.licenses_owned == 0
+        assert circulation.licenses_available == 0
+        assert circulation.status == LicensePoolStatus.EXHAUSTED
+
+        # Unowned titles stay in the returned set, so the chord's set difference does
+        # not mark them a second time.
+        assert IdentifierSet(redis_fixture.client, result["key"]).get() == set(listed)
+
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
+    def test_reap_collection_marks_unowned_titles_on_an_incomplete_crawl(
+        self,
+        mock_api_class: MagicMock,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        redis_fixture: RedisFixture,
+    ):
+        """A crawl that cannot be verified still marks what Overdrive stated outright.
+
+        Only the half that acts on absence needs a complete crawl.
+        """
+        collection = overdrive_api_fixture.collection
+        overdrive_pool(db, collection, "id-weeded")
+        weeded = overdrive_identifiers("id-weeded")
+        mock_crawl(
+            mock_api_class,
+            product_page(listed=weeded, unowned=weeded, total_items=5000),
+        )
+
+        with patch.object(identifiers, "circulation_apply") as mock_apply:
+            result = overdrive.reap_collection.delay(collection.id).wait()
+
+        assert result is None
+        mock_apply.delay.assert_called_once()
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
     def test_reap_collection_skips_collection_marked_for_deletion(

@@ -1,16 +1,21 @@
+from collections.abc import Iterable
 from functools import partial
+from logging import Logger
 
 from celery import shared_task
 from celery.canvas import Signature, chord
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import raiseload
+from sqlalchemy.sql import Select
 
 from palace.util.exceptions import PalaceValueError
+from palace.util.log import LoggerAdapterType
 
 from palace.manager.celery.task import Task
 from palace.manager.celery.tasks.apply import circulation_apply
 from palace.manager.celery.utils import load_from_id, validate_not_none
 from palace.manager.data_layer.circulation import CirculationData
+from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.set import (
     IdentifierSet,
@@ -25,16 +30,86 @@ from palace.manager.sqlalchemy.model.licensing import (
 )
 
 
+def available_identifiers_query(collection_id: int) -> Select:
+    """
+    Select the identifiers in a collection whose license pools are currently available.
+
+    A pool is considered available if it is an UNLIMITED pool with ACTIVE status,
+    or a metered/aggregated pool with non-zero owned and available license counts.
+    UNLIMITED pools always have licenses_owned and licenses_available set to 0,
+    so they need to be matched on status instead.
+
+    Callers that only care about particular identifiers can narrow the returned
+    query further, which is how a distributor that reports its own removals checks
+    whether a title it has flagged is still available to us.
+
+    No relationships are loaded: callers want the identifiers themselves, and the
+    query is run over whole collections.
+    """
+    return (
+        select(Identifier)
+        .options(raiseload("*"))
+        .join(LicensePool)
+        .where(
+            LicensePool.collection_id == collection_id,
+            or_(
+                and_(
+                    LicensePool.type == LicensePoolType.UNLIMITED,
+                    LicensePool.status == LicensePoolStatus.ACTIVE,
+                ),
+                and_(
+                    LicensePool.type != LicensePoolType.UNLIMITED,
+                    LicensePool.licenses_available != 0,
+                    LicensePool.licenses_owned != 0,
+                ),
+            ),
+        )
+    )
+
+
+def queue_unavailable_updates(
+    identifiers: Iterable[IdentifierData],
+    *,
+    collection_id: int,
+    collection_name: str,
+    data_source_name: str,
+    status: LicensePoolStatus,
+    log: Logger | LoggerAdapterType,
+) -> int:
+    """
+    Queue a `circulation_apply` task for each identifier, zeroing out its licenses.
+
+    :param status: The status to record on the affected license pools.
+    :return: The number of tasks queued.
+    """
+    create_circulation_data = partial(
+        CirculationData,
+        data_source_name=data_source_name,
+        licenses_owned=0,
+        licenses_available=0,
+        status=status,
+    )
+    queued = 0
+    for identifier in identifiers:
+        log.info(
+            f"Marking identifier {identifier} as unavailable in collection "
+            f"{collection_name} ({collection_id})"
+        )
+        circulation_apply.delay(
+            circulation=create_circulation_data(primary_identifier_data=identifier),
+            collection_id=collection_id,
+        )
+        queued += 1
+    return queued
+
+
 @shared_task(queue=QueueNames.default, bind=True)
 def existing_available_identifiers(task: Task, collection_id: int) -> IdentifierSet:
     """
     Retrieves all identifiers in the specified collection whose license pools are
     currently available, returning them as a Redis IdentifierSet.
 
-    A pool is considered available if it is an UNLIMITED pool with ACTIVE status,
-    or a metered/aggregated pool with non-zero owned and available license counts.
-    UNLIMITED pools always have licenses_owned and licenses_available set to 0,
-    so they need to be matched on status instead.
+    See `available_identifiers_query` for what counts as available.
 
     This function is designed to be used as part of a chord operation that identifies and
     marks identifiers not present in a distributor's feed as unavailable.
@@ -47,25 +122,7 @@ def existing_available_identifiers(task: Task, collection_id: int) -> Identifier
 
     try:
         with task.session() as session:
-            identifiers_query = (
-                select(Identifier)
-                .join(LicensePool)
-                .where(
-                    LicensePool.collection_id == collection_id,
-                    or_(
-                        and_(
-                            LicensePool.type == LicensePoolType.UNLIMITED,
-                            LicensePool.status == LicensePoolStatus.ACTIVE,
-                        ),
-                        and_(
-                            LicensePool.type != LicensePoolType.UNLIMITED,
-                            LicensePool.licenses_available != 0,
-                            LicensePool.licenses_owned != 0,
-                        ),
-                    ),
-                )
-                .options(raiseload("*"))
-            )
+            identifiers_query = available_identifiers_query(collection_id)
 
             for identifiers in (
                 session.execute(identifiers_query).yield_per(100).scalars().partitions()
@@ -148,26 +205,16 @@ def mark_identifiers_unavailable(
             ).name
             collection_name = collection.name
 
-        create_circulation_data = partial(
-            CirculationData,
+        queued = queue_unavailable_updates(
+            existing_identifiers - active_identifiers,
+            collection_id=collection_id,
+            collection_name=collection_name,
             data_source_name=data_source_name,
-            licenses_owned=0,
-            licenses_available=0,
             status=status,
+            log=task.log,
         )
-        identifiers_to_mark = existing_identifiers - active_identifiers
-        for identifier in identifiers_to_mark:
-            task.log.info(
-                f"Marking identifier {identifier} as unavailable in collection {collection_name} ({collection_id})"
-            )
-            circulation_apply.delay(
-                circulation=create_circulation_data(primary_identifier_data=identifier),
-                collection_id=collection_id,
-            )
 
-        task.log.info(
-            f"Sent tasks to mark {len(identifiers_to_mark)} identifiers as unavailable"
-        )
+        task.log.info(f"Sent tasks to mark {queued} identifiers as unavailable")
         return True
     finally:
         existing_identifiers.delete()

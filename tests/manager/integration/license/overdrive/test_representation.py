@@ -183,20 +183,19 @@ class TestOverdriveRepresentationExtractor:
         # Status should be EXHAUSTED since licenses_owned is 0
         assert LicensePoolStatus.EXHAUSTED == data.status
 
-    def test_book_info_to_circulation_no_ownership_data(
+    def test_book_info_to_circulation_not_owned(
         self, overdrive_api_fixture: OverdriveAPIFixture
     ):
-        """
-        Test that status is None when we don't have ownership information.
+        """A title Overdrive reports as no longer owned has no copies.
 
-        This test case is here since its possible for this to happen the way
-        the code is currently written, but it's not a situation that I have observed
-        in the wild.
+        Overdrive keeps weeded and expired titles in a collection's responses flagged
+        `isOwnedByCollections: false`, so the flag states that the collection holds no
+        copies. Treating it as missing data instead would leave the title on the shelf
+        indefinitely, since nothing else about the document says it is gone.
         """
         fixture = overdrive_api_fixture
         extractor = OverdriveRepresentationExtractor(fixture.api)
 
-        # isOwnedByCollections=False means the collection does not own this book.
         availability = Availability.model_validate(
             {
                 "reserveId": "test-id-12345",
@@ -206,11 +205,10 @@ class TestOverdriveRepresentationExtractor:
 
         data = extractor.book_info_to_circulation(availability)
 
-        # When we don't own the book and there's no error, licenses_owned is None
-        assert data.licenses_owned is None
-        assert data.licenses_available is None
-        # Status should also be None when we don't have ownership information
-        assert data.status is None
+        assert data.licenses_owned == 0
+        assert data.licenses_available == 0
+        assert data.patrons_in_hold_queue == 0
+        assert data.status == LicensePoolStatus.EXHAUSTED
 
     def test_book_info_with_metadata(self, overdrive_api_fixture: OverdriveAPIFixture):
         # Tests that can convert an overdrive json block into a Metadata object.

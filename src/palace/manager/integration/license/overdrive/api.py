@@ -12,6 +12,7 @@ from urllib.parse import urlsplit
 
 import flask
 from celery.canvas import Signature
+from httpx import Headers
 from pydantic import ValidationError
 from requests import Response
 from requests.structures import CaseInsensitiveDict
@@ -124,7 +125,7 @@ from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util import base64
 from palace.manager.util.http.async_http import WORKER_DEFAULT_BACKOFF, AsyncClient
-from palace.manager.util.http.exception import BadResponseException
+from palace.manager.util.http.exception import BadResponseException, ResponseData
 from palace.manager.util.http.http import HTTP, RequestKwargs
 
 
@@ -142,20 +143,25 @@ class BookInfoEndpoint:
 class ProductPage:
     """One page of a collection's product list, as consumed by the reaper.
 
-    :param active: Identifiers for the titles on this page that the collection still
-        owns. Titles Overdrive reports as no longer owned are excluded, so they fall
-        out of the reaper's active set and are reaped like titles that left the feed
-        entirely.
-    :param seen: How many products the page contained, owned or not. Accumulated
-        across pages and compared against ``total_items`` to detect a truncated crawl.
+    :param listed: Identifiers for every title on the page, owned or not. The
+        reaper's set difference is taken against these, so a title Overdrive still
+        lists is never reaped for being absent -- if it is no longer owned it is
+        marked from ``unowned`` instead.
+    :param unowned: The subset of ``listed`` that Overdrive flags
+        ``isOwnedByCollections: false``. Overdrive keeps weeded and expired titles in
+        the product list rather than dropping them, so this is direct evidence that a
+        title is gone, as opposed to the inference drawn from an identifier's absence.
     :param total_items: Overdrive's count of the whole result set.
-    :param next_page: The following page, or None once the crawl is complete.
+    :param offset: Where this page starts in the result set, as echoed by Overdrive.
+    :param limit: The page size Overdrive applied, which may be smaller than the one
+        requested.
     """
 
-    active: tuple[IdentifierData, ...]
-    seen: int
+    listed: tuple[IdentifierData, ...]
+    unowned: tuple[IdentifierData, ...]
     total_items: int | None
-    next_page: BookInfoEndpoint | None
+    offset: int
+    limit: int
 
 
 class OverdriveAPI(
@@ -240,7 +246,7 @@ class OverdriveAPI(
 
     COLLECTION_PRODUCTS_ENDPOINT = (
         f"{HOST_ENDPOINT_BASE}/v1/collections/%(collection_token)s/products"
-        "?limit=%(limit)s&sort=%(sort)s"
+        "?limit=%(limit)s&offset=%(offset)s&sort=%(sort)s"
     )
 
     METADATA_ENDPOINT_BASE = "/v1/collections/%(collection_token)s/products"
@@ -276,13 +282,15 @@ class OverdriveAPI(
     # nothing but ids, so the response stays manageable.
     PRODUCTS_PAGE_SIZE_LIMIT = 2000
 
-    # Sorting the reaper's crawl by an immutable field keeps offset pagination
-    # stable. Overdrive's `next` links are offset-based, so under the default
-    # ordering a title whose metadata changes mid-crawl can shift position and
-    # slide past the cursor -- and a title the crawl never sees is
-    # indistinguishable from one that left the collection. dateAdded never
-    # changes, and sorting it ascending puts newly added titles beyond the
-    # cursor instead of shifting everything behind them.
+    # The reaper's crawl pages through offsets, so it needs an ordering that does
+    # not shift under it. Ties cannot be broken from here: Overdrive rejects every
+    # unique sort key (`id`, `reserveId` and `crossRefId` all return 400) and accepts
+    # a second sort key only to ignore it. dateAdded is heavily tied, too -- a bulk
+    # load can put thousands of titles on one value. Overdrive does resolve those ties
+    # consistently: the same offsets return the same titles across repeated requests,
+    # across page sizes, and across whole crawls. dateAdded is also immutable, so
+    # nothing the crawl reads can move a title from one position to another mid-run.
+    # See `next_product_page` for titles removed mid-crawl.
     PRODUCTS_CRAWL_SORT = "dateAdded:asc"
 
     EVENT_SOURCE = "Overdrive"
@@ -747,15 +755,16 @@ class OverdriveAPI(
 
         return BookInfoEndpoint(endpoint)
 
-    def product_page_initial_endpoint(
-        self, page_size: int | None = None
+    def product_page_endpoint(
+        self, offset: int = 0, page_size: int | None = None
     ) -> BookInfoEndpoint:
-        """Create the first-page url for a full crawl of the collection's products.
+        """Create the url for one page of a full crawl of the collection's products.
 
         Unlike :meth:`book_info_initial_endpoint` this is not filtered by update
         time: the reaper needs every title the collection currently holds, not only
         those that changed recently.
 
+        :param offset: Index of the first title the page should return.
         :param page_size: Titles per page. Capped at
             :attr:`PRODUCTS_PAGE_SIZE_LIMIT`, which is also the default.
         """
@@ -765,9 +774,42 @@ class OverdriveAPI(
             self.COLLECTION_PRODUCTS_ENDPOINT,
             collection_token=self.collection_token,
             limit=str(min(page_size, self.PRODUCTS_PAGE_SIZE_LIMIT)),
+            offset=str(offset),
             sort=self.PRODUCTS_CRAWL_SORT,
         )
         return BookInfoEndpoint(_make_link_safe(url))
+
+    def next_product_page(self, page: ProductPage) -> BookInfoEndpoint | None:
+        """The next page of a reaper crawl, or None once the collection is covered.
+
+        The crawl walks the product list *backwards*: the first page is fetched at
+        offset 0 to learn ``totalItems``, and from there each page steps back one
+        page-length until the start of the list is reached.
+
+        Walking forwards -- following Overdrive's ``next`` links -- would lose a
+        title every time one was removed mid-crawl. Removing a title shifts every
+        title behind it down one position, so the title sitting at the next page's
+        starting offset is never returned, and a title the crawl never saw is
+        indistinguishable from one that left the collection. Walking backwards, a
+        removal below the cursor can only shift a not-yet-crawled title further into
+        the region still being walked, and a removal above it cannot move that region
+        at all: titles are re-seen at worst, never skipped. The last page overlaps the
+        first, which is harmless because the identifiers are collected into a set.
+
+        :param page: The page just fetched.
+        """
+        if page.total_items is None or page.limit <= 0:
+            # Nothing to page with. The caller's completeness check refuses a crawl
+            # that cannot be shown to have covered the collection.
+            return None
+        if page.offset == 0:
+            if page.total_items <= page.limit:
+                return None
+            return self.product_page_endpoint(page.total_items - page.limit)
+        if page.offset <= page.limit:
+            # The first page already covered everything below this one.
+            return None
+        return self.product_page_endpoint(page.offset - page.limit)
 
     def fetch_product_page(self, endpoint: BookInfoEndpoint) -> ProductPage:
         """Fetch a single page of the collection's product list.
@@ -782,38 +824,49 @@ class OverdriveAPI(
         the identifiers in the database.
 
         :param endpoint: The page to fetch.
-        :return: The page's owned identifiers, product count, result-set size and
-            next page.
+        :raise BadResponseException: If Overdrive returns anything but a 200.
+        :return: The page's identifiers, the unowned subset, and the paging fields
+            needed to walk the rest of the crawl.
         """
-        status_code, _, content = self.get(endpoint.url)
+        status_code, headers, content = self.get(endpoint.url)
         if status_code != 200:
-            # Left to the caller's completeness check rather than raised here: a
-            # short page and a missing totalItems both surface there as "crawl
-            # could not be verified", which is the outcome either way.
-            self.log.error(
-                "Unexpected status code %s fetching Overdrive product page %s",
-                status_code,
+            # This endpoint returns the occasional transient 404, which self.get()
+            # allows through. Raising a retryable error lets the page be retried
+            # rather than discarding a crawl that may have been running for hours.
+            raise BadResponseException(
                 endpoint.url,
+                f"Unexpected status code {status_code} fetching Overdrive product page.",
+                ResponseData(
+                    status_code=status_code,
+                    url=endpoint.url,
+                    headers=Headers(headers),
+                    text=content.decode("utf-8", errors="replace"),
+                    content=content,
+                    extensions={},
+                ),
             )
         data = json.loads(content)
 
         products = data.get("products") or []
-        active = tuple(
+        listed = tuple(
             IdentifierData(
                 type=Identifier.OVERDRIVE_ID, identifier=product["id"].lower()
             )
             for product in products
-            # A title Overdrive still lists but no longer owns is as gone as one
-            # that left the feed, so it is left out of the active set.
-            if product.get("isOwnedByCollections") is not False
         )
-        next_url = OverdriveRepresentationExtractor.link(data, self.NEXT_REL)
+        unowned = tuple(
+            identifier
+            for identifier, product in zip(listed, products)
+            if product.get("isOwnedByCollections") is False
+        )
 
         return ProductPage(
-            active=active,
-            seen=len(products),
+            listed=listed,
+            unowned=unowned,
             total_items=data.get("totalItems"),
-            next_page=BookInfoEndpoint(next_url) if next_url else None,
+            offset=data.get("offset") or 0,
+            # Overdrive caps the page size it applies, and echoes what it used.
+            limit=data.get("limit") or len(products),
         )
 
     async def fetch_book_info_list(

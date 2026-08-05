@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, create_autospec, patch
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
@@ -39,6 +40,7 @@ from palace.manager.integration.license.overdrive.api import (
     BookInfoEndpoint,
     OverdriveAPI,
     OverdriveToken,
+    ProductPage,
 )
 from palace.manager.integration.license.overdrive.constants import OverdriveConstants
 from palace.manager.integration.license.overdrive.exception import (
@@ -101,24 +103,102 @@ class TestOverdriveAPI:
         )
         assert result == mock_chord.return_value
 
-    def test_product_page_initial_endpoint(
+    def test_product_page_endpoint(
         self, overdrive_api_fixture: OverdriveAPIFixture
     ) -> None:
-        endpoint = overdrive_api_fixture.api.product_page_initial_endpoint()
+        endpoint = overdrive_api_fixture.api.product_page_endpoint()
 
         assert "/v1/collections/fake%20collection%20token/products" in endpoint.url
         assert f"limit={OverdriveAPI.PRODUCTS_PAGE_SIZE_LIMIT}" in endpoint.url
+        assert "offset=0" in endpoint.url
         # _make_link_safe escapes the colon in the sort value; Overdrive accepts
         # either form.
         assert "sort=dateAdded%3Aasc" in endpoint.url
 
-    def test_product_page_initial_endpoint_caps_page_size(
+        offset_endpoint = overdrive_api_fixture.api.product_page_endpoint(4000)
+        assert "offset=4000" in offset_endpoint.url
+
+    def test_product_page_endpoint_caps_page_size(
         self, overdrive_api_fixture: OverdriveAPIFixture
     ) -> None:
-        endpoint = overdrive_api_fixture.api.product_page_initial_endpoint(
-            page_size=100_000
-        )
+        endpoint = overdrive_api_fixture.api.product_page_endpoint(page_size=100_000)
         assert f"limit={OverdriveAPI.PRODUCTS_PAGE_SIZE_LIMIT}" in endpoint.url
+
+    @pytest.mark.parametrize(
+        "offset,limit,total_items,expected_offset",
+        [
+            pytest.param(0, 2000, 1500, None, id="first page covers the collection"),
+            pytest.param(
+                0, 2000, 2000, None, id="first page is exactly the collection"
+            ),
+            pytest.param(0, 2000, 5000, 3000, id="first page jumps to the end"),
+            pytest.param(3000, 2000, 5000, 1000, id="walks backwards"),
+            pytest.param(1000, 2000, 5000, None, id="stops inside the first page"),
+            pytest.param(2000, 2000, 5000, None, id="stops at the first page boundary"),
+            pytest.param(0, 2000, None, None, id="no totalItems to walk with"),
+            pytest.param(0, 0, 5000, None, id="no limit to walk with"),
+        ],
+    )
+    def test_next_product_page(
+        self,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        offset: int,
+        limit: int,
+        total_items: int | None,
+        expected_offset: int | None,
+    ) -> None:
+        page = ProductPage(
+            listed=(), unowned=(), total_items=total_items, offset=offset, limit=limit
+        )
+
+        next_page = overdrive_api_fixture.api.next_product_page(page)
+
+        if expected_offset is None:
+            assert next_page is None
+        else:
+            assert next_page is not None
+            assert f"offset={expected_offset}" in next_page.url
+
+    @pytest.mark.parametrize(
+        "total_items,limit",
+        [
+            pytest.param(1050, 100, id="ragged final page"),
+            pytest.param(1000, 100, id="exact multiple"),
+            pytest.param(100, 100, id="single page"),
+            pytest.param(1, 100, id="single title"),
+            pytest.param(101, 100, id="one title past the first page"),
+        ],
+    )
+    def test_next_product_page_leaves_no_gap(
+        self, overdrive_api_fixture: OverdriveAPIFixture, total_items: int, limit: int
+    ) -> None:
+        """Walking the pages must cover every offset in the collection.
+
+        A gap would be indistinguishable from titles that left the collection, and
+        the reaper would mark them as gone.
+        """
+        api = overdrive_api_fixture.api
+        covered: set[int] = set()
+        offset = 0
+
+        for _ in range(100):
+            covered.update(range(offset, min(offset + limit, total_items)))
+            next_page = api.next_product_page(
+                ProductPage(
+                    listed=(),
+                    unowned=(),
+                    total_items=total_items,
+                    offset=offset,
+                    limit=limit,
+                )
+            )
+            if next_page is None:
+                break
+            offset = int(parse_qs(urlsplit(next_page.url).query)["offset"][0])
+        else:
+            pytest.fail("The crawl never reached the start of the collection.")
+
+        assert covered == set(range(total_items))
 
     def test_fetch_product_page(
         self, overdrive_api_fixture: OverdriveAPIFixture
@@ -130,25 +210,28 @@ class TestOverdriveAPI:
             BookInfoEndpoint("http://products/")
         )
 
-        # Every product on the page is counted, whether or not it is still owned,
-        # because the count is what gets checked against totalItems.
-        assert page.seen == len(raw["products"]) == 3
+        # Every product on the page is listed, whether or not it is still owned: a
+        # title Overdrive still returns is never reaped for being absent.
+        assert len(page.listed) == len(raw["products"]) == 3
         assert page.total_items == raw["totalItems"]
-        assert page.next_page is not None
-        assert page.next_page.url == raw["links"]["next"]["href"]
 
-        # The title Overdrive no longer owns is left out of the active set, so it is
-        # reaped alongside titles that dropped out of the feed entirely.
+        # The title Overdrive no longer owns is reported separately, so it can be
+        # marked from Overdrive's own flag rather than inferred from its absence.
         not_owned = [
             p["id"] for p in raw["products"] if p.get("isOwnedByCollections") is False
         ]
         assert len(not_owned) == 1
-        assert len(page.active) == 2
-        assert not_owned[0].lower() not in {i.identifier for i in page.active}
+        assert {i.identifier for i in page.unowned} == {not_owned[0].lower()}
+        assert set(page.unowned) <= set(page.listed)
 
-    def test_fetch_product_page_last_page(
+    def test_fetch_product_page_reads_paging_from_response(
         self, overdrive_api_fixture: OverdriveAPIFixture
     ) -> None:
+        """The crawl pages by offset, so it uses the values Overdrive echoes back.
+
+        Overdrive caps the page size it applies, so the requested limit is not
+        necessarily the one that was used.
+        """
         data, raw = overdrive_api_fixture.sample_json(
             "overdrive_product_page_last.json"
         )
@@ -158,9 +241,33 @@ class TestOverdriveAPI:
             BookInfoEndpoint("http://products/")
         )
 
-        assert "next" not in raw["links"]
-        assert page.next_page is None
-        assert page.seen == 2
+        assert page.offset == raw["offset"] == 38432
+        assert page.limit == raw["limit"] == 2
+        assert len(page.listed) == 2
+        assert page.unowned == ()
+
+    def test_fetch_product_page_raises_on_error_status(
+        self, overdrive_api_fixture: OverdriveAPIFixture
+    ) -> None:
+        """A bad response is raised, not parsed.
+
+        Overdrive returns the occasional transient 404 here, and `get` lets 404
+        through. BadResponseException is in the reap task's `autoretry_for`, so the
+        page is retried rather than a crawl of several hours being thrown away on one
+        blip -- and a non-JSON error body no longer kills the task outright.
+        """
+        overdrive_api_fixture.mock_http.queue_response(
+            404, content=b"<html>not json</html>"
+        )
+
+        with pytest.raises(BadResponseException) as excinfo:
+            overdrive_api_fixture.api.fetch_product_page(
+                BookInfoEndpoint("http://products/")
+            )
+
+        assert "Unexpected status code 404" in str(excinfo.value)
+        assert excinfo.value.response.status_code == 404
+        assert BadResponseException in overdrive_celery.reap_collection.autoretry_for
 
     def test_fetch_product_page_normalizes_identifier_case(
         self,
@@ -187,12 +294,10 @@ class TestOverdriveAPI:
         )
 
         for product in raw["products"]:
-            if product.get("isOwnedByCollections") is False:
-                continue
             identifier, _ = Identifier.for_foreign_id(
                 db.session, Identifier.OVERDRIVE_ID, product["id"]
             )
-            assert IdentifierData.from_identifier(identifier) in page.active
+            assert IdentifierData.from_identifier(identifier) in page.listed
 
     def test_patron_activity_exception_collection_none(
         self,
