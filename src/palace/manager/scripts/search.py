@@ -2,7 +2,7 @@ import argparse
 
 from sqlalchemy.orm import Session
 
-from palace.manager.celery.tasks.search import get_migrate_search_chain, search_reindex
+from palace.manager.celery.tasks.search import search_reindex
 from palace.manager.scripts.base import Script
 from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.service.container import Services
@@ -23,7 +23,6 @@ class RebuildSearchIndexScript(Script):
         args = self.parse_command_line(self._db, cmd_args=cmd_args)
         self.blocking: bool = args.blocking
         self.delete: bool = args.delete
-        self.migration: bool = args.migration
 
     @classmethod
     def arg_parser(cls, _db: Session) -> argparse.ArgumentParser:
@@ -42,12 +41,6 @@ class RebuildSearchIndexScript(Script):
             action="store_true",
             help="Delete the search index before rebuilding.",
         )
-        parser.add_argument(
-            "-m",
-            "--migration",
-            action="store_true",
-            help="Treat as a migration and update the read pointer after the rebuild is complete.",
-        )
         return parser
 
     def do_run(self) -> None:
@@ -58,10 +51,7 @@ class RebuildSearchIndexScript(Script):
 
         self.log.info("Rebuilding search index.")
 
-        if self.migration:
-            rebuild_task = get_migrate_search_chain()
-        else:
-            rebuild_task = search_reindex.s()
+        rebuild_task = search_reindex.s()
 
         if self.blocking:
             rebuild_task()

@@ -40,17 +40,3 @@ class TestRebuildSearchIndexScript:
         RebuildSearchIndexScript(db.session, cmd_args=["--delete"]).do_run()
         services_fixture.search_index.clear_search_documents.assert_called_once_with()
         mock_search_reindex.s.return_value.delay.assert_called_once_with()
-
-    @patch("palace.manager.scripts.search.get_migrate_search_chain")
-    def test_do_run_migration(
-        self, mock_get_migrate_search_chain: MagicMock, db: DatabaseTransactionFixture
-    ):
-        # If we are called with the --migration argument, we treat the reindex as completing a migration.
-        RebuildSearchIndexScript(db.session, cmd_args=["--migration"]).do_run()
-        mock_get_migrate_search_chain.return_value.delay.assert_called_once_with()
-
-        # We can also combine --blocking and --migration.
-        RebuildSearchIndexScript(
-            db.session, cmd_args=["--migration", "--blocking"]
-        ).do_run()
-        mock_get_migrate_search_chain.return_value.assert_called_once_with()

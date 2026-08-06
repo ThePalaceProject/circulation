@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from palace.util.log import LoggerMixin
 
-from palace.manager.celery.tasks.search import get_migrate_search_chain
+from palace.manager.celery.tasks.search import search_reindex
 from palace.manager.scripts.startup import run_startup_tasks as _run_startup_tasks
 from palace.manager.search.revision import SearchSchemaRevision
 from palace.manager.search.service import SearchService
@@ -126,10 +126,11 @@ class InstanceInitializationScript(LoggerMixin):
     ) -> None:
         # The revision is not the most recent. We need to create a new index.
         # and start reindexing our data into it asynchronously. When the reindex
-        # is complete, we will switch the read pointer to the new index.
+        # is complete, we will switch the read pointer to the new index. The normal
+        # search_reindex task handles this transition.
         cls.logger().info(f"Creating a new index for revision (v{revision.version}).")
         cls.create_search_index(service, revision)
-        task = get_migrate_search_chain().apply_async()
+        task = search_reindex.apply_async()
         cls.logger().info(
             f"Task queued to index data into new search index (Task ID: {task.id})."
         )
@@ -153,9 +154,9 @@ class InstanceInitializationScript(LoggerMixin):
             self.migrate_search(service, revision)
         elif read_pointer.version < revision.version:
             self.log.info(
-                f"Search read pointer is out-of-date (v{read_pointer.version}). Latest is v{revision.version}."
-                f"This likely means that the reindexing task is in progress. If there is no reindexing task "
-                f"running, you may need to repair the search index."
+                f"Search read pointer is out-of-date (v{read_pointer.version}). Latest is v{revision.version}. "
+                f"This likely means that the reindexing task is in progress. The first run to complete a "
+                f"full pass over the new index will publish it for reads."
             )
         elif (
             read_pointer.version > revision.version

@@ -1,26 +1,28 @@
 import json
 import math
 from collections import Counter
+from collections.abc import Sequence
+from typing import Any
 from unittest.mock import MagicMock, call, patch
 
 import pytest
 from celery.exceptions import MaxRetriesExceededError
 from opensearchpy import OpenSearchException
-
-from palace.util.exceptions import BasePalaceException
+from sqlalchemy.orm import Session
 
 from palace.manager.celery.tasks.search import (
-    get_migrate_search_chain,
-    get_work_search_documents,
+    get_presentation_ready_work_ids,
     index_works,
     search_indexing,
     search_reindex,
-    update_read_pointer,
 )
 from palace.manager.scripts.initialization import InstanceInitializationScript
+from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.search.filter import Filter
+from palace.manager.search.service import SearchPointer
 from palace.manager.service.redis.models.lock import LockNotAcquired, TaskLock
 from palace.manager.service.redis.models.search import WaitingForIndexing
+from palace.manager.sqlalchemy.model.work import Work
 from tests.fixtures.celery import CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.redis import RedisFixture
@@ -46,21 +48,44 @@ def search_reindex_task_lock_fixture(redis_fixture: RedisFixture):
     return SearchReindexTaskLockFixture(redis_fixture)
 
 
-def test_get_work_search_documents(db: DatabaseTransactionFixture) -> None:
+@pytest.fixture
+def mock_search_pointers(
+    services_fixture: ServicesFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    Point the mocked search service at a single index at the latest revision.
+    """
+    base_name = "test_index"
+    revision = MockSearchSchemaRevisionLatest(42)
+    index = revision.name_for_index(base_name)
+
+    # The services fixture resets return values between tests, but not attributes we
+    # assign directly, so base_revision_name is set through monkeypatch.
+    monkeypatch.setattr(
+        services_fixture.search_service, "base_revision_name", base_name
+    )
+    services_fixture.search_revision_directory.highest.return_value = revision
+    services_fixture.search_service.read_pointer.return_value = SearchPointer(
+        alias=f"{base_name}-search-read", index=index, version=revision.version
+    )
+    services_fixture.search_service.write_pointer.return_value = SearchPointer(
+        alias=f"{base_name}-search-write", index=index, version=revision.version
+    )
+
+
+def test_get_presentation_ready_work_ids(db: DatabaseTransactionFixture) -> None:
     work1 = db.work(with_open_access_download=True)
     work2 = db.work(with_open_access_download=True)
     # This work is not presentation ready, because it has no open access download.
     work3 = db.work(with_open_access_download=False)
     work4 = db.work(with_open_access_download=True)
 
-    documents = get_work_search_documents(db.session, 2, 0)
-    assert {doc["_id"] for doc in documents} == {work1.id, work2.id}
-
-    documents = get_work_search_documents(db.session, 2, 2)
-    assert {doc["_id"] for doc in documents} == {work4.id}
-
-    documents = get_work_search_documents(db.session, 2, 4)
-    assert documents == []
+    assert set(get_presentation_ready_work_ids(db.session, 2, 0)) == {
+        work1.id,
+        work2.id,
+    }
+    assert set(get_presentation_ready_work_ids(db.session, 2, 2)) == {work4.id}
+    assert get_presentation_ready_work_ids(db.session, 2, 4) == []
 
 
 @pytest.mark.parametrize("batch_size", [2, 3, 500])
@@ -112,6 +137,43 @@ def test_search_reindex(
     end_to_end_search_fixture.expect_results([work1, work2, work4], "", ordered=False)
 
 
+@patch("palace.manager.celery.tasks.search.random")
+def test_search_reindex_indexes_the_works_after_one_that_cannot_be_indexed(
+    mock_random: MagicMock,
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+    search_reindex_task_lock_fixture: SearchReindexTaskLockFixture,
+    end_to_end_search_fixture: EndToEndSearchFixture,
+) -> None:
+    # Work.to_search_documents drops a work whose document it cannot build, so a full
+    # batch of works arrives as a short batch of documents. The run has to keep paging
+    # anyway: the works after the dropped one are the rest of the collection.
+    mock_random.uniform.return_value = 0.0
+    works = [db.work(with_open_access_download=True) for _ in range(4)]
+
+    to_search_documents = Work.to_search_documents
+    dropped: list[int] = []
+
+    def drop_one_document(
+        session: Session, work_ids: Sequence[int]
+    ) -> Sequence[dict[str, Any]]:
+        documents = to_search_documents(session, work_ids)
+        if not dropped and documents:
+            dropped.append(documents[0]["_id"])
+            return documents[1:]
+        return documents
+
+    # The first batch loses a document, so it has to be a batch that is not the last one.
+    with patch.object(Work, "to_search_documents", drop_one_document):
+        search_reindex.delay(batch_size=2).wait()
+
+    assert len(dropped) == 1
+    end_to_end_search_fixture.external_search.write_client.indices.refresh()
+    end_to_end_search_fixture.expect_results(
+        [work for work in works if work.id != dropped[0]], "", ordered=False
+    )
+
+
 def test_search_reindex_lock(
     db: DatabaseTransactionFixture,
     celery_fixture: CeleryFixture,
@@ -131,8 +193,10 @@ def test_fiction_query_returns_results(
 ) -> None:
     work1 = db.work(with_open_access_download=True, fiction=True)
     work2 = db.work(with_open_access_download=True, fiction=False)
-    documents = get_work_search_documents(db.session, 2, 0)
-    assert {doc["_id"] for doc in documents} == {work2.id, work1.id}
+    assert set(get_presentation_ready_work_ids(db.session, 2, 0)) == {
+        work2.id,
+        work1.id,
+    }
 
     end_to_end_search_fixture.populate_search_index()
     end_to_end_search_fixture.expect_results(
@@ -162,6 +226,7 @@ def test_search_reindex_failures(
     celery_fixture: CeleryFixture,
     search_reindex_task_lock_fixture: SearchReindexTaskLockFixture,
     services_fixture: ServicesFixture,
+    mock_search_pointers: None,
 ):
     # Make sure our backoff function doesn't delay the test.
     mock_backoff.return_value = 0
@@ -193,24 +258,22 @@ def test_search_reindex_failures(
 
 @patch("palace.manager.celery.tasks.search.random.uniform")
 @patch("palace.manager.celery.tasks.search.exponential_backoff")
-@patch("palace.manager.celery.tasks.search.get_work_search_documents")
+@patch("palace.manager.celery.tasks.search.get_presentation_ready_work_ids")
 def test_search_reindex_requeue_delay(
-    mock_get_work_search_documents: MagicMock,
+    mock_get_work_ids: MagicMock,
     mock_backoff: MagicMock,
     mock_random_uniform: MagicMock,
     celery_fixture: CeleryFixture,
     search_reindex_task_lock_fixture: SearchReindexTaskLockFixture,
     services_fixture: ServicesFixture,
+    mock_search_pointers: None,
 ) -> None:
     """Verify that the task requeues with a random delay to avoid hammering the search service."""
     mock_backoff.return_value = 0
     mock_random_uniform.return_value = 0
 
     # Return a full batch to trigger requeueing, then an empty batch to stop
-    mock_get_work_search_documents.side_effect = [
-        [{"_id": 1}, {"_id": 2}],
-        [],
-    ]
+    mock_get_work_ids.side_effect = [[1, 2], []]
 
     # Ensure add_documents succeeds (returns no failed documents)
     services_fixture.search_index.add_documents.return_value = None
@@ -224,32 +287,23 @@ def test_search_reindex_requeue_delay(
 
 @patch("palace.manager.celery.tasks.search.random.uniform")
 @patch("palace.manager.celery.tasks.search.exponential_backoff")
-@patch("palace.manager.celery.tasks.search.get_work_search_documents")
+@patch("palace.manager.celery.tasks.search.get_presentation_ready_work_ids")
 def test_search_reindex_failures_multiple_batch(
-    mock_get_work_search_documents: MagicMock,
+    mock_get_work_ids: MagicMock,
     mock_backoff: MagicMock,
     mock_random_uniform: MagicMock,
     celery_fixture: CeleryFixture,
     search_reindex_task_lock_fixture: SearchReindexTaskLockFixture,
     services_fixture: ServicesFixture,
+    mock_search_pointers: None,
 ):
     # When a batch succeeds, the retry count is reset.
     mock_backoff.return_value = 0
     mock_random_uniform.return_value = 0
-    search_documents = [
-        {"_id": 1},
-        {"_id": 2},
-        {"_id": 3},
-        {"_id": 4},
-        {"_id": 5},
-        {"_id": 6},
-        {"_id": 7},
+    work_ids = [1, 2, 3, 4, 5, 6, 7]
+    mock_get_work_ids.side_effect = lambda session, batch_size, offset: work_ids[
+        offset : offset + batch_size
     ]
-    mock_get_work_search_documents.side_effect = (
-        lambda session, batch_size, offset: search_documents[
-            offset : offset + batch_size
-        ]
-    )
     add_documents_mock = services_fixture.search_index.add_documents
     add_documents_mock.side_effect = [
         # First batch
@@ -273,117 +327,294 @@ def test_search_reindex_failures_multiple_batch(
     assert search_reindex_task_lock_fixture.task_lock.locked() is False
 
 
-def test_update_read_pointer(
+class SearchMigrationFixture:
+    """A search index mid-migration: a new revision exists and the write pointer has
+    moved to it, but the read pointer is still serving the old one."""
+
+    def __init__(
+        self,
+        db: DatabaseTransactionFixture,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+    ):
+        container = end_to_end_search_fixture.external_search.search_container
+        self.client = container.write_client()
+        self.service = container.service()
+        revision_directory = container.revision_directory()
+
+        self.works = [
+            db.work(title=f"Work {x}", with_open_access_download=True)
+            for x in range(10)
+        ]
+        end_to_end_search_fixture.populate_search_index()
+
+        self.old_index = revision_directory.highest().name_for_index(
+            self.service.base_revision_name
+        )
+
+        self.new_revision = MockSearchSchemaRevisionLatest(1010101)
+        self.new_index = self.new_revision.name_for_index(
+            self.service.base_revision_name
+        )
+        available = dict(revision_directory.available)
+        available[self.new_revision.version] = self.new_revision
+        revision_directory._available = available
+
+        InstanceInitializationScript.create_search_index(
+            self.service, self.new_revision
+        )
+
+    def remove_read_pointer(self) -> None:
+        """Leave the index with no read pointer at all, serving no reads."""
+        self.client.indices.update_aliases(
+            body={
+                "actions": [
+                    {
+                        "remove": {
+                            "index": "*",
+                            "alias": self.service.read_pointer_name(),
+                        }
+                    }
+                ]
+            }
+        )
+        assert self.service.read_pointer() is None
+
+    def assert_pointers(self, read: str, write: str) -> None:
+        read_pointer = self.service.read_pointer()
+        write_pointer = self.service.write_pointer()
+        assert read_pointer is not None and read_pointer.index == read
+        assert write_pointer is not None and write_pointer.index == write
+
+
+@pytest.fixture
+def search_migration_fixture(
     db: DatabaseTransactionFixture,
-    celery_fixture: CeleryFixture,
     end_to_end_search_fixture: EndToEndSearchFixture,
 ):
-    client = end_to_end_search_fixture.external_search.write_client
-    service = end_to_end_search_fixture.external_search.service
+    return SearchMigrationFixture(db, end_to_end_search_fixture)
 
-    # Remove the read pointer
-    alias_name = service.read_pointer_name()
-    action = {
-        "actions": [
-            {"remove": {"index": "*", "alias": alias_name}},
-        ]
-    }
-    client.indices.update_aliases(body=action)
 
-    # Verify that the read pointer is gone
-    assert service.read_pointer() is None
+@patch("palace.manager.celery.tasks.search.random.uniform")
+def test_search_reindex_advances_read_pointer(
+    mock_random_uniform: MagicMock,
+    celery_fixture: CeleryFixture,
+    redis_fixture: RedisFixture,
+    search_migration_fixture: SearchMigrationFixture,
+    end_to_end_search_fixture: EndToEndSearchFixture,
+):
+    fixture = search_migration_fixture
+    mock_random_uniform.return_value = 0.0
 
-    # Update the read pointer
-    update_read_pointer.delay().wait()
+    # Creating the new index moves the write pointer but leaves reads on the old index.
+    fixture.assert_pointers(read=fixture.old_index, write=fixture.new_index)
 
-    # Verify that the read pointer is set
-    assert service.read_pointer() is not None
+    # A real migration always takes more than one batch, so use a batch size that makes
+    # the run requeue itself: the index it is filling has to survive the requeues.
+    search_reindex.delay(batch_size=3).wait()
+
+    # Having filled the new index end to end, the reindex publishes it. Nothing had to
+    # chain a second task on to do it.
+    fixture.assert_pointers(read=fixture.new_index, write=fixture.new_index)
+
+    fixture.client.indices.refresh()
+    end_to_end_search_fixture.expect_results(fixture.works, "", ordered=False)
+
+
+def test_search_reindex_advances_read_pointer_when_there_is_none(
+    celery_fixture: CeleryFixture,
+    redis_fixture: RedisFixture,
+    search_migration_fixture: SearchMigrationFixture,
+):
+    fixture = search_migration_fixture
+
+    # An index serving no reads at all is not "already current", so a completed pass
+    # publishes it rather than leaving search with nothing to read from.
+    fixture.remove_read_pointer()
+
+    search_reindex.delay().wait()
+
+    fixture.assert_pointers(read=fixture.new_index, write=fixture.new_index)
+
+
+@patch("palace.manager.celery.tasks.search.random.uniform")
+@patch("palace.manager.celery.tasks.search.exponential_backoff")
+def test_search_reindex_advances_read_pointer_after_a_retried_batch(
+    mock_backoff: MagicMock,
+    mock_random_uniform: MagicMock,
+    celery_fixture: CeleryFixture,
+    redis_fixture: RedisFixture,
+    search_migration_fixture: SearchMigrationFixture,
+):
+    fixture = search_migration_fixture
+    mock_backoff.return_value = 0
+    mock_random_uniform.return_value = 0
+
+    # The index a run is filling has to survive a retry of an already requeued batch, not
+    # just the requeue: a batch at a non-zero offset fails once, retries, and the run
+    # still knows what it filled when it reaches the end.
+    with patch.object(
+        ExternalSearchIndex, "add_documents", autospec=True
+    ) as add_documents:
+        add_documents.side_effect = [None, OpenSearchException(), None, None]
+        search_reindex.delay(batch_size=4).wait()
+
+    assert add_documents.call_count == 4
+    fixture.assert_pointers(read=fixture.new_index, write=fixture.new_index)
+
+
+def test_search_reindex_does_not_advance_read_pointer_for_another_index(
+    celery_fixture: CeleryFixture,
+    redis_fixture: RedisFixture,
+    search_migration_fixture: SearchMigrationFixture,
+):
+    fixture = search_migration_fixture
+
+    # A run that started before the new revision existed has been filling the old index,
+    # so the new one never received a complete pass and must not be published.
+    search_reindex.delay(target_index=fixture.old_index).wait()
+
+    fixture.assert_pointers(read=fixture.old_index, write=fixture.new_index)
+
+
+@pytest.mark.parametrize("write_pointer_removed", [False, True])
+def test_search_reindex_does_not_advance_read_pointer_when_the_write_pointer_moves(
+    celery_fixture: CeleryFixture,
+    redis_fixture: RedisFixture,
+    search_migration_fixture: SearchMigrationFixture,
+    write_pointer_removed: bool,
+):
+    fixture = search_migration_fixture
+    started_on = fixture.service.write_pointer()
+
+    # An instance running a newer revision deploys partway through and aims writes at an
+    # index this run never touched, so the works are split across two indexes and neither
+    # got a complete pass.
+    later_revision = MockSearchSchemaRevisionLatest(1010102)
+    moved_to = (
+        None
+        if write_pointer_removed
+        else SearchPointer(
+            alias=fixture.service.write_pointer_name(),
+            index=later_revision.name_for_index(fixture.service.base_revision_name),
+            version=later_revision.version,
+        )
+    )
+
+    # The run reads the write pointer once on the way in and once at the end.
+    with patch.object(
+        type(fixture.service), "write_pointer", autospec=True
+    ) as write_pointer:
+        write_pointer.side_effect = [started_on, moved_to]
+        search_reindex.delay().wait()
+
+    assert write_pointer.call_count == 2
+    fixture.assert_pointers(read=fixture.old_index, write=fixture.new_index)
 
 
 @patch("palace.manager.celery.tasks.search.exponential_backoff")
-def test_update_read_pointer_failures(
+def test_search_reindex_retries_when_the_write_pointer_cannot_be_read(
     mock_backoff: MagicMock,
     celery_fixture: CeleryFixture,
-    services_fixture: ServicesFixture,
+    redis_fixture: RedisFixture,
+    search_migration_fixture: SearchMigrationFixture,
 ):
-    # Make sure our backoff function doesn't delay the test.
+    fixture = search_migration_fixture
     mock_backoff.return_value = 0
+    started_on = fixture.service.write_pointer()
 
-    read_pointer_set_mock = services_fixture.search_service.read_pointer_set
-    read_pointer_set_mock.side_effect = OpenSearchException()
-    with pytest.raises(MaxRetriesExceededError):
-        update_read_pointer.delay().wait()
-    assert read_pointer_set_mock.call_count == 5
+    # The run can't tell which index it is filling until it reads the write pointer, so a
+    # transient failure there is retried rather than failing the run.
+    with patch.object(
+        type(fixture.service), "write_pointer", autospec=True
+    ) as write_pointer:
+        write_pointer.side_effect = [OpenSearchException(), started_on, started_on]
+        search_reindex.delay().wait()
 
-    read_pointer_set_mock.reset_mock()
-    read_pointer_set_mock.side_effect = [OpenSearchException(), None]
-    update_read_pointer.delay().wait()
-    assert read_pointer_set_mock.call_count == 2
+    fixture.assert_pointers(read=fixture.new_index, write=fixture.new_index)
 
 
-def test_get_migrate_search_chain(
+@patch("palace.manager.celery.tasks.search.exponential_backoff")
+def test_search_reindex_retries_when_the_pointers_cannot_be_read(
+    mock_backoff: MagicMock,
+    celery_fixture: CeleryFixture,
+    redis_fixture: RedisFixture,
+    search_migration_fixture: SearchMigrationFixture,
+):
+    fixture = search_migration_fixture
+    mock_backoff.return_value = 0
+    current_read_pointer = fixture.service.read_pointer()
+
+    # Reading the pointers is the last thing a pass does, after days of work on a large
+    # collection, so a transient failure there is retried rather than losing the run.
+    with patch.object(
+        type(fixture.service), "read_pointer", autospec=True
+    ) as read_pointer:
+        read_pointer.side_effect = [OpenSearchException(), current_read_pointer]
+        search_reindex.delay().wait()
+
+    fixture.assert_pointers(read=fixture.new_index, write=fixture.new_index)
+
+
+@patch("palace.manager.celery.tasks.search.random.uniform")
+@patch("palace.manager.celery.tasks.search.exponential_backoff")
+def test_search_reindex_does_not_advance_read_pointer_when_it_fails(
+    mock_backoff: MagicMock,
+    mock_random_uniform: MagicMock,
+    celery_fixture: CeleryFixture,
+    redis_fixture: RedisFixture,
+    search_migration_fixture: SearchMigrationFixture,
+):
+    fixture = search_migration_fixture
+    mock_backoff.return_value = 0
+    mock_random_uniform.return_value = 0
+
+    # The first batch lands, then the second fails through every retry, so the reindex
+    # dies with the new index partly filled. Reads stay where they were rather than
+    # moving to an index missing half its works.
+    with patch.object(
+        ExternalSearchIndex, "add_documents", autospec=True
+    ) as add_documents:
+        add_documents.side_effect = [None, *([OpenSearchException()] * 5)]
+        with pytest.raises(MaxRetriesExceededError):
+            search_reindex.delay(batch_size=5).wait()
+
+    assert add_documents.call_count == 6
+    fixture.assert_pointers(read=fixture.old_index, write=fixture.new_index)
+
+
+def test_search_reindex_does_not_advance_read_pointer_from_a_resumed_run(
+    celery_fixture: CeleryFixture,
+    redis_fixture: RedisFixture,
+    search_migration_fixture: SearchMigrationFixture,
+):
+    fixture = search_migration_fixture
+
+    # A run started partway through never indexes the works before its offset, so it has
+    # not filled the new index and must not publish it.
+    search_reindex.delay(offset=5).wait()
+
+    fixture.assert_pointers(read=fixture.old_index, write=fixture.new_index)
+
+
+def test_search_reindex_leaves_current_read_pointer_alone(
     db: DatabaseTransactionFixture,
     celery_fixture: CeleryFixture,
-    search_reindex_task_lock_fixture: SearchReindexTaskLockFixture,
+    redis_fixture: RedisFixture,
     end_to_end_search_fixture: EndToEndSearchFixture,
 ):
-    container = end_to_end_search_fixture.external_search.search_container
+    # Outside a migration the read pointer is already at the latest revision, so a
+    # routine reindex has nothing to advance.
+    service = end_to_end_search_fixture.external_search.service
+    db.work(with_open_access_download=True)
+    before = service.read_pointer()
 
-    client = container.write_client()
-    service = container.service()
-    revision_directory = container.revision_directory()
-    revision = revision_directory.highest()
+    with patch.object(
+        type(service), "read_pointer_set", autospec=True
+    ) as read_pointer_set:
+        search_reindex.delay().wait()
 
-    works = [
-        db.work(title=f"Work {x}", with_open_access_download=True) for x in range(10)
-    ]
-
-    end_to_end_search_fixture.populate_search_index()
-    new_revision = MockSearchSchemaRevisionLatest(1010101)
-    new_revision_index_name = new_revision.name_for_index(service.base_revision_name)
-    available = dict(revision_directory.available)
-    available[new_revision.version] = new_revision
-    revision_directory._available = available
-
-    InstanceInitializationScript.create_search_index(service, new_revision)
-
-    # The write pointer should point to the new revision
-    write_pointer = service.write_pointer()
-    assert write_pointer is not None
-    assert write_pointer.index == new_revision_index_name
-    assert write_pointer.version == new_revision.version
-
-    # The read pointer should still point to the old revision
-    read_pointer = service.read_pointer()
-    assert read_pointer is not None
-    assert read_pointer.index == revision.name_for_index(service.base_revision_name)
-    assert read_pointer.version == revision.version
-
-    # There is a lock on the search reindex task
-    search_reindex_task_lock_fixture.task_lock.acquire()
-
-    # Run the migration task
-    with pytest.raises(BasePalaceException):
-        get_migrate_search_chain().delay().wait()
-
-    # The read pointer should still point to the old revision
-    read_pointer = service.read_pointer()
-    assert read_pointer is not None
-    assert read_pointer.index == revision.name_for_index(service.base_revision_name)
-    assert read_pointer.version == revision.version
-
-    # Release the lock and try again
-    search_reindex_task_lock_fixture.task_lock.release()
-    get_migrate_search_chain().delay().wait()
-
-    # The read pointer should now point to the new revision
-    read_pointer = service.read_pointer()
-    assert read_pointer is not None
-    assert read_pointer.index == new_revision_index_name
-
-    # And we should have all the works in the new index
-    client.indices.refresh()
-    end_to_end_search_fixture.expect_results(works, "", ordered=False)
+    read_pointer_set.assert_not_called()
+    assert service.read_pointer() == before
 
 
 class SearchIndexingFixture:
