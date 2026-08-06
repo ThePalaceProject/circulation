@@ -342,6 +342,10 @@ class SAMLACSSelectionPolicy(Enum):
     # The SAML rule: isDefault="true" wins, falling back to the lowest index.
     METADATA_DEFAULT = "metadata_default"
 
+    # Name no endpoint at all, leaving the identity provider to use whichever one it
+    # has registered. A mismatch between the two sides then cannot arise.
+    DEFER_TO_IDP = "defer_to_idp"
+
 
 class SAMLNameIDFormat(Enum):
     """Enumeration of SAML name ID formats"""

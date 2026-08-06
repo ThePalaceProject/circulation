@@ -20,6 +20,7 @@ from palace.manager.integration.patron_auth.saml.configuration.model import (
     SAMLWebSSOAuthSettings,
 )
 from palace.manager.integration.patron_auth.saml.metadata.model import (
+    SAMLACSSelectionPolicy,
     SAMLAttribute,
     SAMLAttributeStatement,
     SAMLAttributeType,
@@ -291,6 +292,7 @@ class TestSAMLAuthenticationManager:
         create_mock_onelogin_configuration: Callable[..., SAMLOneLoginConfiguration],
         identity_provider_entity_id: str,
         strict_mode: bool,
+        acs_selection_policy: SAMLACSSelectionPolicy = SAMLACSSelectionPolicy.FIRST_INDEX,
     ) -> SAMLAuthenticationManager:
         """Build a manager whose SP asserts saml_strings.SP_ACS_URL."""
         identity_providers = [
@@ -301,12 +303,120 @@ class TestSAMLAuthenticationManager:
         configuration = create_saml_configuration(
             service_provider_debug_mode=False,
             service_provider_strict_mode=strict_mode,
+            service_provider_acs_selection_policy=acs_selection_policy,
         )
         onelogin_configuration = create_mock_onelogin_configuration(
             SERVICE_PROVIDER_WITH_UNSIGNED_REQUESTS, identity_providers, configuration
         )
 
         return SAMLAuthenticationManager(onelogin_configuration, SAMLSubjectParser())
+
+    @pytest.mark.parametrize(
+        "service_provider",
+        [
+            pytest.param(SERVICE_PROVIDER_WITH_UNSIGNED_REQUESTS, id="unsigned"),
+            pytest.param(SERVICE_PROVIDER_WITH_SIGNED_REQUESTS, id="signed"),
+        ],
+    )
+    @pytest.mark.parametrize(
+        "policy, expect_acs_attributes",
+        [
+            pytest.param(
+                SAMLACSSelectionPolicy.FIRST_INDEX,
+                True,
+                id="first-index-names-an-endpoint",
+            ),
+            pytest.param(
+                SAMLACSSelectionPolicy.METADATA_DEFAULT,
+                True,
+                id="metadata-default-names-an-endpoint",
+            ),
+            pytest.param(
+                SAMLACSSelectionPolicy.DEFER_TO_IDP,
+                False,
+                id="defer-to-idp-names-no-endpoint",
+            ),
+        ],
+    )
+    def test_start_authentication_acs_attributes_follow_policy(
+        self,
+        controller_fixture: ControllerFixture,
+        create_saml_configuration,
+        create_mock_onelogin_configuration: Callable[..., SAMLOneLoginConfiguration],
+        service_provider: SAMLServiceProviderMetadata,
+        policy: SAMLACSSelectionPolicy,
+        expect_acs_attributes: bool,
+    ):
+        """Deferring to the IdP omits both endpoint attributes from the request."""
+        configuration = create_saml_configuration(
+            service_provider_acs_selection_policy=policy
+        )
+        onelogin_configuration = create_mock_onelogin_configuration(
+            service_provider, IDENTITY_PROVIDERS, configuration
+        )
+        authentication_manager = SAMLAuthenticationManager(
+            onelogin_configuration, SAMLSubjectParser()
+        )
+
+        with controller_fixture.app.test_request_context("/"):
+            result = authentication_manager.start_authentication(
+                controller_fixture.db.session, saml_strings.IDP_1_ENTITY_ID, ""
+            )
+
+        assert isinstance(result, str)
+        query_items = parse_qs(urlsplit(result).query)
+        decoded_saml_request = OneLogin_Saml2_Utils.decode_base64_and_inflate(
+            query_items["SAMLRequest"][0]
+        )
+
+        # Removing the attributes must leave a schema-valid AuthnRequest.
+        validation_result = OneLogin_Saml2_XML.validate_xml(
+            decoded_saml_request, "saml-schema-protocol-2.0.xsd", False
+        )
+        assert isinstance(validation_result, OneLogin_Saml2_XML._element_class)
+
+        saml_request_dom = fromstring(decoded_saml_request)
+        assert (
+            saml_request_dom.get("AssertionConsumerServiceURL") is not None
+        ) is expect_acs_attributes
+        assert (
+            saml_request_dom.get("ProtocolBinding") is not None
+        ) is expect_acs_attributes
+
+        # The signature is computed from the request as sent, so it survives stripping.
+        if service_provider.authn_requests_signed:
+            assert "Signature" in query_items
+
+    def test_finish_authentication_does_not_warn_when_deferring_to_idp(
+        self,
+        controller_fixture: ControllerFixture,
+        create_saml_configuration,
+        create_mock_onelogin_configuration: Callable[..., SAMLOneLoginConfiguration],
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """Nothing was asserted, so an unexpected endpoint is not a mismatch."""
+        caplog.set_level(logging.WARNING)
+
+        identity_provider_entity_id = "http://idp.hilbertteam.net/idp/shibboleth"
+        authentication_manager = self._create_authentication_manager(
+            create_saml_configuration,
+            create_mock_onelogin_configuration,
+            identity_provider_entity_id,
+            strict_mode=False,
+            acs_selection_policy=SAMLACSSelectionPolicy.DEFER_TO_IDP,
+        )
+        saml_response = base64.b64encode(saml_strings.SAML_COLUMBIA_RESPONSE)
+
+        with controller_fixture.app.test_request_context(
+            "/SAML2/POST",
+            base_url="http://localhost",
+            data={"SAMLResponse": saml_response},
+        ):
+            authentication_manager.finish_authentication(
+                controller_fixture.db.session, identity_provider_entity_id
+            )
+
+        assert self._acs_mismatch_warned(caplog) is False
 
     def test_start_authentication_logs_asserted_acs_endpoint(
         self,

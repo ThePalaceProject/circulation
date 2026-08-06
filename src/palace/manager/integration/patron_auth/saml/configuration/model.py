@@ -171,6 +171,9 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
                 SAMLACSSelectionPolicy.METADATA_DEFAULT.value: (
                     "Metadata default (isDefault, otherwise lowest index)"
                 ),
+                SAMLACSSelectionPolicy.DEFER_TO_IDP.value: (
+                    "Defer to identity provider (name no endpoint in the request)"
+                ),
             },
         ),
     ] = SAMLACSSelectionPolicy.FIRST_INDEX
