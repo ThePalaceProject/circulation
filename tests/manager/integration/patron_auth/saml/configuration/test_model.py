@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Callable
 from datetime import datetime
 from unittest.mock import MagicMock, call, create_autospec
@@ -732,16 +733,101 @@ SP_METADATA_WITH_TWO_ACS_ENDPOINTS = (
 
 
 class TestSAMLOneLoginConfiguration:
-    def test_acs_selection_policy_defaults_to_first_index(
-        self, create_saml_configuration
-    ):
-        """The default preserves the endpoint identity providers are registered against."""
+    def test_acs_selection_policy_is_unset_by_default(self, create_saml_configuration):
+        """An unset integration setting means 'use the site-wide default'."""
         configuration = create_saml_configuration()
 
-        assert (
-            configuration.service_provider_acs_selection_policy
-            is SAMLACSSelectionPolicy.FIRST_INDEX
+        assert configuration.service_provider_acs_selection_policy is None
+
+    def test_acs_selection_policy_can_be_reset_from_the_admin_interface(self):
+        """The admin interface clears a setting by sending an empty string."""
+        settings = SAMLWebSSOAuthSettings(
+            service_provider_xml_metadata=saml_strings.CORRECT_XML_WITH_ONE_SP,
+            service_provider_acs_selection_policy="",
         )
+
+        assert settings.service_provider_acs_selection_policy is None
+
+    @pytest.mark.parametrize(
+        "env_policy, settings_policy, expected_policy",
+        [
+            pytest.param(
+                None,
+                None,
+                SAMLACSSelectionPolicy.FIRST_INDEX,
+                id="neither-set-uses-built-in-default",
+            ),
+            pytest.param(
+                SAMLACSSelectionPolicy.METADATA_DEFAULT.value,
+                None,
+                SAMLACSSelectionPolicy.METADATA_DEFAULT,
+                id="environment-supplies-the-default",
+            ),
+            pytest.param(
+                None,
+                SAMLACSSelectionPolicy.DEFER_TO_IDP,
+                SAMLACSSelectionPolicy.DEFER_TO_IDP,
+                id="integration-setting-is-used",
+            ),
+            pytest.param(
+                SAMLACSSelectionPolicy.METADATA_DEFAULT.value,
+                SAMLACSSelectionPolicy.DEFER_TO_IDP,
+                SAMLACSSelectionPolicy.DEFER_TO_IDP,
+                id="integration-setting-overrides-the-environment",
+            ),
+            pytest.param(
+                "not-a-policy",
+                None,
+                SAMLACSSelectionPolicy.FIRST_INDEX,
+                id="invalid-environment-value-falls-back",
+            ),
+            pytest.param(
+                "",
+                None,
+                SAMLACSSelectionPolicy.FIRST_INDEX,
+                id="empty-environment-value-falls-back",
+            ),
+            pytest.param(
+                "not-a-policy",
+                SAMLACSSelectionPolicy.METADATA_DEFAULT,
+                SAMLACSSelectionPolicy.METADATA_DEFAULT,
+                id="invalid-environment-value-does-not-disturb-the-setting",
+            ),
+        ],
+    )
+    def test_get_acs_selection_policy(
+        self,
+        monkeypatch_env: MonkeyPatchEnvFixture,
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
+        env_policy: str | None,
+        settings_policy: SAMLACSSelectionPolicy | None,
+        expected_policy: SAMLACSSelectionPolicy,
+    ):
+        """The integration setting wins, then the environment, then the built-in default."""
+        monkeypatch_env("PALACE_SAML_SP_ACS_SELECTION_POLICY", env_policy)
+        configuration = create_saml_configuration(
+            service_provider_acs_selection_policy=settings_policy
+        )
+
+        onelogin_configuration = SAMLOneLoginConfiguration(configuration)
+
+        assert onelogin_configuration.get_acs_selection_policy() is expected_policy
+
+    def test_invalid_acs_selection_policy_in_environment_is_logged(
+        self,
+        monkeypatch_env: MonkeyPatchEnvFixture,
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """A misconfigured default is otherwise invisible until a login fails."""
+        caplog.set_level(logging.ERROR)
+        monkeypatch_env("PALACE_SAML_SP_ACS_SELECTION_POLICY", "not-a-policy")
+
+        SAMLOneLoginConfiguration(create_saml_configuration())
+
+        assert "PALACE_SAML_SP_ACS_SELECTION_POLICY" in caplog.text
+        assert "not-a-policy" in caplog.text
+        assert SAMLACSSelectionPolicy.FIRST_INDEX.value in caplog.text
 
     @pytest.mark.parametrize(
         "policy, expected_url",

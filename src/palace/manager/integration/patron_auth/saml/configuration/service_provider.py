@@ -3,17 +3,25 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from pydantic import field_validator
 from pydantic_settings import SettingsConfigDict
 
+from palace.util.log import LoggerMixin
+
 from palace.manager.core.config import CannotLoadConfiguration
+from palace.manager.integration.patron_auth.saml.metadata.model import (
+    SAMLACSSelectionPolicy,
+)
 from palace.manager.service.configuration.service_configuration import (
     ServiceConfiguration,
 )
 
+ACS_SELECTION_POLICY_ENV_VAR = "PALACE_SAML_SP_ACS_SELECTION_POLICY"
 
-class SamlServiceProviderConfiguration(ServiceConfiguration):
+
+class SamlServiceProviderConfiguration(ServiceConfiguration, LoggerMixin):
     """SAML Service Provider configuration loaded from environment variables.
 
     Supports both file-based and inline content configuration for SP private key
@@ -24,6 +32,8 @@ class SamlServiceProviderConfiguration(ServiceConfiguration):
         PALACE_SAML_SP_PRIVATE_KEY: Inline SP private key content
         PALACE_SAML_SP_METADATA_FILE: Path to SP metadata XML file
         PALACE_SAML_SP_METADATA: Inline SP metadata XML content
+        PALACE_SAML_SP_ACS_SELECTION_POLICY: Default ACS endpoint selection policy,
+            used by integrations that do not set one of their own
     """
 
     model_config = SettingsConfigDict(env_prefix="PALACE_SAML_SP_")
@@ -35,6 +45,33 @@ class SamlServiceProviderConfiguration(ServiceConfiguration):
     # Inline content options (value is the content)
     private_key: str | None = None
     metadata: str | None = None
+
+    # Site-wide default for integrations that leave their own policy unset.
+    acs_selection_policy: SAMLACSSelectionPolicy | None = None
+
+    @field_validator("acs_selection_policy", mode="before")
+    @classmethod
+    def validate_acs_selection_policy(cls, value: Any) -> SAMLACSSelectionPolicy | None:
+        """Ignore an unrecognized policy rather than refusing to start.
+
+        This setting has a safe built-in default, so a typo in the environment should
+        not take the application down. The error names the accepted values, since a
+        misconfigured default is otherwise invisible until a login fails.
+        """
+        if value is None or value == "":
+            return None
+
+        try:
+            return SAMLACSSelectionPolicy(value)
+        except ValueError:
+            accepted = ", ".join(policy.value for policy in SAMLACSSelectionPolicy)
+            cls.logger().error(
+                f"{ACS_SELECTION_POLICY_ENV_VAR} has an unrecognized value "
+                f"'{value}'. Expected one of: {accepted}. Integrations without their "
+                f"own policy will use the default instead."
+            )
+
+            return None
 
     @field_validator("private_key_file")
     @classmethod

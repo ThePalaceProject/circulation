@@ -402,6 +402,21 @@ settings in the future.
 - `PALACE_SAML_SP_METADATA_FILE`: Path to SP metadata XML file
 - `PALACE_SAML_SP_METADATA`: Inline SP metadata XML content
 
+When SP metadata declares more than one `AssertionConsumerService` endpoint, only one of them is named in
+the authentication requests we send. The following variable sets the site-wide default rule for choosing it,
+which applies to any SAML integration that leaves its own "Assertion Consumer Service Endpoint Selection"
+setting unset in the Administrative Interface. An integration that does set it overrides this default, and
+clearing that setting returns the integration to this default.
+
+- `PALACE_SAML_SP_ACS_SELECTION_POLICY`: One of
+  - `first_index` (the default): use the endpoint with the lowest `index`, ignoring `isDefault`.
+  - `metadata_default`: use the endpoint marked `isDefault="true"`, falling back to the lowest `index`.
+  - `defer_to_idp`: name no endpoint, leaving the identity provider to use whichever one it has registered.
+
+Identity providers are registered against the endpoint this selects, so changing it is a coordinated
+configuration change with the identity provider rather than a preference. An unrecognized value is ignored:
+it is logged as an error and the built-in default (`first_index`) is used instead.
+
 #### DeMarque WebReader
 
 For DeMarque WebReader JWT authentication, the following environment variables can be configured. All are

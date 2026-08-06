@@ -234,8 +234,12 @@ class SAMLAuthenticationManager:
         return auth
 
     def _defers_acs_to_idp(self) -> bool:
-        """Whether requests should name no ACS endpoint at all."""
-        policy = self._configuration.configuration.service_provider_acs_selection_policy
+        """Whether requests should name no ACS endpoint at all.
+
+        Resolved through the configuration rather than read from the integration
+        setting, so that a site-wide default from the environment is honored.
+        """
+        policy = self._configuration.get_acs_selection_policy()
 
         return policy is SAMLACSSelectionPolicy.DEFER_TO_IDP
 
