@@ -5,7 +5,7 @@ from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from datetime import timedelta
 from functools import cached_property
-from typing import cast
+from typing import cast, overload
 from uuid import uuid4
 
 from palace.util.exceptions import BasePalaceException
@@ -188,6 +188,24 @@ class RedisLock(BaseRedisLock):
 
         return previous_value is None or previous_value == self._random_value
 
+    def acquire_force(self) -> str | None:
+        """
+        Take the lock, whether or not anything else is holding it.
+
+        Nothing tells the previous holder. It finds out the next time it tries to take
+        or extend the lock, so a holder that takes the lock once per unit of work carries
+        on until the end of the one it is doing, and both it and the caller are working
+        until then.
+
+        :return: What the previous holder had stored, or None if the lock was free.
+        """
+        return cast(
+            str | None,
+            self._redis_client.set(
+                self.key, self._random_value, px=self._lock_timeout, get=True
+            ),
+        )
+
     def acquire_blocking(self, timeout: float | int = -1) -> bool:
         """
         Acquire the lock. Blocks until the lock is acquired or the timeout is reached.
@@ -233,23 +251,55 @@ class RedisLock(BaseRedisLock):
 
 
 class TaskLock(RedisLock):
+    """
+    The lock a task takes to keep a second copy of itself from running.
+
+    `task` may be omitted, as long as `lock_name` and `redis_client` are given, so that
+    code outside Celery can contend for the same lock as a task. That is for callers
+    doing a task's work themselves rather than merely touching the same resource.
+    """
+
+    @overload
     def __init__(
         self,
         task: Task,
+        redis_client: Redis | None = ...,
+        lock_name: str | None = ...,
+        lock_timeout: timedelta | None = ...,
+        retry_delay: float = ...,
+    ): ...
+
+    @overload
+    def __init__(
+        self,
+        *,
+        redis_client: Redis,
+        lock_name: str,
+        lock_timeout: timedelta | None = ...,
+        retry_delay: float = ...,
+    ): ...
+
+    def __init__(
+        self,
+        task: Task | None = None,
         redis_client: Redis | None = None,
         lock_name: str | None = None,
         lock_timeout: timedelta | None = timedelta(minutes=5),
         retry_delay: float = 0.2,
     ):
-        random_value = task.request.root_id or task.request.id
+        random_value = (task.request.root_id or task.request.id) if task else None
         if lock_name is None:
-            if task.name is None:
+            if task is None or task.name is None:
                 raise LockValueError(
-                    "Task.name must not be None if lock_name is not provided."
+                    "Task with a name must be provided if lock_name is not provided."
                 )
             name = ["Task", task.name]
         else:
             name = [lock_name]
         if redis_client is None:
+            if task is None:
+                raise LockValueError(
+                    "redis_client must be provided if task is not provided."
+                )
             redis_client = task.services.redis.client()
         super().__init__(redis_client, name, random_value, lock_timeout, retry_delay)

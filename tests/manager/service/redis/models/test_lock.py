@@ -63,6 +63,25 @@ class TestRedisLock:
         assert not redis_lock_fixture.lock.acquire_blocking(timeout=0.1)
         assert redis_lock_fixture.lock.acquire_blocking(timeout=2)
 
+    def test_acquire_force(
+        self, redis_lock_fixture: RedisLockFixture, redis_fixture: RedisFixture
+    ):
+        # Taking a lock nothing holds reports that nothing held it.
+        assert redis_lock_fixture.lock.acquire_force() is None
+        assert redis_lock_fixture.lock.locked(by_us=True) is True
+
+        # Taking a lock someone else holds reports what they had stored, and hands the
+        # lock to us, timeout and all.
+        held_by = redis_lock_fixture.other_lock.acquire_force()
+        assert held_by == redis_lock_fixture.lock._random_value
+        assert redis_lock_fixture.other_lock.locked(by_us=True) is True
+        assert redis_fixture.client.ttl(redis_lock_fixture.other_lock.key) > 0
+
+        # The previous holder is not told, but it finds out: it can no longer extend the
+        # lock, or take it back, until we are done with it.
+        assert redis_lock_fixture.lock.extend_timeout() is False
+        assert redis_lock_fixture.lock.acquire() is False
+
     def test_release(
         self, redis_lock_fixture: RedisLockFixture, redis_fixture: RedisFixture
     ):
@@ -220,3 +239,27 @@ class TestTaskLock:
             mock_task, lock_name="test_lock", redis_client=redis_fixture.client
         )
         assert task_lock.key.endswith("::TaskLock::test_lock")
+
+    def test___init___without_task(self, redis_fixture: RedisFixture):
+        # A caller outside Celery can contend for a task's lock, as long as it supplies
+        # the two things the task would otherwise have provided.
+        task_lock = TaskLock(lock_name="test_lock", redis_client=redis_fixture.client)
+        assert task_lock.key.endswith("::TaskLock::test_lock")
+
+        # It gets the same key a task holding the same lock would, so the two contend.
+        mock_task = create_autospec(Task)
+        mock_task.name = "test_task"
+        assert (
+            TaskLock(
+                mock_task, lock_name="test_lock", redis_client=redis_fixture.client
+            ).key
+            == task_lock.key
+        )
+
+        # Without a task there is no name to fall back on, and no client to borrow. Both
+        # of these are rejected by the overloads too, hence the ignores: the checks are
+        # here for callers the type checker doesn't see.
+        with pytest.raises(LockValueError):
+            TaskLock(redis_client=redis_fixture.client)  # type: ignore[call-overload]
+        with pytest.raises(LockValueError):
+            TaskLock(lock_name="test_lock")  # type: ignore[call-overload]
