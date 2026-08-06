@@ -366,10 +366,11 @@ class SAMLAuthenticationManager:
             # The request named no endpoint, so there is nothing to compare. Record the
             # identity provider's choice, which is what pinning a policy would select.
             asserted_acs_url = None
-            self._logger.debug(
-                f"SAML response for IdP '{idp_entity_id}' arrived at "
-                f"'{received_acs_url}', chosen by the identity provider"
-            )
+            if self._logger.isEnabledFor(logging.DEBUG):
+                self._logger.debug(
+                    f"SAML response for IdP '{idp_entity_id}' arrived at "
+                    f"'{received_acs_url}', chosen by the identity provider"
+                )
         else:
             asserted_acs_url = self._get_asserted_acs_url(auth)
             self._warn_on_acs_endpoint_mismatch(

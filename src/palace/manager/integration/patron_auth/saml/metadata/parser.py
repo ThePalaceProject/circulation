@@ -10,6 +10,7 @@ from onelogin.saml2.xmlparser import RestrictedElement, fromstring
 from palace.util.exceptions import BasePalaceException
 
 from palace.manager.integration.patron_auth.saml.metadata.model import (
+    DEFAULT_ACS_SELECTION_POLICY,
     SAMLACSSelectionPolicy,
     SAMLAttribute,
     SAMLAttributeStatement,
@@ -68,14 +69,13 @@ class SAMLMetadataParser:
 
     def __init__(
         self,
-        skip_incorrect_providers=False,
-        acs_selection_policy: SAMLACSSelectionPolicy = SAMLACSSelectionPolicy.FIRST_INDEX,
-    ):
+        skip_incorrect_providers: bool = False,
+        acs_selection_policy: SAMLACSSelectionPolicy = DEFAULT_ACS_SELECTION_POLICY,
+    ) -> None:
         """Initialize a new instance of MetadataParser class.
 
         :param skip_incorrect_providers: Boolean value indicating whether the parse should skip
             incorrect SAML provider declarations instead of raising an exception
-        :type skip_incorrect_providers: bool
 
         :param acs_selection_policy: Rule for choosing among several
             AssertionConsumerService endpoints declared in SP metadata

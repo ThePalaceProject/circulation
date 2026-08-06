@@ -888,7 +888,8 @@ class TestSAMLMetadataParser:
     ):
         """The default-aware selector honors isDefault.
 
-        ACS selection does not use this selector; it is pinned to the lowest index.
+        Used for ACS selection under the METADATA_DEFAULT and DEFER_TO_IDP policies;
+        FIRST_INDEX bypasses it and is pinned to the lowest index.
         """
         metadata_parser = SAMLMetadataParser()
         document = fromstring(_sp_metadata(*acs_elements).encode())
