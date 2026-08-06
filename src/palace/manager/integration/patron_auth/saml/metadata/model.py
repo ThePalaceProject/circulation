@@ -336,6 +336,10 @@ class SAMLACSSelectionPolicy(Enum):
 
     Which rule applies to a given integration is resolved by
     SAMLOneLoginConfiguration.get_acs_selection_policy().
+
+    The values are an external contract, appearing in PALACE_SAML_SP_ACS_SELECTION_POLICY
+    and in each integration's stored settings, so they are spelled out rather than derived
+    from the member names. Renaming a member must not silently change them.
     """
 
     # Lowest index, ignoring isDefault. Identity providers are registered against the
@@ -346,7 +350,7 @@ class SAMLACSSelectionPolicy(Enum):
     METADATA_DEFAULT = "metadata_default"
 
     # Name no endpoint at all, leaving the identity provider to use whichever one it
-    # has registered. A mismatch between the two sides then cannot arise.
+    # has registered. Assumes we can receive at every endpoint our metadata publishes.
     DEFER_TO_IDP = "defer_to_idp"
 
 
