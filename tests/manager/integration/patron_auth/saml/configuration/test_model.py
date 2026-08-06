@@ -1,3 +1,4 @@
+import json
 import logging
 from collections.abc import Callable
 from datetime import datetime
@@ -36,6 +37,7 @@ from palace.manager.sqlalchemy.model.saml import (
     SAMLFederatedIdentityProvider,
     SAMLFederation,
 )
+from palace.manager.util.json import json_serializer
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.test_utils import MonkeyPatchEnvFixture
@@ -738,6 +740,33 @@ class TestSAMLOneLoginConfiguration:
         configuration = create_saml_configuration()
 
         assert configuration.service_provider_acs_selection_policy is None
+
+    @pytest.mark.parametrize(
+        "policy",
+        [pytest.param(policy, id=policy.value) for policy in SAMLACSSelectionPolicy],
+    )
+    def test_acs_selection_policy_survives_settings_dict_round_trip(
+        self, policy: SAMLACSSelectionPolicy
+    ):
+        """settings_dict is stored as JSONB, so the policy has to survive that trip.
+
+        Serialized through the session's own serializer, which is what the write
+        actually uses.
+        """
+        settings = SAMLWebSSOAuthSettings(
+            service_provider_xml_metadata=saml_strings.CORRECT_XML_WITH_ONE_SP,
+            service_provider_acs_selection_policy=policy,
+        )
+
+        settings_dict = json.loads(json_serializer(settings.model_dump()))
+
+        assert settings_dict["service_provider_acs_selection_policy"] == policy.value
+        assert (
+            SAMLWebSSOAuthSettings(
+                **settings_dict
+            ).service_provider_acs_selection_policy
+            is policy
+        )
 
     def test_acs_selection_policy_can_be_reset_from_the_admin_interface(self):
         """The admin interface clears a setting by sending an empty string."""

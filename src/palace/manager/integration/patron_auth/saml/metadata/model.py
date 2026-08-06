@@ -333,10 +333,13 @@ class SAMLACSSelectionPolicy(Enum):
 
     Only applies when the SP metadata declares more than one
     AssertionConsumerService endpoint for the required binding.
+
+    Which rule applies to a given integration is resolved by
+    SAMLOneLoginConfiguration.get_acs_selection_policy().
     """
 
-    # Lowest index, ignoring isDefault. Identity providers are registered against
-    # the endpoint this picks, so it is the default.
+    # Lowest index, ignoring isDefault. Identity providers are registered against the
+    # endpoint this picks, which is why it is the built-in fallback.
     FIRST_INDEX = "first_index"
 
     # The SAML rule: isDefault="true" wins, falling back to the lowest index.

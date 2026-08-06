@@ -462,11 +462,9 @@ class SAMLMetadataParser:
             provider_node,
             "./md:AssertionConsumerService[@Binding='%s']" % required_acs_binding.value,
         )
-        # Identity providers are registered against the endpoint selected here, so the
-        # default policy preserves the lowest-index choice and ignores isDefault.
-        # Honoring isDefault is opt-in per integration. DEFER_TO_IDP still resolves an
-        # endpoint, because the SAML toolkit requires one in its settings; requests
-        # under that policy simply do not name it.
+        # DEFER_TO_IDP resolves an endpoint just as METADATA_DEFAULT does, even though
+        # requests under it name no endpoint, because the SAML toolkit requires an ACS
+        # URL in its settings. Choosing the policy is the caller's business.
         if self._acs_selection_policy is SAMLACSSelectionPolicy.FIRST_INDEX:
             acs_service_node = self._select_first_indexed_element(acs_service_nodes)
         else:
