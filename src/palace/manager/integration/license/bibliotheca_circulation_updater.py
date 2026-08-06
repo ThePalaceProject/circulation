@@ -244,7 +244,6 @@ class BibliothecaCirculationUpdater(LoggerMixin):
                         edition,
                         self._collection,
                         ReplacementPolicy.from_license_source(),
-                        create_coverage_record=False,
                     )
                 else:
                     apply.bibliographic_apply.delay(
