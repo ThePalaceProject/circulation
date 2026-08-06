@@ -47,7 +47,6 @@ class OIDCUtility(LoggerMixin):
     # Cache TTLs
     DISCOVERY_CACHE_TTL = 24 * 60 * 60  # 24 hours
     JWKS_CACHE_TTL = 24 * 60 * 60  # 24 hours
-    PKCE_CACHE_TTL = 10 * 60  # 10 minutes
     STATE_MAX_AGE = 10 * 60  # 10 minutes
     LOGOUT_STATE_CACHE_TTL = 10 * 60  # 10 minutes
     LOGOUT_STATE_MAX_AGE = 10 * 60  # 10 minutes
@@ -55,7 +54,6 @@ class OIDCUtility(LoggerMixin):
     # Cache key prefixes
     DISCOVERY_KEY_PREFIX = "oidc:discovery:"
     JWKS_KEY_PREFIX = "oidc:jwks:"
-    PKCE_KEY_PREFIX = "oidc:pkce:"
     LOGOUT_STATE_KEY_PREFIX = "oidc:logout_state:"
 
     def __init__(self, redis_client: Redis | None = None):
@@ -107,11 +105,11 @@ class OIDCUtility(LoggerMixin):
     ) -> dict[str, Any] | None:
         """Retrieve token-related data from Redis cache.
 
-        Generic method for retrieving PKCE, logout state, or other token data.
+        Generic method for retrieving logout state or other token data.
 
-        :param key_prefix: Cache key prefix (e.g., PKCE_KEY_PREFIX)
+        :param key_prefix: Cache key prefix (e.g., LOGOUT_STATE_KEY_PREFIX)
         :param state_token: State token used as cache key
-        :param data_type: Description for logging (e.g., "PKCE", "logout state")
+        :param data_type: Description for logging (e.g., "logout state")
         :param delete: Whether to delete the entry after retrieval (one-time use)
         :return: Dictionary with token data, or None if not found
         :raises OIDCUtilityError: If Redis client is not available
@@ -398,45 +396,6 @@ class OIDCUtility(LoggerMixin):
             self._store_in_cache(cache_key, jwks, self.JWKS_CACHE_TTL)
 
         return jwks
-
-    def store_pkce(
-        self,
-        state_token: str,
-        code_verifier: str,
-        metadata: dict[str, Any] | None = None,
-    ) -> None:
-        """Store PKCE code_verifier in Redis cache.
-
-        :param state_token: State token to use as cache key
-        :param code_verifier: PKCE code verifier to store
-        :param metadata: Optional additional metadata to store
-        """
-        if not self._redis:
-            raise OIDCUtilityError("Redis client required for PKCE storage")
-
-        data = {
-            "code_verifier": code_verifier,
-            "timestamp": int(time.time()),
-        }
-        if metadata:
-            data.update(metadata)
-
-        cache_key = self._redis.get_key(self.PKCE_KEY_PREFIX + state_token)
-        self._redis.set(cache_key, json.dumps(data), ex=self.PKCE_CACHE_TTL)
-        self.log.debug(f"Stored PKCE for state: {state_token[:16]}...")
-
-    def retrieve_pkce(
-        self, state_token: str, delete: bool = True
-    ) -> dict[str, Any] | None:
-        """Retrieve PKCE code_verifier from Redis cache.
-
-        :param state_token: State token used as cache key
-        :param delete: Whether to delete the entry after retrieval (one-time use)
-        :return: Dictionary with code_verifier and metadata, or None if not found
-        """
-        return self._retrieve_token_data(
-            self.PKCE_KEY_PREFIX, state_token, "PKCE", delete
-        )
 
     def store_logout_state(
         self,

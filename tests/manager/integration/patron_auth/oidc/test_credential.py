@@ -15,6 +15,7 @@ from palace.manager.integration.patron_auth.oidc.auth import OIDCRefreshTokenErr
 from palace.manager.integration.patron_auth.oidc.credential import OIDCCredentialManager
 from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.sqlalchemy.model.datasource import DataSource
+from palace.manager.sqlalchemy.util import get_one
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
@@ -284,6 +285,76 @@ class TestOIDCCredentialManager:
             assert token_data["refresh_token"] == refresh_token
         else:
             assert "refresh_token" not in token_data
+
+    @pytest.mark.parametrize(
+        "token_type,data_source_name",
+        [
+            pytest.param(
+                OIDCCredentialManager.TOKEN_TYPE,
+                OIDCCredentialManager.TOKEN_DATA_SOURCE_NAME,
+                id="default-names",
+            ),
+            pytest.param("Custom token", "CustomProvider", id="custom-names"),
+        ],
+    )
+    def test_create_oidc_token_with_configured_names(
+        self,
+        db: DatabaseTransactionFixture,
+        mock_patron,
+        sample_id_token_claims,
+        token_type: str,
+        data_source_name: str,
+    ):
+        """Test that configured token type and data source flow through create and lookup."""
+        manager = OIDCCredentialManager(
+            token_type=token_type, data_source_name=data_source_name
+        )
+
+        credential = manager.create_oidc_token(
+            db.session,
+            mock_patron,
+            sample_id_token_claims,
+            "test-access-token",
+        )
+        db.session.commit()
+
+        assert credential.type == token_type
+        assert credential.data_source.name == data_source_name
+
+        found_by_patron = manager.lookup_oidc_token_by_patron(db.session, mock_patron)
+        assert found_by_patron is not None
+        assert found_by_patron.id == credential.id
+
+        assert credential.credential is not None
+        found_by_value = manager.lookup_oidc_token_by_value(
+            db.session, credential.credential, mock_patron.library_id
+        )
+        assert found_by_value is not None
+        assert found_by_value.id == credential.id
+
+    def test_create_oidc_token_with_subclassed_names(
+        self,
+        db: DatabaseTransactionFixture,
+        mock_patron,
+        sample_id_token_claims,
+    ):
+        """Class-constant overrides in a subclass take effect without constructor arguments."""
+
+        class SubclassedCredentialManager(OIDCCredentialManager):
+            TOKEN_TYPE = "Subclassed token"
+            TOKEN_DATA_SOURCE_NAME = "SubclassedProvider"
+
+        manager = SubclassedCredentialManager()
+
+        credential = manager.create_oidc_token(
+            db.session,
+            mock_patron,
+            sample_id_token_claims,
+            "test-access-token",
+        )
+
+        assert credential.type == "Subclassed token"
+        assert credential.data_source.name == "SubclassedProvider"
 
     def test_lookup_oidc_token_by_patron_found(
         self,
@@ -832,3 +903,38 @@ class TestOIDCCredentialManagerLogout:
         count = manager.invalidate_patron_credentials(db.session, patron.id)
 
         assert count == 0
+
+    def test_invalidate_patron_credentials_scoped_to_data_source(self, db, manager):
+        """Invalidation only affects credentials in the manager's own namespace.
+
+        Two managers sharing a token type but using different data sources
+        must be able to invalidate a patron's credentials independently.
+        """
+        patron = db.patron()
+        other_manager = OIDCCredentialManager(
+            token_type=OIDCCredentialManager.TOKEN_TYPE,
+            data_source_name="OtherProvider",
+        )
+
+        oidc_credential = manager.create_oidc_token(
+            db.session, patron, {"sub": "user123"}, "access-token-oidc"
+        )
+        other_credential = other_manager.create_oidc_token(
+            db.session, patron, {"sub": "user123"}, "access-token-other"
+        )
+
+        count = other_manager.invalidate_patron_credentials(db.session, patron.id)
+
+        assert count == 1
+        assert other_credential.expires <= utc_now()
+        assert oidc_credential.expires > utc_now()
+
+    def test_invalidate_patron_credentials_does_not_create_data_source(self, db):
+        """Invalidation with nothing stored must not create the data source row."""
+        patron = db.patron()
+        manager = OIDCCredentialManager(data_source_name="NeverStored")
+
+        count = manager.invalidate_patron_credentials(db.session, patron.id)
+
+        assert count == 0
+        assert get_one(db.session, DataSource, name="NeverStored") is None

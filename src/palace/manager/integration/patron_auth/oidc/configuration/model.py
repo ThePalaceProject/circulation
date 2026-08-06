@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 from re import Pattern
 from typing import Annotated, Any
 
 from flask_babel import lazy_gettext as _
 from pydantic import (
+    AfterValidator,
     HttpUrl,
     PositiveInt,
     TypeAdapter,
@@ -15,8 +17,6 @@ from pydantic import (
     model_validator,
 )
 from pydantic_core.core_schema import ValidationInfo
-
-from palace.util.log import LoggerMixin
 
 from palace.manager.api.admin.problem_details import (
     INCOMPLETE_CONFIGURATION,
@@ -27,7 +27,6 @@ from palace.manager.api.authentication.base import (
     AuthProviderSettings,
 )
 from palace.manager.integration.settings import (
-    BaseSettings,
     FormFieldType,
     FormMetadata,
     SettingsValidationError,
@@ -50,8 +49,11 @@ OIDC_INCORRECT_FILTER_EXPRESSION = pd(
 )
 
 
-def _validate_filter_expression(cls: type[BaseSettings], v: str | None) -> str | None:
-    """Shared validator for OIDC filter expression fields on settings models.
+def _check_filter_expression_syntax(v: str | None) -> str | None:
+    """Validate the syntax of a filter expression setting value.
+
+    Attached to filter expression fields with ``AfterValidator`` so the
+    check travels with the field definition.
 
     :raises SettingsValidationError: if the expression is syntactically invalid.
     """
@@ -59,7 +61,7 @@ def _validate_filter_expression(cls: type[BaseSettings], v: str | None) -> str |
         try:
             FilterExpression(v).check_syntax()
         except FilterExpressionError as exception:
-            cls.logger().warning(
+            logging.getLogger(__name__).warning(
                 f"Validation of the filter expression failed: {exception}"
             )
             raise SettingsValidationError(
@@ -70,7 +72,180 @@ def _validate_filter_expression(cls: type[BaseSettings], v: str | None) -> str |
     return v
 
 
-class OIDCAuthSettings(AuthProviderSettings, LoggerMixin):
+# Field definitions shared with other providers built on the OIDC machinery.
+# Settings classes declare fields using these aliases, so field order (and
+# therefore admin form order) is still determined by where each field is
+# declared in its class.
+ClientIdSetting = Annotated[
+    str,
+    FormMetadata(
+        label=_("Client ID"),
+        description=_(
+            "OAuth 2.0 Client ID assigned by the OIDC provider during registration. "
+            "This is a public identifier for your application."
+        ),
+    ),
+]
+
+ClientSecretSetting = Annotated[
+    str,
+    FormMetadata(
+        label=_("Client Secret"),
+        description=_(
+            "OAuth 2.0 Client Secret assigned by the OIDC provider. "
+            "This is a confidential credential - keep it secure. "
+            "Used for authenticating token exchange requests."
+        ),
+        type=FormFieldType.TEXT,
+    ),
+]
+
+SessionLifetimeSetting = Annotated[
+    PositiveInt | None,
+    FormMetadata(
+        label=_("Session Lifetime (Days)"),
+        description=_(
+            "Override the OIDC provider's token lifetime with a custom session duration in days. "
+            "Leave empty to use the provider's token expiry. "
+            "Note: This only affects the Circulation Manager's session. "
+            "Protected content access is still governed by the OIDC provider's tokens."
+        ),
+        patron_auth_filter_context=True,
+    ),
+]
+
+IntegrationFilterExpressionSetting = Annotated[
+    str | None,
+    FormMetadata(
+        label="Filter Expression",
+        description=(
+            "A Python expression that may restrict a patron's access based on their"
+            " ID token claims and other settings."
+            " When present, it must evaluate to True in order for the patron to gain access."
+            " If a per-library Filter Expression is also configured, both must evaluate to True."
+            "<br>"
+            "<br>"
+            "The expression has access to: 'claims' (dict of ID token claims),"
+            " 'integration' (selected integration settings),"
+            " and 'library' (id, name, short_name)."
+            "<br>"
+            "<br>"
+            "Example — restrict to a specific email domain:"
+            "<br>"
+            "<pre>claims['email'].endswith('@example.edu')</pre>"
+        ),
+        type=FormFieldType.TEXTAREA,
+        use_monospace_font=True,
+    ),
+    AfterValidator(_check_filter_expression_syntax),
+]
+
+LibraryFilterExpressionSetting = Annotated[
+    str | None,
+    FormMetadata(
+        label="Filter Expression",
+        description=(
+            "A Python expression that may restrict a patron's access to this library"
+            " based on their ID token claims and other settings."
+            " When present, it must evaluate to True in order for the patron to gain"
+            " access to this library."
+            "<br>"
+            "<br>"
+            "Refer to the integration-level Filter Expression setting for expression"
+            " syntax and available context variables."
+        ),
+        type=FormFieldType.TEXTAREA,
+        use_monospace_font=True,
+    ),
+    AfterValidator(_check_filter_expression_syntax),
+]
+
+# Note: the key-ordering caveat in the description below is a JSONB storage
+# side effect. PostgreSQL sorts all object keys when storing/retrieving JSONB.
+ExtraDataSetting = Annotated[
+    dict[str, Any] | list[Any] | int | float | bool | str | None,
+    FormMetadata(
+        label="Extra Data",
+        description=(
+            "Extra data available to patron filter expressions via the"
+            " 'integration.extra_data' context variable."
+            " Accepts any JSON value (object, array, string, number, boolean, or null)."
+            "<br>"
+            "Note: Dictionary/object key order may not be preserved after saving."
+        ),
+        type=FormFieldType.JSON,
+        patron_auth_filter_context=True,
+        use_monospace_font=True,
+    ),
+]
+
+AuthLinkDisplayNameSetting = Annotated[
+    str | None,
+    FormMetadata(
+        label=_("Authorization Link: Display Name (Optional)"),
+        description=_(
+            "Human-readable name for this authentication provider shown to patrons. "
+            "If not provided, the integration name will be used. "
+            "Example: 'University Single Sign-On' or 'Library Login'"
+        ),
+        weight=1000,
+    ),
+]
+
+AuthLinkDescriptionSetting = Annotated[
+    str | None,
+    FormMetadata(
+        label=_("Authorization Link: Description (Optional)"),
+        description=_(
+            "Brief description of this authentication method shown to patrons. "
+            "If not provided, the display name will be used. "
+            "Example: 'Log in with your university credentials'"
+        ),
+        type=FormFieldType.TEXTAREA,
+        weight=1001,
+    ),
+]
+
+AuthLinkLogoUrlSetting = Annotated[
+    HttpUrl | None,
+    FormMetadata(
+        label=_("Authorization Link: Logo URL (Optional)"),
+        description=_(
+            "URL to a logo image representing this authentication provider. "
+            "Displayed in authentication selection screens. "
+            "Should be a publicly accessible HTTPS URL. "
+            "Recommended size: 64x64 pixels or larger."
+        ),
+        weight=1002,
+    ),
+]
+
+AuthLinkInformationUrlSetting = Annotated[
+    HttpUrl | None,
+    FormMetadata(
+        label=_("Authorization Link: Information URL (Optional)"),
+        description=_(
+            "URL to a page with more information about this authentication method. "
+            "Example: Help page, registration instructions, or provider information."
+        ),
+        weight=1003,
+    ),
+]
+
+AuthLinkPrivacyStatementUrlSetting = Annotated[
+    HttpUrl | None,
+    FormMetadata(
+        label=_("Authorization Link: Privacy Statement URL (Optional)"),
+        description=_(
+            "URL to the authentication provider's privacy policy or statement. "
+            "Helps patrons understand how their data is handled."
+        ),
+        weight=1004,
+    ),
+]
+
+
+class OIDCAuthSettings(AuthProviderSettings):
     """OIDC Authentication Provider Settings.
 
     Configures OpenID Connect (OIDC) authentication for patron authentication.
@@ -212,29 +387,9 @@ class OIDCAuthSettings(AuthProviderSettings, LoggerMixin):
     ] = None
 
     # Client Configuration
-    client_id: Annotated[
-        str,
-        FormMetadata(
-            label=_("Client ID"),
-            description=_(
-                "OAuth 2.0 Client ID assigned by the OIDC provider during registration. "
-                "This is a public identifier for your application."
-            ),
-        ),
-    ]
+    client_id: ClientIdSetting
 
-    client_secret: Annotated[
-        str,
-        FormMetadata(
-            label=_("Client Secret"),
-            description=_(
-                "OAuth 2.0 Client Secret assigned by the OIDC provider. "
-                "This is a confidential credential - keep it secure. "
-                "Used for authenticating token exchange requests."
-            ),
-            type=FormFieldType.TEXT,
-        ),
-    ]
+    client_secret: ClientSecretSetting
 
     # Scopes & Claims
     scopes: Annotated[
@@ -282,63 +437,11 @@ class OIDCAuthSettings(AuthProviderSettings, LoggerMixin):
     ] = None
 
     # Session Configuration
-    session_lifetime: Annotated[
-        PositiveInt | None,
-        FormMetadata(
-            label=_("Session Lifetime (Days)"),
-            description=_(
-                "Override the OIDC provider's token lifetime with a custom session duration in days. "
-                "Leave empty to use the provider's token expiry. "
-                "Note: This only affects the Circulation Manager's session. "
-                "Protected content access is still governed by the OIDC provider's tokens."
-            ),
-            patron_auth_filter_context=True,
-        ),
-    ] = None
+    session_lifetime: SessionLifetimeSetting = None
 
-    filter_expression: Annotated[
-        str | None,
-        FormMetadata(
-            label="Filter Expression",
-            description=(
-                "A Python expression that may restrict a patron's access based on their"
-                " ID token claims and other settings."
-                " When present, it must evaluate to True in order for the patron to gain access."
-                " If a per-library Filter Expression is also configured, both must evaluate to True."
-                "<br>"
-                "<br>"
-                "The expression has access to: 'claims' (dict of ID token claims),"
-                " 'integration' (selected integration settings),"
-                " and 'library' (id, name, short_name)."
-                "<br>"
-                "<br>"
-                "Example — restrict to a specific email domain:"
-                "<br>"
-                "<pre>claims['email'].endswith('@example.edu')</pre>"
-            ),
-            type=FormFieldType.TEXTAREA,
-            use_monospace_font=True,
-        ),
-    ] = None
+    filter_expression: IntegrationFilterExpressionSetting = None
 
-    # Note: the key-ordering caveat in the description below is a JSONB storage
-    # side effect — PostgreSQL sorts all object keys when storing/retrieving JSONB.
-    extra_data: Annotated[
-        dict[str, Any] | list[Any] | int | float | bool | str | None,
-        FormMetadata(
-            label="Extra Data",
-            description=(
-                "Extra data available to patron filter expressions via the"
-                " 'integration.extra_data' context variable."
-                " Accepts any JSON value (object, array, string, number, boolean, or null)."
-                "<br>"
-                "Note: Dictionary/object key order may not be preserved after saving."
-            ),
-            type=FormFieldType.JSON,
-            patron_auth_filter_context=True,
-            use_monospace_font=True,
-        ),
-    ] = None
+    extra_data: ExtraDataSetting = None
 
     # Advanced Options
     use_pkce: Annotated[
@@ -395,70 +498,15 @@ class OIDCAuthSettings(AuthProviderSettings, LoggerMixin):
     ] = "offline"
 
     # Authentication Link Settings
-    auth_link_display_name: Annotated[
-        str | None,
-        FormMetadata(
-            label=_("Authorization Link: Display Name (Optional)"),
-            description=_(
-                "Human-readable name for this authentication provider shown to patrons. "
-                "If not provided, the integration name will be used. "
-                "Example: 'University Single Sign-On' or 'Library Login'"
-            ),
-            weight=1000,
-        ),
-    ] = None
+    auth_link_display_name: AuthLinkDisplayNameSetting = None
 
-    auth_link_description: Annotated[
-        str | None,
-        FormMetadata(
-            label=_("Authorization Link: Description (Optional)"),
-            description=_(
-                "Brief description of this authentication method shown to patrons. "
-                "If not provided, the display name will be used. "
-                "Example: 'Log in with your university credentials'"
-            ),
-            type=FormFieldType.TEXTAREA,
-            weight=1001,
-        ),
-    ] = None
+    auth_link_description: AuthLinkDescriptionSetting = None
 
-    auth_link_logo_url: Annotated[
-        HttpUrl | None,
-        FormMetadata(
-            label=_("Authorization Link: Logo URL (Optional)"),
-            description=_(
-                "URL to a logo image representing this authentication provider. "
-                "Displayed in authentication selection screens. "
-                "Should be a publicly accessible HTTPS URL. "
-                "Recommended size: 64x64 pixels or larger."
-            ),
-            weight=1002,
-        ),
-    ] = None
+    auth_link_logo_url: AuthLinkLogoUrlSetting = None
 
-    auth_link_information_url: Annotated[
-        HttpUrl | None,
-        FormMetadata(
-            label=_("Authorization Link: Information URL (Optional)"),
-            description=_(
-                "URL to a page with more information about this authentication method. "
-                "Example: Help page, registration instructions, or provider information."
-            ),
-            weight=1003,
-        ),
-    ] = None
+    auth_link_information_url: AuthLinkInformationUrlSetting = None
 
-    auth_link_privacy_statement_url: Annotated[
-        HttpUrl | None,
-        FormMetadata(
-            label=_("Authorization Link: Privacy Statement URL (Optional)"),
-            description=_(
-                "URL to the authentication provider's privacy policy or statement. "
-                "Helps patrons understand how their data is handled."
-            ),
-            weight=1004,
-        ),
-    ] = None
+    auth_link_privacy_statement_url: AuthLinkPrivacyStatementUrlSetting = None
 
     @model_validator(mode="after")
     def validate_configuration_mode(self) -> OIDCAuthSettings:
@@ -549,11 +597,6 @@ class OIDCAuthSettings(AuthProviderSettings, LoggerMixin):
             )
         return v
 
-    @field_validator("filter_expression")
-    @classmethod
-    def validate_filter_expression(cls, v: str | None) -> str | None:
-        return _validate_filter_expression(cls, v)
-
     @field_validator("patron_id_regular_expression")
     @classmethod
     def validate_patron_id_regex(cls, v: Pattern[str] | None) -> Pattern[str] | None:
@@ -572,26 +615,4 @@ class OIDCAuthSettings(AuthProviderSettings, LoggerMixin):
 class OIDCAuthLibrarySettings(AuthProviderLibrarySettings):
     """Per-library OIDC authentication settings."""
 
-    filter_expression: Annotated[
-        str | None,
-        FormMetadata(
-            label="Filter Expression",
-            description=(
-                "A Python expression that may restrict a patron's access to this library"
-                " based on their ID token claims and other settings."
-                " When present, it must evaluate to True in order for the patron to gain"
-                " access to this library."
-                "<br>"
-                "<br>"
-                "Refer to the integration-level Filter Expression setting for expression"
-                " syntax and available context variables."
-            ),
-            type=FormFieldType.TEXTAREA,
-            use_monospace_font=True,
-        ),
-    ] = None
-
-    @field_validator("filter_expression")
-    @classmethod
-    def validate_filter_expression(cls, v: str | None) -> str | None:
-        return _validate_filter_expression(cls, v)
+    filter_expression: LibraryFilterExpressionSetting = None

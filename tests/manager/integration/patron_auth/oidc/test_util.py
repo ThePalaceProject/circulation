@@ -352,6 +352,16 @@ class TestOIDCUtilityDiscovery:
                 assert result == mock_discovery_document
                 mock_get.assert_called_once()
 
+    def test_store_in_cache_without_redis_is_noop(self):
+        """Storing is silently skipped when no Redis client is configured.
+
+        The public callers never reach this branch (they only pass a cache
+        key obtained with Redis present), so exercise the guard directly.
+        """
+        utility = OIDCUtility(redis_client=None)
+
+        utility._store_in_cache("some-key", {"a": 1}, ttl=60)
+
 
 class TestOIDCUtilityJWKS:
     """Tests for JWKS fetching."""
@@ -484,101 +494,6 @@ class TestOIDCUtilityJWKS:
                 result = utility.fetch_jwks(jwks_uri)
                 assert result == mock_jwks
                 mock_get.assert_called_once()
-
-
-class TestOIDCUtilityPKCEStorage:
-    """Tests for PKCE storage and retrieval in Redis."""
-
-    def test_store_pkce_success(self, redis_fixture):
-        state_token = "test-state-token"
-        code_verifier = "test-code-verifier-abc123"
-
-        utility = OIDCUtility(redis_client=redis_fixture.client)
-        utility.store_pkce(state_token, code_verifier)
-
-        cache_key = redis_fixture.client.get_key(
-            f"{OIDCUtility.PKCE_KEY_PREFIX}{state_token}"
-        )
-        cached = redis_fixture.client.get(cache_key)
-
-        assert cached is not None
-        data = json.loads(cached)
-        assert data["code_verifier"] == code_verifier
-        assert "timestamp" in data
-
-    def test_store_pkce_with_metadata(self, redis_fixture):
-        state_token = "test-state-token"
-        code_verifier = "test-code-verifier"
-        metadata = {"extra_field": "extra_value"}
-
-        utility = OIDCUtility(redis_client=redis_fixture.client)
-        utility.store_pkce(state_token, code_verifier, metadata=metadata)
-
-        cache_key = redis_fixture.client.get_key(
-            f"{OIDCUtility.PKCE_KEY_PREFIX}{state_token}"
-        )
-        cached = redis_fixture.client.get(cache_key)
-
-        data = json.loads(cached)
-        assert data["code_verifier"] == code_verifier
-        assert data["extra_field"] == "extra_value"
-
-    def test_store_pkce_without_redis_raises_error(self):
-        utility = OIDCUtility(redis_client=None)
-
-        with pytest.raises(OIDCUtilityError, match="Redis client required"):
-            utility.store_pkce("state", "verifier")
-
-    def test_retrieve_pkce_success(self, redis_fixture):
-        state_token = "test-state-token"
-        code_verifier = "test-code-verifier"
-
-        utility = OIDCUtility(redis_client=redis_fixture.client)
-        utility.store_pkce(state_token, code_verifier)
-
-        retrieved = utility.retrieve_pkce(state_token, delete=False)
-
-        assert retrieved is not None
-        assert retrieved["code_verifier"] == code_verifier
-
-    def test_retrieve_pkce_with_delete(self, redis_fixture):
-        state_token = "test-state-token"
-        code_verifier = "test-code-verifier"
-
-        utility = OIDCUtility(redis_client=redis_fixture.client)
-        utility.store_pkce(state_token, code_verifier)
-
-        retrieved1 = utility.retrieve_pkce(state_token, delete=True)
-        assert retrieved1 is not None
-
-        retrieved2 = utility.retrieve_pkce(state_token, delete=False)
-        assert retrieved2 is None
-
-    def test_retrieve_pkce_not_found(self, redis_fixture):
-        utility = OIDCUtility(redis_client=redis_fixture.client)
-
-        retrieved = utility.retrieve_pkce("nonexistent-state")
-
-        assert retrieved is None
-
-    def test_retrieve_pkce_without_redis_raises_error(self):
-        utility = OIDCUtility(redis_client=None)
-
-        with pytest.raises(OIDCUtilityError, match="Redis client required"):
-            utility.retrieve_pkce("state")
-
-    def test_retrieve_pkce_corrupted_json(self, redis_fixture):
-        state_token = "test-state-token"
-
-        cache_key = redis_fixture.client.get_key(
-            f"{OIDCUtility.PKCE_KEY_PREFIX}{state_token}"
-        )
-        redis_fixture.client.set(cache_key, "invalid-json{{{", ex=600)
-
-        utility = OIDCUtility(redis_client=redis_fixture.client)
-        retrieved = utility.retrieve_pkce(state_token)
-
-        assert retrieved is None
 
 
 class TestOIDCUtilityLogoutState:

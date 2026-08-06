@@ -3,9 +3,9 @@ from __future__ import annotations
 import enum
 import json
 import logging
-from abc import ABC
+from abc import ABC, abstractmethod
 from collections.abc import Iterable
-from typing import Any, Self
+from typing import TYPE_CHECKING, Any, Self
 
 import flask
 import jwt
@@ -63,6 +63,16 @@ from palace.manager.sqlalchemy.model.patron import Patron, PatronProfileStorage
 from palace.manager.util.http.exception import RemoteIntegrationException
 from palace.manager.util.opds_writer import OPDSFeed
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
+
+if TYPE_CHECKING:
+    from palace.manager.api.authentication.base import PatronData
+    from palace.manager.integration.patron_auth.oidc.auth import (
+        OIDCAuthenticationManager,
+    )
+    from palace.manager.integration.patron_auth.oidc.credential import (
+        OIDCCredentialManager,
+    )
+    from palace.manager.sqlalchemy.model.credential import Credential
 
 
 class CirculationPatronProfileStorage(PatronProfileStorage):
@@ -970,8 +980,49 @@ class BaseOIDCAuthenticationProvider[
     OPDSAuthenticationFlow,
     ABC,
 ):
-    """Base class for OIDC authentication providers."""
+    """Base class for OIDC authentication providers.
+
+    The abstract members below are the contract OIDCController relies on.
+    Every provider registered through the OIDC dispatch path must supply
+    them. Keeping the contract here lets the controller work with any
+    OIDC-family provider without reaching into implementation details.
+    """
 
     @property
     def flow_type(self) -> str:
         return "http://palaceproject.io/authtype/OpenIDConnect"
+
+    @abstractmethod
+    def extract_patron_identifier(self, id_token_claims: dict[str, Any]) -> str | None:
+        """Extract the patron identifier from validated token claims.
+
+        Must apply the same extraction used at login, so that logout
+        lookups match the stored authorization identifier.
+
+        :param id_token_claims: Validated token claims
+        :return: Patron identifier, or None if it cannot be determined
+        """
+
+    @property
+    @abstractmethod
+    def credential_manager(self) -> OIDCCredentialManager:
+        """Credential manager storing this provider's tokens."""
+
+    @abstractmethod
+    def get_authentication_manager(self) -> OIDCAuthenticationManager:
+        """Return the authentication manager driving the OIDC protocol flow."""
+
+    @abstractmethod
+    def oidc_callback(
+        self,
+        db: Session,
+        id_token_claims: dict[str, Any],
+        access_token: str,
+        refresh_token: str | None = None,
+        expires_in: int | None = None,
+        id_token: str | None = None,
+    ) -> tuple[Credential, Patron, PatronData]:
+        """Authorize and persist a patron session after ID token validation.
+
+        :return: 3-tuple (Credential, Patron, PatronData)
+        """

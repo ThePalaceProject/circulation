@@ -28,7 +28,7 @@ from palace.manager.integration.patron_auth.oidc.auth import (
 from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.patron import Patron
-from palace.manager.sqlalchemy.util import get_one_or_create
+from palace.manager.sqlalchemy.util import get_one, get_one_or_create
 
 
 class OIDCCredentialManager(LoggerMixin):
@@ -43,15 +43,37 @@ class OIDCCredentialManager(LoggerMixin):
     TOKEN_TYPE = "OIDC token"
     TOKEN_DATA_SOURCE_NAME = "OIDC"
 
+    def __init__(
+        self,
+        token_type: str | None = None,
+        data_source_name: str | None = None,
+    ) -> None:
+        """Initialize the credential manager.
+
+        The defaults suit the generic OIDC provider. Other providers built on
+        the same machinery can pass distinct values, or subclass and override
+        the class constants, so their credentials do not collide with OIDC
+        ones.
+
+        :param token_type: Value stored as ``Credential.type``.
+            Defaults to the class's ``TOKEN_TYPE``.
+        :param data_source_name: Name of the ``DataSource`` owning the
+            credentials. Defaults to the class's ``TOKEN_DATA_SOURCE_NAME``.
+        """
+        self._token_type = token_type if token_type is not None else self.TOKEN_TYPE
+        self._data_source_name = (
+            data_source_name
+            if data_source_name is not None
+            else self.TOKEN_DATA_SOURCE_NAME
+        )
+
     def _get_token_data_source(self, db: Session) -> DataSource:
         """Get or create the data source for OIDC credentials.
 
         :param db: Database session
         :return: DataSource for OIDC credentials
         """
-        datasource, _ = get_one_or_create(
-            db, DataSource, name=self.TOKEN_DATA_SOURCE_NAME
-        )
+        datasource, _ = get_one_or_create(db, DataSource, name=self._data_source_name)
         return datasource
 
     @staticmethod
@@ -171,7 +193,7 @@ class OIDCCredentialManager(LoggerMixin):
         )
 
         oidc_credential, is_new = Credential.temporary_token_create(
-            db, data_source, self.TOKEN_TYPE, patron, session_lifetime, token_value
+            db, data_source, self._token_type, patron, session_lifetime, token_value
         )
 
         return oidc_credential
@@ -189,8 +211,8 @@ class OIDCCredentialManager(LoggerMixin):
 
         credential = Credential.lookup_by_patron(
             db,
-            self.TOKEN_DATA_SOURCE_NAME,
-            self.TOKEN_TYPE,
+            self._data_source_name,
+            self._token_type,
             patron,
             allow_persistent_token=False,
             auto_create_datasource=True,
@@ -227,7 +249,7 @@ class OIDCCredentialManager(LoggerMixin):
         credential = Credential.lookup_by_token(
             db,
             self._get_token_data_source(db),
-            self.TOKEN_TYPE,
+            self._token_type,
             token_value,
             constraint=credential_constraint,
         )
@@ -385,17 +407,28 @@ class OIDCCredentialManager(LoggerMixin):
         self.log.info(f"Invalidated credential {credential_id}")
 
     def invalidate_patron_credentials(self, db: Session, patron_id: int) -> int:
-        """Invalidate all OIDC credentials for a patron.
+        """Invalidate all of a patron's credentials managed by this manager.
+
+        Only credentials matching this manager's data source and token type
+        are affected, so providers with distinct credential namespaces can
+        be invalidated independently.
 
         :param db: Database session
         :param patron_id: Patron ID
         :return: Number of credentials invalidated
         """
+        # Plain lookup rather than _get_token_data_source: invalidation must
+        # not create the data source when nothing was ever stored under it.
+        data_source = get_one(db, DataSource, name=self._data_source_name)
+        if data_source is None:
+            return 0
+
         credentials = (
             db.query(Credential)
             .filter(
                 Credential.patron_id == patron_id,
-                Credential.type == self.TOKEN_TYPE,
+                Credential.data_source == data_source,
+                Credential.type == self._token_type,
             )
             .all()
         )

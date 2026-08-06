@@ -5,11 +5,12 @@ This module provides the OIDC authentication provider implementation for patron 
 
 from __future__ import annotations
 
-from collections.abc import Generator
-from typing import TYPE_CHECKING, Any
+from collections.abc import Generator, Sequence
+from typing import TYPE_CHECKING, Any, Protocol
 
 from flask import url_for
 from flask_babel import lazy_gettext as _
+from pydantic import HttpUrl
 from sqlalchemy.orm import Session
 from werkzeug.datastructures import Authorization
 
@@ -17,6 +18,7 @@ from palace.opds.authentication.document import AuthenticateLink, PalaceAuthenti
 from palace.opds.authentication.palace import LocalizedValue
 from palace.opds.rwpm import Link
 from palace.util.exceptions import PalaceValueError
+from palace.util.log import LoggerType
 
 from palace.manager.api.authentication.base import PatronData, PatronLookupNotSupported
 from palace.manager.api.authenticator import BaseOIDCAuthenticationProvider
@@ -37,6 +39,7 @@ from palace.manager.integration.patron_auth.oidc.util import (
 )
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.credential import Credential
+from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.filter import FilterExpression, FilterExpressionError
 from palace.manager.util.problem_detail import (
@@ -88,6 +91,184 @@ OIDC_FILTER_EVALUATION_ERROR = pd(
 )
 
 
+def evaluate_patron_filters(
+    expressions: Sequence[tuple[str, str]],
+    context: dict[str, Any],
+    *,
+    library: Library,
+    claim_names: Sequence[str],
+    log: LoggerType,
+) -> None:
+    """Evaluate labeled filter expressions as an authorization check.
+
+    Every expression must evaluate to True for access to be granted. All
+    expressions are always evaluated so that a single log entry can report
+    every failing level at once. Callers assemble the evaluation context,
+    which lets providers expose whatever data their filters operate on.
+
+    :param expressions: (label, expression) pairs to evaluate
+    :param context: Evaluation context passed to each expression
+    :param library: Library the patron is authenticating against (for logging)
+    :param claim_names: Claim names included in denial log entries
+    :param log: Logger to record evaluation results with
+    :raises ProblemDetailException: if the patron is denied access or an expression errors
+    """
+    failing: list[str] = []
+    eval_errors: list[FilterExpressionError] = []
+    for label, expression in expressions:
+        try:
+            result = FilterExpression(expression).evaluate(context)
+        except FilterExpressionError as exc:
+            log.error(
+                "Filter [%s] evaluation error for library %s (%s): %s",
+                label,
+                library.name,
+                library.short_name,
+                exc,
+            )
+            failing.append(label)
+            eval_errors.append(exc)
+            continue
+        log.info(
+            "Filter [%s] %s for library %s (%s)",
+            label,
+            "passed" if result else "failed",
+            library.name,
+            library.short_name,
+        )
+        if not result:
+            failing.append(label)
+
+    if failing:
+        log.warning(
+            "Access denied for library %s (%s): filter(s) failed: %s; claim names=%s",
+            library.name,
+            library.short_name,
+            ", ".join(failing),
+            claim_names,
+        )
+        if eval_errors:
+            raise ProblemDetailException(
+                problem_detail=OIDC_FILTER_EVALUATION_ERROR.detailed(
+                    "; ".join(str(e) for e in eval_errors)
+                )
+            ) from eval_errors[0]
+        raise ProblemDetailException(problem_detail=OIDC_NO_ACCESS_ERROR)
+
+
+class OIDCAuthLinkSettings(Protocol):
+    """Display attributes for the authenticate link in an authentication document."""
+
+    @property
+    def auth_link_display_name(self) -> str | None: ...
+
+    @property
+    def auth_link_description(self) -> str | None: ...
+
+    @property
+    def auth_link_logo_url(self) -> HttpUrl | None: ...
+
+    @property
+    def auth_link_information_url(self) -> HttpUrl | None: ...
+
+    @property
+    def auth_link_privacy_statement_url(self) -> HttpUrl | None: ...
+
+
+def build_authenticate_link(
+    settings: OIDCAuthLinkSettings, label: str, authenticate_url: str
+) -> AuthenticateLink:
+    """Build an authentication link for an authentication entry.
+
+    :param settings: Display attributes for the link
+    :param label: Provider label, used when no display name is configured
+    :param authenticate_url: URL the client follows to start authentication
+    """
+    display_name = settings.auth_link_display_name or label
+    description = settings.auth_link_description or display_name
+
+    information_urls: list[LocalizedValue] = []
+    if settings.auth_link_information_url:
+        information_urls = [
+            LocalizedValue(value=str(settings.auth_link_information_url), language="en")
+        ]
+    privacy_statement_urls: list[LocalizedValue] = []
+    if settings.auth_link_privacy_statement_url:
+        privacy_statement_urls = [
+            LocalizedValue(
+                value=str(settings.auth_link_privacy_statement_url),
+                language="en",
+            )
+        ]
+    logo_urls: list[LocalizedValue] = []
+    if settings.auth_link_logo_url:
+        logo_urls = [
+            LocalizedValue(value=str(settings.auth_link_logo_url), language="en")
+        ]
+
+    return AuthenticateLink(
+        rel="authenticate",
+        href=authenticate_url,
+        display_names=[LocalizedValue(value=display_name, language="en")],
+        descriptions=[LocalizedValue(value=description, language="en")],
+        information_urls=information_urls,
+        privacy_statement_urls=privacy_statement_urls,
+        logo_urls=logo_urls,
+    )
+
+
+def build_oidc_authentication_document(
+    settings: OIDCAuthLinkSettings,
+    *,
+    flow_type: str,
+    label: str,
+    library_short_name: str,
+    supports_logout: bool,
+) -> PalaceAuthentication:
+    """Build an `authentication` entry suitable for an authentication document.
+
+    The authenticate and logout links point at the shared OIDC routes, which
+    dispatch to the right provider by its label. Any provider registered on
+    the OIDC path can therefore use this builder, passing its own flow type
+    and label and omitting the logout link when logout is unsupported.
+
+    :param settings: Display attributes for the authenticate link
+    :param flow_type: Authentication flow type URI advertised to clients
+    :param label: Provider label, used for route dispatch and as the description
+    :param library_short_name: Library the entry is generated for
+    :param supports_logout: Whether to include a templated logout link
+    :return: Authentication entry
+    """
+    authenticate_url = url_for(
+        "oidc_authenticate",
+        _external=True,
+        library_short_name=library_short_name,
+        provider=label,
+    )
+    links: list[Link] = [build_authenticate_link(settings, label, authenticate_url)]
+
+    if supports_logout:
+        logout_url = url_for(
+            "oidc_logout",
+            _external=True,
+            library_short_name=library_short_name,
+            provider=label,
+        )
+        links.append(
+            Link(
+                rel="logout",
+                href=f"{logout_url}{{&{LOGOUT_REDIRECT_QUERY_PARAM}}}",
+                templated=True,
+            )
+        )
+
+    return PalaceAuthentication(
+        type=flow_type,
+        description=label,
+        links=links,
+    )
+
+
 class OIDCAuthenticationProvider(
     BaseOIDCAuthenticationProvider[OIDCAuthSettings, OIDCAuthLibrarySettings]
 ):
@@ -136,6 +317,16 @@ class OIDCAuthenticationProvider(
         """Indicate whether this provider identifies individual patrons."""
         return True
 
+    @property
+    def patron_id_claim(self) -> str:
+        """Name of the ID token claim used to identify the patron."""
+        return self._settings.patron_id_claim
+
+    @property
+    def credential_manager(self) -> OIDCCredentialManager:
+        """Credential manager storing this provider's tokens."""
+        return self._credential_manager
+
     @classmethod
     def settings_class(cls) -> type[OIDCAuthSettings]:
         """Return the settings class for this provider."""
@@ -158,44 +349,6 @@ class OIDCAuthenticationProvider(
             return auth.token
         return None
 
-    def _create_authentication_link(self, authenticate_url: str) -> AuthenticateLink:
-        """Build an authentication link for an authentication entry."""
-        display_name = self._settings.auth_link_display_name or self.label()
-        description = self._settings.auth_link_description or display_name
-
-        information_urls: list[LocalizedValue] = []
-        if self._settings.auth_link_information_url:
-            information_urls = [
-                LocalizedValue(
-                    value=str(self._settings.auth_link_information_url), language="en"
-                )
-            ]
-        privacy_statement_urls: list[LocalizedValue] = []
-        if self._settings.auth_link_privacy_statement_url:
-            privacy_statement_urls = [
-                LocalizedValue(
-                    value=str(self._settings.auth_link_privacy_statement_url),
-                    language="en",
-                )
-            ]
-        logo_urls: list[LocalizedValue] = []
-        if self._settings.auth_link_logo_url:
-            logo_urls = [
-                LocalizedValue(
-                    value=str(self._settings.auth_link_logo_url), language="en"
-                )
-            ]
-
-        return AuthenticateLink(
-            rel="authenticate",
-            href=authenticate_url,
-            display_names=[LocalizedValue(value=display_name, language="en")],
-            descriptions=[LocalizedValue(value=description, language="en")],
-            information_urls=information_urls,
-            privacy_statement_urls=privacy_statement_urls,
-            logo_urls=logo_urls,
-        )
-
     def _authentication_flow_document(self, db: Session) -> PalaceAuthentication:
         """Build an `authentication` entry suitable for an authentication document.
 
@@ -206,34 +359,12 @@ class OIDCAuthenticationProvider(
         if not library:
             raise PalaceValueError("Library not found")
 
-        authenticate_url = url_for(
-            "oidc_authenticate",
-            _external=True,
+        return build_oidc_authentication_document(
+            self._settings,
+            flow_type=self.flow_type,
+            label=self.label(),
             library_short_name=library.short_name,
-            provider=self.label(),
-        )
-        links: list[Link] = [self._create_authentication_link(authenticate_url)]
-
-        auth_manager = self.get_authentication_manager()
-        if auth_manager.supports_logout():
-            logout_url = url_for(
-                "oidc_logout",
-                _external=True,
-                library_short_name=library.short_name,
-                provider=self.label(),
-            )
-            links.append(
-                Link(
-                    rel="logout",
-                    href=f"{logout_url}{{&{LOGOUT_REDIRECT_QUERY_PARAM}}}",
-                    templated=True,
-                )
-            )
-
-        return PalaceAuthentication(
-            type=self.flow_type,
-            description=self.label(),
-            links=links,
+            supports_logout=self.get_authentication_manager().supports_logout(),
         )
 
     def _run_self_tests(self, db: Session) -> Generator[SelfTestResult]:
@@ -301,16 +432,17 @@ class OIDCAuthenticationProvider(
         self._auth_manager = manager
         return self._auth_manager
 
-    def remote_patron_lookup_from_oidc_claims(
-        self, id_token_claims: dict[str, Any]
-    ) -> PatronData:
-        """Create PatronData from ID token claims.
+    def extract_patron_identifier(self, id_token_claims: dict[str, Any]) -> str | None:
+        """Extract the patron identifier from validated token claims.
 
-        :param id_token_claims: Validated ID token claims
-        :return: PatronData object
-        :raises: ProblemDetailException if patron cannot be determined
+        Applies the configured patron ID claim and optional extraction
+        regular expression. Logout paths use this so their patron lookups
+        match the identifier stored at login.
+
+        :param id_token_claims: Validated token claims
+        :return: Patron identifier, or None if it cannot be determined
         """
-        patron_id_claim = self._settings.patron_id_claim
+        patron_id_claim = self.patron_id_claim
         id_token_claim_names = list(id_token_claims.keys())
         raw_patron_id = id_token_claims.get(patron_id_claim)
 
@@ -320,7 +452,7 @@ class OIDCAuthenticationProvider(
                 patron_id_claim,
                 id_token_claim_names,
             )
-            raise ProblemDetailException(problem_detail=OIDC_CANNOT_DETERMINE_PATRON)
+            return None
 
         if self._settings.patron_id_regular_expression:
             match = self._settings.patron_id_regular_expression.match(
@@ -333,9 +465,7 @@ class OIDCAuthenticationProvider(
                     raw_patron_id,
                     patron_id_claim,
                 )
-                raise ProblemDetailException(
-                    problem_detail=OIDC_CANNOT_DETERMINE_PATRON
-                )
+                return None
             patron_id = match.group("patron_id")
         else:
             patron_id = str(raw_patron_id)
@@ -346,6 +476,21 @@ class OIDCAuthenticationProvider(
             patron_id_claim,
             id_token_claim_names,
         )
+        return patron_id
+
+    def remote_patron_lookup_from_oidc_claims(
+        self, id_token_claims: dict[str, Any]
+    ) -> PatronData:
+        """Create PatronData from ID token claims.
+
+        :param id_token_claims: Validated ID token claims
+        :return: PatronData object
+        :raises: ProblemDetailException if patron cannot be determined
+        """
+        patron_id = self.extract_patron_identifier(id_token_claims)
+        if patron_id is None:
+            raise ProblemDetailException(problem_detail=OIDC_CANNOT_DETERMINE_PATRON)
+
         return PatronData(
             permanent_id=patron_id,
             authorization_identifier=patron_id,
@@ -415,47 +560,13 @@ class OIDCAuthenticationProvider(
             },
         }
 
-        failing: list[str] = []
-        eval_errors: list[FilterExpressionError] = []
-        for label, expression in labeled_expressions:
-            try:
-                result = FilterExpression(expression).evaluate(context)
-            except FilterExpressionError as exc:
-                self.log.error(
-                    "Filter [%s] evaluation error for library %s (%s): %s",
-                    label,
-                    library.name,
-                    library.short_name,
-                    exc,
-                )
-                failing.append(label)
-                eval_errors.append(exc)
-                continue
-            self.log.info(
-                "Filter [%s] %s for library %s (%s)",
-                label,
-                "passed" if result else "failed",
-                library.name,
-                library.short_name,
-            )
-            if not result:
-                failing.append(label)
-
-        if failing:
-            self.log.warning(
-                "Access denied for library %s (%s): filter(s) failed: %s; claim names=%s",
-                library.name,
-                library.short_name,
-                ", ".join(failing),
-                id_token_claim_names,
-            )
-            if eval_errors:
-                raise ProblemDetailException(
-                    problem_detail=OIDC_FILTER_EVALUATION_ERROR.detailed(
-                        "; ".join(str(e) for e in eval_errors)
-                    )
-                ) from eval_errors[0]
-            raise ProblemDetailException(problem_detail=OIDC_NO_ACCESS_ERROR)
+        evaluate_patron_filters(
+            labeled_expressions,
+            context,
+            library=library,
+            claim_names=id_token_claim_names,
+            log=self.log,
+        )
 
     def oidc_callback(
         self,

@@ -21,6 +21,9 @@ from palace.manager.integration.patron_auth.oidc.configuration.model import (
     OIDCAuthLibrarySettings,
     OIDCAuthSettings,
 )
+from palace.manager.integration.patron_auth.oidc.credential import (
+    OIDCCredentialManager,
+)
 from palace.manager.integration.patron_auth.oidc.provider import (
     OIDC_CANNOT_DETERMINE_PATRON,
     OIDC_FILTER_EVALUATION_ERROR,
@@ -28,6 +31,7 @@ from palace.manager.integration.patron_auth.oidc.provider import (
     OIDC_NO_ACCESS_ERROR,
     OIDC_TOKEN_EXPIRED,
     OIDCAuthenticationProvider,
+    evaluate_patron_filters,
 )
 from palace.manager.integration.patron_auth.oidc.util import (
     OIDCDiscoveryError,
@@ -59,6 +63,52 @@ class TestOIDCAuthenticationProvider:
 
     def test_identifies_individuals(self, oidc_provider):
         assert oidc_provider.identifies_individuals is True
+
+    def test_patron_id_claim(self, oidc_provider: OIDCAuthenticationProvider) -> None:
+        assert oidc_provider.patron_id_claim == oidc_provider._settings.patron_id_claim
+
+    @pytest.mark.parametrize(
+        "claims,patron_id_regex,expected",
+        [
+            pytest.param({"sub": "user123"}, None, "user123", id="plain-claim"),
+            pytest.param(
+                {"sub": "jdoe@example.edu"},
+                r"(?P<patron_id>[^@]+)@example\.edu",
+                "jdoe",
+                id="regex-extraction",
+            ),
+            pytest.param(
+                {"sub": "jdoe@other.edu"},
+                r"(?P<patron_id>[^@]+)@example\.edu",
+                None,
+                id="regex-no-match",
+            ),
+            pytest.param({"email": "x@y.z"}, None, None, id="missing-claim"),
+        ],
+    )
+    def test_extract_patron_identifier(
+        self,
+        create_oidc_settings: Callable[..., OIDCAuthSettings],
+        create_oidc_provider: Callable[..., OIDCAuthenticationProvider],
+        claims: dict[str, Any],
+        patron_id_regex: str | None,
+        expected: str | None,
+    ) -> None:
+        """The extraction applies the same claim and optional regex used at login."""
+        settings_kwargs: dict[str, Any] = {}
+        if patron_id_regex is not None:
+            settings_kwargs["patron_id_regular_expression"] = patron_id_regex
+        provider = create_oidc_provider(
+            settings=create_oidc_settings(**settings_kwargs)
+        )
+
+        assert provider.extract_patron_identifier(claims) == expected
+
+    def test_credential_manager(
+        self, oidc_provider: OIDCAuthenticationProvider
+    ) -> None:
+        assert isinstance(oidc_provider.credential_manager, OIDCCredentialManager)
+        assert oidc_provider.credential_manager is oidc_provider._credential_manager
 
     def test_get_credential_from_header_with_bearer_token(self, oidc_provider):
         auth = MagicMock()
@@ -779,6 +829,58 @@ class TestOIDCAuthenticationProvider:
         detail = str(exc_info.value.problem_detail.detail)
         assert "; " in detail
         assert len([r for r in caplog.records if r.levelno == logging.ERROR]) == 2
+
+    @pytest.mark.parametrize(
+        "expressions,expected_uri",
+        [
+            pytest.param(
+                [("integration", "claims['role'] == 'student'")],
+                None,
+                id="passing-expression",
+            ),
+            pytest.param(
+                [
+                    ("integration", "claims['role'] == 'student'"),
+                    ("library", "claims['role'] == 'teacher'"),
+                ],
+                OIDC_NO_ACCESS_ERROR.uri,
+                id="failing-expression",
+            ),
+            pytest.param(
+                [("integration", "claims.no_such_attr == 'x'")],
+                OIDC_FILTER_EVALUATION_ERROR.uri,
+                id="evaluation-error",
+            ),
+        ],
+    )
+    def test_evaluate_patron_filters(
+        self,
+        db: DatabaseTransactionFixture,
+        expressions: list[tuple[str, str]],
+        expected_uri: str | None,
+    ) -> None:
+        """evaluate_patron_filters grants access only when every expression passes."""
+        claims = {"role": "student"}
+        context = {"claims": claims}
+        library = db.default_library()
+
+        context_manager = (
+            pytest.raises(ProblemDetailException)
+            if expected_uri is not None
+            else nullcontext()
+        )
+        with context_manager as exc_info:
+            evaluate_patron_filters(
+                expressions,
+                context,
+                library=library,
+                claim_names=list(claims.keys()),
+                log=logging.getLogger(__name__),
+            )
+
+        if expected_uri is not None:
+            assert exc_info is not None
+            assert exc_info.value.problem_detail.uri == expected_uri
 
     def test_filter_claims_library_not_found(
         self,
