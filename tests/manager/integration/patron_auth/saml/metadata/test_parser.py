@@ -3,7 +3,8 @@ from unittest.mock import MagicMock, create_autospec
 import pytest
 from onelogin.saml2.auth import OneLogin_Saml2_Auth
 from onelogin.saml2.settings import OneLogin_Saml2_Settings
-from onelogin.saml2.xmlparser import RestrictedElement
+from onelogin.saml2.utils import OneLogin_Saml2_XML
+from onelogin.saml2.xmlparser import RestrictedElement, fromstring
 
 from palace.manager.integration.patron_auth.saml.metadata.model import (
     SAMLAttribute,
@@ -26,6 +27,36 @@ from palace.manager.integration.patron_auth.saml.metadata.parser import (
     SAMLSubjectParser,
 )
 from tests.mocks import saml_strings
+
+ACS_BINDING = "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
+ACS_OLD_URL = "https://il.thepalaceproject.org/saml_callback"
+ACS_NEW_URL = "https://il.thepalaceproject.org/saml/callback"
+
+
+def _acs_element(
+    location: str, index: str | None = None, is_default: str | None = None
+) -> str:
+    """Build an AssertionConsumerService element for SP metadata."""
+    attributes = [f'Binding="{ACS_BINDING}"', f'Location="{location}"']
+
+    if index is not None:
+        attributes.append(f'index="{index}"')
+    if is_default is not None:
+        attributes.append(f'isDefault="{is_default}"')
+
+    return f"<md:AssertionConsumerService {' '.join(attributes)}/>"
+
+
+def _sp_metadata(*acs_elements: str) -> str:
+    """Build minimal SP metadata declaring the given ACS endpoints."""
+    return (
+        '<md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" '
+        'entityID="http://sp.example.org/metadata">'
+        '<md:SPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">'
+        f"{''.join(acs_elements)}"
+        "</md:SPSSODescriptor>"
+        "</md:EntityDescriptor>"
+    )
 
 
 class TestSAMLMetadataParser:
@@ -643,6 +674,146 @@ class TestSAMLMetadataParser:
             metadata_parser.parse(
                 incorrect_xml_with_one_sp_metadata_without_acs_service
             )
+
+    @pytest.mark.parametrize(
+        "acs_elements, expected_url",
+        [
+            pytest.param(
+                [_acs_element(ACS_NEW_URL, index="1")],
+                ACS_NEW_URL,
+                id="single-endpoint",
+            ),
+            pytest.param(
+                [_acs_element(ACS_NEW_URL, index="1", is_default="true")],
+                ACS_NEW_URL,
+                id="single-endpoint-marked-default",
+            ),
+            pytest.param(
+                [
+                    _acs_element(ACS_OLD_URL, index="1"),
+                    _acs_element(ACS_NEW_URL, index="2"),
+                ],
+                ACS_OLD_URL,
+                id="no-endpoint-marked-default",
+            ),
+            pytest.param(
+                [
+                    _acs_element(ACS_OLD_URL, index="1", is_default="true"),
+                    _acs_element(ACS_NEW_URL, index="2"),
+                ],
+                ACS_OLD_URL,
+                id="lowest-index-marked-default",
+            ),
+            pytest.param(
+                [
+                    _acs_element(ACS_OLD_URL, index="1"),
+                    _acs_element(ACS_NEW_URL, index="2", is_default="true"),
+                ],
+                ACS_OLD_URL,
+                id="higher-index-marked-default",
+            ),
+            pytest.param(
+                [
+                    _acs_element(ACS_OLD_URL, index="1", is_default="false"),
+                    _acs_element(ACS_NEW_URL, index="2", is_default="true"),
+                ],
+                ACS_OLD_URL,
+                id="lowest-index-marked-not-default",
+            ),
+            pytest.param(
+                [
+                    _acs_element(ACS_NEW_URL, index="10"),
+                    _acs_element(ACS_OLD_URL, index="9"),
+                ],
+                ACS_OLD_URL,
+                id="index-compared-numerically-not-as-string",
+            ),
+            pytest.param(
+                [
+                    _acs_element(ACS_OLD_URL),
+                    _acs_element(ACS_NEW_URL, index="2"),
+                ],
+                ACS_OLD_URL,
+                id="endpoint-without-index-treated-as-zero",
+            ),
+            pytest.param(
+                [
+                    _acs_element(ACS_NEW_URL, index="0"),
+                    _acs_element(ACS_OLD_URL),
+                ],
+                ACS_NEW_URL,
+                id="index-zero-ties-with-absent-index-document-order-wins",
+            ),
+        ],
+    )
+    def test_parse_selects_acs_endpoint_with_lowest_index(
+        self, acs_elements: list[str], expected_url: str
+    ):
+        """ACS selection uses the lowest index and ignores isDefault.
+
+        Identity providers are registered against the endpoint chosen here, so these
+        results are a compatibility guarantee, not an implementation detail. The
+        "higher-index-marked-default" case is the shape most integrations use.
+        """
+        metadata_parser = SAMLMetadataParser()
+
+        parsing_results = metadata_parser.parse(_sp_metadata(*acs_elements))
+
+        [parsing_result] = parsing_results
+        assert parsing_result.provider.acs_service.url == expected_url
+
+    def test_parse_raises_exception_when_acs_index_is_not_an_integer(self):
+        metadata_parser = SAMLMetadataParser()
+
+        with pytest.raises(SAMLMetadataParsingError):
+            metadata_parser.parse(
+                _sp_metadata(_acs_element(ACS_NEW_URL, index="first"))
+            )
+
+    @pytest.mark.parametrize(
+        "acs_elements, expected_url",
+        [
+            pytest.param(
+                [
+                    _acs_element(ACS_OLD_URL, index="1"),
+                    _acs_element(ACS_NEW_URL, index="2", is_default="true"),
+                ],
+                ACS_NEW_URL,
+                id="default-wins-over-lower-index",
+            ),
+            pytest.param(
+                [
+                    _acs_element(ACS_OLD_URL, index="1", is_default="false"),
+                    _acs_element(ACS_NEW_URL, index="2", is_default="true"),
+                ],
+                ACS_NEW_URL,
+                id="is-default-false-is-not-a-default",
+            ),
+            pytest.param(
+                [
+                    _acs_element(ACS_OLD_URL, index="1"),
+                    _acs_element(ACS_NEW_URL, index="2"),
+                ],
+                ACS_OLD_URL,
+                id="falls-back-to-lowest-index",
+            ),
+        ],
+    )
+    def test_select_default_or_first_indexed_element(
+        self, acs_elements: list[str], expected_url: str
+    ):
+        """The default-aware selector honors isDefault.
+
+        ACS selection does not use this selector; it is pinned to the lowest index.
+        """
+        metadata_parser = SAMLMetadataParser()
+        document = fromstring(_sp_metadata(*acs_elements).encode())
+        nodes = OneLogin_Saml2_XML.query(document, "//md:AssertionConsumerService")
+
+        selected = metadata_parser._select_default_or_first_indexed_element(nodes)
+
+        assert selected is not None
+        assert selected.get("Location") == expected_url
 
     @pytest.mark.parametrize(
         "correct_xml_with_one_sp",
