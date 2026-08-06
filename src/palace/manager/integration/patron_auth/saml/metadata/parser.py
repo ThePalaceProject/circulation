@@ -10,6 +10,7 @@ from onelogin.saml2.xmlparser import RestrictedElement, fromstring
 from palace.util.exceptions import BasePalaceException
 
 from palace.manager.integration.patron_auth.saml.metadata.model import (
+    SAMLACSSelectionPolicy,
     SAMLAttribute,
     SAMLAttributeStatement,
     SAMLAttributeType,
@@ -65,14 +66,22 @@ class SAMLMetadataParsingResult:
 class SAMLMetadataParser:
     """Parses SAML metadata"""
 
-    def __init__(self, skip_incorrect_providers=False):
+    def __init__(
+        self,
+        skip_incorrect_providers=False,
+        acs_selection_policy: SAMLACSSelectionPolicy = SAMLACSSelectionPolicy.FIRST_INDEX,
+    ):
         """Initialize a new instance of MetadataParser class.
 
         :param skip_incorrect_providers: Boolean value indicating whether the parse should skip
             incorrect SAML provider declarations instead of raising an exception
         :type skip_incorrect_providers: bool
+
+        :param acs_selection_policy: Rule for choosing among several
+            AssertionConsumerService endpoints declared in SP metadata
         """
         self._skip_incorrect_providers = skip_incorrect_providers
+        self._acs_selection_policy = acs_selection_policy
 
         self._logger = logging.getLogger(__name__)
 
@@ -453,10 +462,15 @@ class SAMLMetadataParser:
             provider_node,
             "./md:AssertionConsumerService[@Binding='%s']" % required_acs_binding.value,
         )
-        # ACS selection uses the lowest index and ignores isDefault. Identity
-        # providers are registered against the endpoint this picks, so changing the
-        # rule is a coordinated configuration migration rather than a parser change.
-        acs_service_node = self._select_first_indexed_element(acs_service_nodes)
+        # Identity providers are registered against the endpoint selected here, so
+        # the default policy preserves the lowest-index choice and ignores isDefault.
+        # Honoring isDefault is opt-in per integration.
+        if self._acs_selection_policy is SAMLACSSelectionPolicy.METADATA_DEFAULT:
+            acs_service_node = self._select_default_or_first_indexed_element(
+                acs_service_nodes
+            )
+        else:
+            acs_service_node = self._select_first_indexed_element(acs_service_nodes)
 
         if acs_service_node is not None:
             acs_url = acs_service_node.get("Location", None)

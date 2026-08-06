@@ -30,6 +30,7 @@ from palace.manager.integration.patron_auth.saml.configuration.service_provider 
 )
 from palace.manager.integration.patron_auth.saml.metadata.federations import incommon
 from palace.manager.integration.patron_auth.saml.metadata.model import (
+    SAMLACSSelectionPolicy,
     SAMLAttributeType,
     SAMLBinding,
     SAMLIdentityProviderMetadata,
@@ -153,6 +154,26 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
             use_monospace_font=True,
         ),
     ] = None
+    service_provider_acs_selection_policy: Annotated[
+        SAMLACSSelectionPolicy,
+        FormMetadata(
+            label="Assertion Consumer Service Endpoint Selection",
+            description=(
+                "Which Assertion Consumer Service endpoint to name in authentication requests, "
+                "when the Service Provider metadata declares more than one. "
+                "'Lowest index' deliberately ignores the isDefault attribute: identity providers "
+                "are registered against the endpoint it selects, so changing this is a "
+                "coordinated configuration change with the identity provider, not a preference."
+            ),
+            type=FormFieldType.SELECT,
+            options={
+                SAMLACSSelectionPolicy.FIRST_INDEX.value: "Lowest index (ignore isDefault)",
+                SAMLACSSelectionPolicy.METADATA_DEFAULT.value: (
+                    "Metadata default (isDefault, otherwise lowest index)"
+                ),
+            },
+        ),
+    ] = SAMLACSSelectionPolicy.FIRST_INDEX
     federated_identity_provider_entity_ids: Annotated[
         list[str] | None,
         FormMetadata(
@@ -638,7 +659,12 @@ class SAMLOneLoginConfiguration(LoggerMixin):
                 )
             )
 
-        parsing_results = self._metadata_parser.parse(metadata)
+        # The ACS selection policy applies only to SP metadata, so this parse uses its
+        # own parser rather than the one shared with identity provider parsing.
+        service_provider_parser = SAMLMetadataParser(
+            acs_selection_policy=self._configuration.service_provider_acs_selection_policy
+        )
+        parsing_results = service_provider_parser.parse(metadata)
 
         if not isinstance(parsing_results, list) or len(parsing_results) != 1:
             raise SAMLConfigurationError(

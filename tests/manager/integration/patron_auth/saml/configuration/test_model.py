@@ -19,6 +19,7 @@ from palace.manager.integration.patron_auth.saml.configuration.problem_details i
 )
 from palace.manager.integration.patron_auth.saml.metadata.federations import incommon
 from palace.manager.integration.patron_auth.saml.metadata.model import (
+    SAMLACSSelectionPolicy,
     SAMLBinding,
     SAMLIdentityProviderMetadata,
     SAMLNameIDFormat,
@@ -715,7 +716,65 @@ class TestSAMLSettings:
         )
 
 
+SP_METADATA_WITH_TWO_ACS_ENDPOINTS = (
+    '<md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" '
+    'entityID="http://sp.example.org/metadata">'
+    '<md:SPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">'
+    '<md:AssertionConsumerService index="1" '
+    'Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" '
+    'Location="https://example.org/saml_callback"/>'
+    '<md:AssertionConsumerService index="2" isDefault="true" '
+    'Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" '
+    'Location="https://example.org/saml/callback"/>'
+    "</md:SPSSODescriptor>"
+    "</md:EntityDescriptor>"
+)
+
+
 class TestSAMLOneLoginConfiguration:
+    def test_acs_selection_policy_defaults_to_first_index(
+        self, create_saml_configuration
+    ):
+        """The default preserves the endpoint identity providers are registered against."""
+        configuration = create_saml_configuration()
+
+        assert (
+            configuration.service_provider_acs_selection_policy
+            is SAMLACSSelectionPolicy.FIRST_INDEX
+        )
+
+    @pytest.mark.parametrize(
+        "policy, expected_url",
+        [
+            pytest.param(
+                SAMLACSSelectionPolicy.FIRST_INDEX,
+                "https://example.org/saml_callback",
+                id="first-index-ignores-is-default",
+            ),
+            pytest.param(
+                SAMLACSSelectionPolicy.METADATA_DEFAULT,
+                "https://example.org/saml/callback",
+                id="metadata-default-honors-is-default",
+            ),
+        ],
+    )
+    def test_acs_selection_policy_reaches_the_parser(
+        self,
+        create_saml_configuration,
+        policy: SAMLACSSelectionPolicy,
+        expected_url: str,
+    ):
+        """The integration setting decides which published ACS endpoint is asserted."""
+        configuration = create_saml_configuration(
+            service_provider_xml_metadata=SP_METADATA_WITH_TWO_ACS_ENDPOINTS,
+            service_provider_acs_selection_policy=policy,
+        )
+        onelogin_configuration = SAMLOneLoginConfiguration(configuration)
+
+        service_provider = onelogin_configuration.get_service_provider()
+
+        assert service_provider.acs_service.url == expected_url
+
     def test_get_identity_provider_settings_returns_correct_result(self):
         # Arrange
         configuration = create_autospec(spec=SAMLWebSSOAuthSettings)

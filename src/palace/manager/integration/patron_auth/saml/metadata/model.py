@@ -328,6 +328,21 @@ class SAMLBinding(Enum):
     DEFLATE = OneLogin_Saml2_Constants.BINDING_DEFLATE
 
 
+class SAMLACSSelectionPolicy(Enum):
+    """Rule for choosing which ACS endpoint to name in an AuthnRequest.
+
+    Only applies when the SP metadata declares more than one
+    AssertionConsumerService endpoint for the required binding.
+    """
+
+    # Lowest index, ignoring isDefault. Identity providers are registered against
+    # the endpoint this picks, so it is the default.
+    FIRST_INDEX = "first_index"
+
+    # The SAML rule: isDefault="true" wins, falling back to the lowest index.
+    METADATA_DEFAULT = "metadata_default"
+
+
 class SAMLNameIDFormat(Enum):
     """Enumeration of SAML name ID formats"""
 

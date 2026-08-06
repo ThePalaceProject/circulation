@@ -7,6 +7,7 @@ from onelogin.saml2.utils import OneLogin_Saml2_XML
 from onelogin.saml2.xmlparser import RestrictedElement, fromstring
 
 from palace.manager.integration.patron_auth.saml.metadata.model import (
+    SAMLACSSelectionPolicy,
     SAMLAttribute,
     SAMLAttributeStatement,
     SAMLAttributeType,
@@ -760,6 +761,35 @@ class TestSAMLMetadataParser:
         parsing_results = metadata_parser.parse(_sp_metadata(*acs_elements))
 
         [parsing_result] = parsing_results
+        assert parsing_result.provider.acs_service.url == expected_url
+
+    @pytest.mark.parametrize(
+        "policy, expected_url",
+        [
+            pytest.param(
+                SAMLACSSelectionPolicy.FIRST_INDEX,
+                ACS_OLD_URL,
+                id="first-index-ignores-is-default",
+            ),
+            pytest.param(
+                SAMLACSSelectionPolicy.METADATA_DEFAULT,
+                ACS_NEW_URL,
+                id="metadata-default-honors-is-default",
+            ),
+        ],
+    )
+    def test_parse_applies_acs_selection_policy(
+        self, policy: SAMLACSSelectionPolicy, expected_url: str
+    ):
+        """The selection policy decides between the lowest index and isDefault."""
+        metadata_parser = SAMLMetadataParser(acs_selection_policy=policy)
+        metadata = _sp_metadata(
+            _acs_element(ACS_OLD_URL, index="1"),
+            _acs_element(ACS_NEW_URL, index="2", is_default="true"),
+        )
+
+        [parsing_result] = metadata_parser.parse(metadata)
+
         assert parsing_result.provider.acs_service.url == expected_url
 
     def test_parse_raises_exception_when_acs_index_is_not_an_integer(self):
