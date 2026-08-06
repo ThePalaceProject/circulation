@@ -387,6 +387,70 @@ class TestSAMLAuthenticationManager:
         if service_provider.authn_requests_signed:
             assert "Signature" in query_items
 
+    def test_start_authentication_logs_that_no_acs_endpoint_is_named(
+        self,
+        controller_fixture: ControllerFixture,
+        create_saml_configuration,
+        create_mock_onelogin_configuration: Callable[..., SAMLOneLoginConfiguration],
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """Deferring names no endpoint, so the log must not claim one was asserted."""
+        caplog.set_level(logging.DEBUG)
+
+        onelogin_configuration = create_mock_onelogin_configuration(
+            SERVICE_PROVIDER_WITH_UNSIGNED_REQUESTS,
+            IDENTITY_PROVIDERS,
+            create_saml_configuration(
+                service_provider_acs_selection_policy=SAMLACSSelectionPolicy.DEFER_TO_IDP
+            ),
+        )
+        authentication_manager = SAMLAuthenticationManager(
+            onelogin_configuration, SAMLSubjectParser()
+        )
+
+        with controller_fixture.app.test_request_context("/"):
+            authentication_manager.start_authentication(
+                controller_fixture.db.session, saml_strings.IDP_1_ENTITY_ID, ""
+            )
+
+        assert "names no ACS endpoint" in caplog.text
+        assert "asserts ACS endpoint" not in caplog.text
+
+    def test_start_authentication_defers_to_idp_from_the_environment(
+        self,
+        controller_fixture: ControllerFixture,
+        monkeypatch: pytest.MonkeyPatch,
+        create_saml_configuration,
+        create_mock_onelogin_configuration: Callable[..., SAMLOneLoginConfiguration],
+    ):
+        """A site-wide policy has to reach request building, not just metadata parsing."""
+        monkeypatch.setenv("PALACE_SAML_SP_ACS_SELECTION_POLICY", "defer_to_idp")
+
+        onelogin_configuration = create_mock_onelogin_configuration(
+            SERVICE_PROVIDER_WITH_UNSIGNED_REQUESTS,
+            IDENTITY_PROVIDERS,
+            create_saml_configuration(),
+        )
+        authentication_manager = SAMLAuthenticationManager(
+            onelogin_configuration, SAMLSubjectParser()
+        )
+
+        with controller_fixture.app.test_request_context("/"):
+            result = authentication_manager.start_authentication(
+                controller_fixture.db.session, saml_strings.IDP_1_ENTITY_ID, ""
+            )
+
+        assert isinstance(result, str)
+        query_items = parse_qs(urlsplit(result).query)
+        saml_request_dom = fromstring(
+            OneLogin_Saml2_Utils.decode_base64_and_inflate(
+                query_items["SAMLRequest"][0]
+            )
+        )
+
+        assert saml_request_dom.get("AssertionConsumerServiceURL") is None
+        assert saml_request_dom.get("ProtocolBinding") is None
+
     def test_finish_authentication_does_not_warn_when_deferring_to_idp(
         self,
         controller_fixture: ControllerFixture,

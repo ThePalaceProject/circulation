@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from unittest.mock import MagicMock, create_autospec
 
 import pytest
@@ -776,6 +777,11 @@ class TestSAMLMetadataParser:
                 ACS_NEW_URL,
                 id="metadata-default-honors-is-default",
             ),
+            pytest.param(
+                SAMLACSSelectionPolicy.DEFER_TO_IDP,
+                ACS_NEW_URL,
+                id="defer-to-idp-still-resolves-an-endpoint",
+            ),
         ],
     )
     def test_parse_applies_acs_selection_policy(
@@ -791,6 +797,54 @@ class TestSAMLMetadataParser:
         [parsing_result] = metadata_parser.parse(metadata)
 
         assert parsing_result.provider.acs_service.url == expected_url
+
+    @pytest.mark.parametrize(
+        "element, binding, accessor",
+        [
+            pytest.param(
+                "SingleSignOnService",
+                "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect",
+                lambda provider: provider.sso_service.url,
+                id="single-sign-on-service",
+            ),
+            pytest.param(
+                "SingleLogoutService",
+                "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect",
+                lambda provider: provider.slo_service.url,
+                id="single-logout-service",
+            ),
+        ],
+    )
+    def test_parse_ignores_is_default_on_endpoint_type_elements(
+        self,
+        element: str,
+        binding: str,
+        accessor: Callable[[SAMLIdentityProviderMetadata], str],
+    ):
+        """Only IndexedEndpointType declares index and isDefault.
+
+        SingleSignOnService and SingleLogoutService are plain EndpointType, so an
+        isDefault attribute on them is meaningless and the first declaration wins.
+        Metadata carrying one is schema-invalid but parses without complaint.
+        """
+        metadata_parser = SAMLMetadataParser()
+        metadata = (
+            '<md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" '
+            'entityID="http://idp.example.org/metadata">'
+            "<md:IDPSSODescriptor "
+            'protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">'
+            f'<md:{element} Binding="{binding}" Location="https://idp.example.org/first"/>'
+            f'<md:{element} Binding="{binding}" Location="https://idp.example.org/second" '
+            'isDefault="true"/>'
+            '<md:SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect" '
+            'Location="https://idp.example.org/filler"/>'
+            "</md:IDPSSODescriptor>"
+            "</md:EntityDescriptor>"
+        )
+
+        [parsing_result] = metadata_parser.parse(metadata)
+
+        assert accessor(parsing_result.provider) == "https://idp.example.org/first"
 
     def test_parse_raises_exception_when_acs_index_is_not_an_integer(self):
         metadata_parser = SAMLMetadataParser()

@@ -811,12 +811,6 @@ class TestSAMLOneLoginConfiguration:
                 id="invalid-environment-value-falls-back",
             ),
             pytest.param(
-                "",
-                None,
-                SAMLACSSelectionPolicy.FIRST_INDEX,
-                id="empty-environment-value-falls-back",
-            ),
-            pytest.param(
                 "not-a-policy",
                 SAMLACSSelectionPolicy.METADATA_DEFAULT,
                 SAMLACSSelectionPolicy.METADATA_DEFAULT,
@@ -841,6 +835,28 @@ class TestSAMLOneLoginConfiguration:
         onelogin_configuration = SAMLOneLoginConfiguration(configuration)
 
         assert onelogin_configuration.get_acs_selection_policy() is expected_policy
+
+    def test_empty_acs_selection_policy_in_environment_is_not_an_error(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """An explicitly empty value means 'unset', not a misconfiguration.
+
+        Set through monkeypatch directly, because the monkeypatch_env fixture deletes
+        the variable for a falsy value rather than setting it empty.
+        """
+        caplog.set_level(logging.ERROR)
+        monkeypatch.setenv("PALACE_SAML_SP_ACS_SELECTION_POLICY", "")
+
+        onelogin_configuration = SAMLOneLoginConfiguration(create_saml_configuration())
+
+        assert (
+            onelogin_configuration.get_acs_selection_policy()
+            is SAMLACSSelectionPolicy.FIRST_INDEX
+        )
+        assert "PALACE_SAML_SP_ACS_SELECTION_POLICY" not in caplog.text
 
     def test_invalid_acs_selection_policy_in_environment_is_logged(
         self,

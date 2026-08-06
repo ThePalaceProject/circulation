@@ -300,10 +300,16 @@ class SAMLAuthenticationManager:
             redirect_url = auth.login(return_to_url, force_authn=force_authn)
 
             if self._logger.isEnabledFor(logging.DEBUG):
-                self._logger.debug(
-                    f"AuthnRequest for IdP '{idp_entity_id}' asserts ACS endpoint "
-                    f"'{self._get_asserted_acs_url(auth)}'"
-                )
+                if self._defers_acs_to_idp():
+                    self._logger.debug(
+                        f"AuthnRequest for IdP '{idp_entity_id}' names no ACS endpoint; "
+                        f"the identity provider will use the one it has registered"
+                    )
+                else:
+                    self._logger.debug(
+                        f"AuthnRequest for IdP '{idp_entity_id}' asserts ACS endpoint "
+                        f"'{self._get_asserted_acs_url(auth)}'"
+                    )
                 self._logger.debug(f"SAML request: {auth.get_last_request_xml()}")
 
             self._logger.info(

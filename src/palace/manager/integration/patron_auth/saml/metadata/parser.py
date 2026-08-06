@@ -385,8 +385,9 @@ class SAMLMetadataParser:
             "./md:SingleSignOnService[@Binding='%s']" % required_sso_binding.value,
         )
         if len(sso_nodes) > 0:
-            sso_node = self._select_default_or_first_indexed_element(sso_nodes)
-            sso_url = sso_node.get("Location", None)
+            # SingleSignOnService is an EndpointType, which declares neither index nor
+            # isDefault, so there is nothing to select by and the first declaration wins.
+            sso_url = sso_nodes[0].get("Location", None)
             sso_service = SAMLService(sso_url, required_sso_binding)
         else:
             raise SAMLMetadataParsingError(
@@ -403,8 +404,9 @@ class SAMLMetadataParser:
             "./md:SingleLogoutService[@Binding='%s']" % required_slo_binding.value,
         )
         if len(slo_nodes) > 0:
-            slo_node = self._select_default_or_first_indexed_element(slo_nodes)
-            slo_url = slo_node.get("Location", None)
+            # SingleLogoutService is an EndpointType, which declares neither index nor
+            # isDefault, so there is nothing to select by and the first declaration wins.
+            slo_url = slo_nodes[0].get("Location", None)
             slo_service = SAMLService(slo_url, required_slo_binding)
 
         signing_certificate_nodes = OneLogin_Saml2_XML.query(
@@ -512,10 +514,10 @@ class SAMLMetadataParser:
     def _parse_index(node: RestrictedElement) -> int:
         """Return a node's "index" attribute, treating an absent one as 0.
 
-        SSO and SLO endpoints carry no "index" at all, so they all tie at 0 and keep
-        document order. The schema requires "index" on AssertionConsumerService, so an
-        absent one there means invalid metadata rather than a meaningful rank; it ties
-        with any endpoint declaring index="0".
+        Only AssertionConsumerService reaches this, and the schema requires "index"
+        there, so an absent one means invalid metadata rather than a meaningful rank.
+        Such a node ties with any endpoint declaring index="0", and document order
+        then decides between them.
 
         :param node: XML node
         :return: Value of the "index" attribute, or 0 when it is absent
