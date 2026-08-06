@@ -413,9 +413,11 @@ clearing that setting returns the integration to this default.
   - `metadata_default`: use the endpoint marked `isDefault="true"`, falling back to the lowest `index`.
   - `defer_to_idp`: name no endpoint, leaving the identity provider to use whichever one it has registered.
 
-Identity providers are registered against the endpoint this selects, so changing it is a coordinated
-configuration change with the identity provider rather than a preference. An unrecognized value is ignored:
-it is logged as an error and the built-in default (`first_index`) is used instead.
+Whichever policy ends up in effect for an integration determines the endpoint named in its authentication
+requests, and identity providers are registered against a specific endpoint. Changing the effective policy
+is therefore a coordinated configuration change with the identity provider rather than a preference. An
+unrecognized value here is ignored: it is logged as an error and the built-in default (`first_index`) is
+used instead.
 
 #### DeMarque WebReader
 

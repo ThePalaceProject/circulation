@@ -174,7 +174,7 @@ class SAMLAuthenticationManager:
     def _warn_on_acs_endpoint_mismatch(
         self, idp_entity_id: str, asserted_url: str | None, received_url: str
     ) -> None:
-        """Warn when a response arrives at an ACS endpoint we did not assert.
+        """Warn when a response arrives at an ACS endpoint that we did not expect.
 
         An SP may publish several AssertionConsumerService endpoints, and a request
         names at most one of them. Requests naming none leave nothing to compare, so
