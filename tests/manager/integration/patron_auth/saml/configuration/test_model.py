@@ -12,6 +12,7 @@ from palace.manager.api.admin.problem_details import (
     INVALID_CONFIGURATION_OPTION,
 )
 from palace.manager.integration.patron_auth.saml.configuration.model import (
+    ACS_SELECTION_POLICY_LABELS,
     SAMLOneLoginConfiguration,
     SAMLWebSSOAuthSettings,
 )
@@ -19,8 +20,12 @@ from palace.manager.integration.patron_auth.saml.configuration.problem_details i
     SAML_INCORRECT_METADATA,
     SAML_INCORRECT_PRIVATE_KEY,
 )
+from palace.manager.integration.patron_auth.saml.configuration.service_provider import (
+    ACS_SELECTION_POLICY_ENV_VAR,
+)
 from palace.manager.integration.patron_auth.saml.metadata.federations import incommon
 from palace.manager.integration.patron_auth.saml.metadata.model import (
+    DEFAULT_ACS_SELECTION_POLICY,
     SAMLACSSelectionPolicy,
     SAMLBinding,
     SAMLIdentityProviderMetadata,
@@ -767,6 +772,26 @@ class TestSAMLOneLoginConfiguration:
             ).service_provider_acs_selection_policy
             is policy
         )
+
+    def test_acs_selection_policy_form_field_tracks_the_policies(self):
+        """The description states the default rather than restating it as fixed prose.
+
+        Guards against the description drifting from DEFAULT_ACS_SELECTION_POLICY, and
+        against a new policy being added without being offered in the form.
+        """
+        field = SAMLWebSSOAuthSettings.model_fields[
+            "service_provider_acs_selection_policy"
+        ]
+        form_metadata = next(m for m in field.metadata if hasattr(m, "label"))
+
+        assert (
+            f"'{ACS_SELECTION_POLICY_LABELS[DEFAULT_ACS_SELECTION_POLICY]}'"
+            in form_metadata.description
+        )
+        assert ACS_SELECTION_POLICY_ENV_VAR in form_metadata.description
+        assert set(form_metadata.options) == {""} | {
+            policy.value for policy in SAMLACSSelectionPolicy
+        }
 
     def test_acs_selection_policy_can_be_reset_from_the_admin_interface(self):
         """The admin interface clears a setting by sending an empty string."""

@@ -1,11 +1,13 @@
 import re
+from collections.abc import Mapping
 from datetime import datetime
 from re import Pattern
 from threading import Lock
-from typing import Annotated, Any
+from typing import Annotated, Any, Final
 
 from annotated_types import Ge, Le
 from flask_babel import lazy_gettext as _
+from frozendict import frozendict
 from onelogin.saml2.settings import OneLogin_Saml2_Settings
 from pydantic import PositiveInt, field_validator
 from sqlalchemy.orm import Session
@@ -26,10 +28,12 @@ from palace.manager.integration.patron_auth.saml.configuration.problem_details i
     SAML_INCORRECT_PRIVATE_KEY,
 )
 from palace.manager.integration.patron_auth.saml.configuration.service_provider import (
+    ACS_SELECTION_POLICY_ENV_VAR,
     SamlServiceProviderConfiguration,
 )
 from palace.manager.integration.patron_auth.saml.metadata.federations import incommon
 from palace.manager.integration.patron_auth.saml.metadata.model import (
+    DEFAULT_ACS_SELECTION_POLICY,
     SAMLACSSelectionPolicy,
     SAMLAttributeType,
     SAMLBinding,
@@ -126,6 +130,17 @@ def _validate_filter_expression(cls: type[BaseSettings], v: str | None) -> str |
     return v
 
 
+# Names shown in the administrative interface. Also used in the field's description, so
+# that the stated default follows DEFAULT_ACS_SELECTION_POLICY rather than being restated.
+ACS_SELECTION_POLICY_LABELS: Final[Mapping[SAMLACSSelectionPolicy, str]] = frozendict(
+    {
+        SAMLACSSelectionPolicy.FIRST_INDEX: "Lowest index",
+        SAMLACSSelectionPolicy.METADATA_DEFAULT: "Metadata default",
+        SAMLACSSelectionPolicy.DEFER_TO_IDP: "Defer to identity provider",
+    }
+)
+
+
 class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
     """SAML Web SSO Authentication settings"""
 
@@ -159,25 +174,27 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
         FormMetadata(
             label="Assertion Consumer Service Endpoint Selection",
             description=(
-                "Which Assertion Consumer Service endpoint to name in authentication requests, "
-                "when the Service Provider metadata declares more than one. "
-                "'Lowest index' deliberately ignores the isDefault attribute: identity providers "
-                "are registered against the endpoint it selects, so changing this is a "
-                "coordinated configuration change with the identity provider, not a preference. "
-                "Leave unset to use the site-wide default from "
-                "PALACE_SAML_SP_ACS_SELECTION_POLICY, which is itself 'Lowest index' unless "
-                "configured otherwise."
+                "(Optional) How we choose which Assertion Consumer Service (ACS) endpoint "
+                "(if any) to name in authentication requests when the Service Provider "
+                "metadata declares more than one. "
+                f"'{ACS_SELECTION_POLICY_LABELS[SAMLACSSelectionPolicy.FIRST_INDEX]}' "
+                "deliberately ignores the isDefault attribute and selects the lowest index "
+                "attribute value. Leave unset to use the site-wide default (currently "
+                f"'{ACS_SELECTION_POLICY_LABELS[DEFAULT_ACS_SELECTION_POLICY]}' unless "
+                f"overridden by the {ACS_SELECTION_POLICY_ENV_VAR} environment variable)."
+                "<br>"
+                "<br>"
+                "NOTE: The selected ACS endpoint, if present, must align with the Identity "
+                "Provider's configuration, so coordination with our IdP partner may be "
+                "required when changing this value."
             ),
             type=FormFieldType.SELECT,
             options={
                 "": "Use site-wide default",
-                SAMLACSSelectionPolicy.FIRST_INDEX.value: "Lowest index (ignore isDefault)",
-                SAMLACSSelectionPolicy.METADATA_DEFAULT.value: (
-                    "Metadata default (isDefault, otherwise lowest index)"
-                ),
-                SAMLACSSelectionPolicy.DEFER_TO_IDP.value: (
-                    "Defer to identity provider (name no endpoint in the request)"
-                ),
+                **{
+                    policy.value: label
+                    for policy, label in ACS_SELECTION_POLICY_LABELS.items()
+                },
             },
         ),
     ] = None
@@ -646,7 +663,7 @@ class SAMLOneLoginConfiguration(LoggerMixin):
         return (
             self._configuration.service_provider_acs_selection_policy
             or self._sp_configuration.acs_selection_policy
-            or SAMLACSSelectionPolicy.FIRST_INDEX
+            or DEFAULT_ACS_SELECTION_POLICY
         )
 
     def _load_service_provider(self) -> SAMLServiceProviderMetadata:

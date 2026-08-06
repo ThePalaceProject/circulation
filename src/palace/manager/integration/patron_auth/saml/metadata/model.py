@@ -4,7 +4,7 @@ from enum import Enum
 from json import JSONDecoder, JSONEncoder
 from json.decoder import WHITESPACE  # type: ignore
 from re import Pattern
-from typing import Any
+from typing import Any, Final
 
 from onelogin.saml2.constants import OneLogin_Saml2_Constants
 
@@ -348,6 +348,10 @@ class SAMLACSSelectionPolicy(Enum):
     # Name no endpoint at all, leaving the identity provider to use whichever one it
     # has registered. A mismatch between the two sides then cannot arise.
     DEFER_TO_IDP = "defer_to_idp"
+
+
+# Applied when neither the integration nor the environment selects a policy.
+DEFAULT_ACS_SELECTION_POLICY: Final = SAMLACSSelectionPolicy.FIRST_INDEX
 
 
 class SAMLNameIDFormat(Enum):
