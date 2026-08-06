@@ -74,10 +74,15 @@ services:
       POSTGRES_PASSWORD: test
       POSTGRES_DB: circ
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U palace -d circ"]
+      # -h 127.0.0.1 forces a TCP check: during initdb the entrypoint runs a temporary
+      # socket-only server, and a socketless pg_isready would report healthy before Postgres
+      # is actually listening on 5432.
+      test: ["CMD-SHELL", "pg_isready -U palace -d circ -h 127.0.0.1"]
       interval: 30s
       timeout: 30s
       retries: 3
+      start_period: 60s
+      start_interval: 2s
 
   minio:
     build:
@@ -97,6 +102,8 @@ services:
       interval: 30s
       timeout: 20s
       retries: 3
+      start_period: 60s
+      start_interval: 2s
 
   os:
     build:
@@ -110,10 +117,14 @@ services:
       OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
       DISABLE_INSTALL_DEMO_CONFIG: "true"
     healthcheck:
-      test: curl --silent http://localhost:9200 >/dev/null; if [[ $$? == 52 ]]; then echo 0; else echo 1; fi
+      # Gate on cluster readiness (yellow+ within 1s), not merely the HTTP transport binding,
+      # so index creation in initialize_instance does not race a not-yet-ready cluster.
+      test: ["CMD", "curl", "--silent", "--show-error", "--fail", "http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=1s"]
       interval: 30s
       timeout: 10s
       retries: 5
+      start_period: 90s
+      start_interval: 2s
 
   valkey:
     image: "valkey/valkey:9.0"
@@ -122,3 +133,5 @@ services:
       interval: 30s
       timeout: 20s
       retries: 3
+      start_period: 60s
+      start_interval: 2s
