@@ -466,7 +466,7 @@ class CustomListsController(
             return Response("", 204)
 
         shared_list_lanes = (
-            self._db.query(Lane)
+            self._db.query(Lane.id)
             .filter(
                 Lane.customlists.contains(customlist),
                 Lane.library_id != customlist.library_id,

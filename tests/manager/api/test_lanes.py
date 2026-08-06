@@ -210,7 +210,7 @@ class TestLaneCreation:
         priority = create_lane_for_small_collection(
             db.session, db.default_library(), parent, languages, priority=2
         )
-        lane = db.session.query(Lane).filter(Lane.parent == parent)
+        lane = db.session.query(Lane.id).filter(Lane.parent == parent)
         assert priority == 0
         assert lane.count() == 0
 
@@ -237,7 +237,7 @@ class TestLaneCreation:
             priority=3,
         )
         assert 0 == new_priority
-        lane = db.session.query(Lane).filter(Lane.parent == new_parent)
+        lane = db.session.query(Lane.id).filter(Lane.parent == new_parent)
         assert lane.count() == 0
 
     def test_create_default_lanes(
