@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from palace.util.exceptions import PalaceValueError
 
-from palace.manager.celery.tasks.overdrive import reap_all_collections, reap_collection
+from palace.manager.celery.tasks.overdrive import reap_all_collections
 from palace.manager.integration.license.overdrive.api import OverdriveAPI
 from palace.manager.scripts.base import Script
 from palace.manager.sqlalchemy.model.collection import Collection
@@ -46,9 +46,9 @@ class OverdriveReaperScript(Script):
                     f"Collection '{parsed.collection_name}' is not an Overdrive collection "
                     f"(protocol: '{collection.protocol}')."
                 )
-            reap_collection.delay(collection.id)
+            OverdriveAPI.reap_task(collection.id).apply_async()
             self.log.info(
-                f'The "reap_collection" task has been queued for collection '
+                f"A reap has been queued for collection "
                 f"'{parsed.collection_name}'. See the celery logs for details."
             )
         else:

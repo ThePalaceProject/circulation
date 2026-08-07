@@ -1,0 +1,298 @@
+{
+  "limit": 300,
+  "offset": 12000,
+  "totalItems": 38434,
+  "id": "v2L1BdwAAAP____81K",
+  "products": [
+    {
+      "isOwnedByCollections": true,
+      "id": "DD128C0B-3915-441D-9A4E-BE874A727C9B",
+      "crossRefId": 9065272,
+      "mediaType": "eBook",
+      "title": "Clytemnestra",
+      "subtitle": "A Novel",
+      "sortTitle": "Clytemnestra A Novel",
+      "primaryCreator": {
+        "role": "Author",
+        "name": "Costanza Casati"
+      },
+      "dateAdded": "2023-02-04T00:13:00Z",
+      "formats": [
+        {
+          "id": "ebook-kindle",
+          "name": "Kindle Book",
+          "identifiers": [
+            {
+              "type": "ASIN",
+              "value": "B0B4BR6B9P"
+            }
+          ]
+        },
+        {
+          "id": "ebook-overdrive",
+          "name": "OverDrive Read",
+          "identifiers": [
+            {
+              "type": "ISBN",
+              "value": "9781728268255"
+            }
+          ]
+        }
+      ],
+      "images": {
+        "thumbnail": {
+          "href": "https://img1.od-cdn.com/ImageType-200/0174-1/{DD128C0B-3915-441D-9A4E-BE874A727C9B}IMG200.JPG",
+          "type": "image/jpeg"
+        },
+        "cover150Wide": {
+          "href": "https://img1.od-cdn.com/ImageType-150/0174-1/{DD128C0B-3915-441D-9A4E-BE874A727C9B}IMG150.JPG",
+          "type": "image/jpeg"
+        },
+        "cover": {
+          "href": "https://img1.od-cdn.com/ImageType-100/0174-1/{DD128C0B-3915-441D-9A4E-BE874A727C9B}IMG100.JPG",
+          "type": "image/jpeg"
+        },
+        "cover300Wide": {
+          "href": "https://img1.od-cdn.com/ImageType-400/0174-1/{DD128C0B-3915-441D-9A4E-BE874A727C9B}IMG400.JPG",
+          "type": "image/jpeg"
+        }
+      },
+      "contentDetails": [
+        {
+          "href": "https://link.overdrive.com?websiteID=119&titleID=9065272",
+          "type": "text/html",
+          "account": {
+            "id": 1106,
+            "name": "Library Connection, Inc. (CT)"
+          }
+        }
+      ],
+      "links": {
+        "self": {
+          "href": "https://api.overdrive.com/v1/collections/v2L1BdwAAAP____81K/products/dd128c0b-3915-441d-9a4e-be874a727c9b",
+          "type": "application/vnd.overdrive.api+json"
+        },
+        "metadata": {
+          "href": "https://api.overdrive.com/v1/collections/v2L1BdwAAAP____81K/products/dd128c0b-3915-441d-9a4e-be874a727c9b/metadata",
+          "type": "application/vnd.overdrive.api+json"
+        },
+        "availability": {
+          "href": "https://api.overdrive.com/v1/collections/v2L1BdwAAAP____81K/products/dd128c0b-3915-441d-9a4e-be874a727c9b/availability",
+          "type": "application/vnd.overdrive.api+json"
+        },
+        "availabilityV2": {
+          "href": "https://api.overdrive.com/v2/collections/v2L1BdwAAAP____81K/products/dd128c0b-3915-441d-9a4e-be874a727c9b/availability",
+          "type": "application/vnd.overdrive.api+json"
+        }
+      },
+      "otherFormatIdentifiers": [
+        {
+          "type": "ISBN",
+          "value": "9781728268231"
+        }
+      ],
+      "classifications": {}
+    },
+    {
+      "isOwnedByCollections": true,
+      "id": "7E8D422D-80F2-48DF-8CD6-8EC7FE8B0989",
+      "crossRefId": 9065326,
+      "mediaType": "eBook",
+      "title": "The Lonely Hearts Book Club",
+      "sortTitle": "Lonely Hearts Book Club",
+      "primaryCreator": {
+        "role": "Author",
+        "name": "Lucy Gilmore"
+      },
+      "dateAdded": "2023-05-01T23:52:00Z",
+      "formats": [
+        {
+          "id": "ebook-kindle",
+          "name": "Kindle Book",
+          "identifiers": [
+            {
+              "type": "ASIN",
+              "value": "B0B4BQXYNR"
+            }
+          ]
+        },
+        {
+          "id": "ebook-overdrive",
+          "name": "OverDrive Read",
+          "identifiers": [
+            {
+              "type": "ISBN",
+              "value": "9781728256238"
+            }
+          ]
+        }
+      ],
+      "images": {
+        "thumbnail": {
+          "href": "https://img1.od-cdn.com/ImageType-200/0174-1/{7E8D422D-80F2-48DF-8CD6-8EC7FE8B0989}IMG200.JPG",
+          "type": "image/jpeg"
+        },
+        "cover150Wide": {
+          "href": "https://img1.od-cdn.com/ImageType-150/0174-1/{7E8D422D-80F2-48DF-8CD6-8EC7FE8B0989}IMG150.JPG",
+          "type": "image/jpeg"
+        },
+        "cover": {
+          "href": "https://img1.od-cdn.com/ImageType-100/0174-1/{7E8D422D-80F2-48DF-8CD6-8EC7FE8B0989}IMG100.JPG",
+          "type": "image/jpeg"
+        },
+        "cover300Wide": {
+          "href": "https://img1.od-cdn.com/ImageType-400/0174-1/{7E8D422D-80F2-48DF-8CD6-8EC7FE8B0989}IMG400.JPG",
+          "type": "image/jpeg"
+        }
+      },
+      "contentDetails": [
+        {
+          "href": "https://link.overdrive.com?websiteID=119&titleID=9065326",
+          "type": "text/html",
+          "account": {
+            "id": 1106,
+            "name": "Library Connection, Inc. (CT)"
+          }
+        }
+      ],
+      "links": {
+        "self": {
+          "href": "https://api.overdrive.com/v1/collections/v2L1BdwAAAP____81K/products/7e8d422d-80f2-48df-8cd6-8ec7fe8b0989",
+          "type": "application/vnd.overdrive.api+json"
+        },
+        "metadata": {
+          "href": "https://api.overdrive.com/v1/collections/v2L1BdwAAAP____81K/products/7e8d422d-80f2-48df-8cd6-8ec7fe8b0989/metadata",
+          "type": "application/vnd.overdrive.api+json"
+        },
+        "availability": {
+          "href": "https://api.overdrive.com/v1/collections/v2L1BdwAAAP____81K/products/7e8d422d-80f2-48df-8cd6-8ec7fe8b0989/availability",
+          "type": "application/vnd.overdrive.api+json"
+        },
+        "availabilityV2": {
+          "href": "https://api.overdrive.com/v2/collections/v2L1BdwAAAP____81K/products/7e8d422d-80f2-48df-8cd6-8ec7fe8b0989/availability",
+          "type": "application/vnd.overdrive.api+json"
+        }
+      },
+      "otherFormatIdentifiers": [
+        {
+          "type": "ISBN",
+          "value": "9781728256214"
+        }
+      ],
+      "classifications": {}
+    },
+    {
+      "isOwnedByCollections": false,
+      "id": "7B4FD6E8-7EB6-41A5-BF97-4FA2CA95A474",
+      "crossRefId": 9253739,
+      "mediaType": "eBook",
+      "title": "Only the Dead",
+      "sortTitle": "Only the Dead",
+      "series": "Terminal List",
+      "seriesId": 503239,
+      "readingOrder": "6",
+      "primaryCreator": {
+        "role": "Author",
+        "name": "Jack Carr"
+      },
+      "dateAdded": "2023-05-13T21:33:00Z",
+      "formats": [
+        {
+          "id": "ebook-kindle",
+          "name": "Kindle Book",
+          "identifiers": [
+            {
+              "type": "ASIN",
+              "value": "B0BG3BDD5P"
+            }
+          ]
+        },
+        {
+          "id": "ebook-overdrive",
+          "name": "OverDrive Read",
+          "identifiers": [
+            {
+              "type": "ISBN",
+              "value": "9781982181727"
+            }
+          ]
+        }
+      ],
+      "images": {
+        "thumbnail": {
+          "href": "https://img1.od-cdn.com/ImageType-200/0439-1/{7B4FD6E8-7EB6-41A5-BF97-4FA2CA95A474}IMG200.JPG",
+          "type": "image/jpeg"
+        },
+        "cover150Wide": {
+          "href": "https://img1.od-cdn.com/ImageType-150/0439-1/{7B4FD6E8-7EB6-41A5-BF97-4FA2CA95A474}IMG150.JPG",
+          "type": "image/jpeg"
+        },
+        "cover": {
+          "href": "https://img1.od-cdn.com/ImageType-100/0439-1/{7B4FD6E8-7EB6-41A5-BF97-4FA2CA95A474}IMG100.JPG",
+          "type": "image/jpeg"
+        },
+        "cover300Wide": {
+          "href": "https://img1.od-cdn.com/ImageType-400/0439-1/{7B4FD6E8-7EB6-41A5-BF97-4FA2CA95A474}IMG400.JPG",
+          "type": "image/jpeg"
+        }
+      },
+      "contentDetails": [
+        {
+          "href": "https://link.overdrive.com?websiteID=119&titleID=9253739",
+          "type": "text/html",
+          "account": {
+            "id": 1106,
+            "name": "Library Connection, Inc. (CT)"
+          }
+        }
+      ],
+      "links": {
+        "self": {
+          "href": "https://api.overdrive.com/v1/collections/v2L1BdwAAAP____81K/products/7b4fd6e8-7eb6-41a5-bf97-4fa2ca95a474",
+          "type": "application/vnd.overdrive.api+json"
+        },
+        "metadata": {
+          "href": "https://api.overdrive.com/v1/collections/v2L1BdwAAAP____81K/products/7b4fd6e8-7eb6-41a5-bf97-4fa2ca95a474/metadata",
+          "type": "application/vnd.overdrive.api+json"
+        },
+        "availability": {
+          "href": "https://api.overdrive.com/v1/collections/v2L1BdwAAAP____81K/products/7b4fd6e8-7eb6-41a5-bf97-4fa2ca95a474/availability",
+          "type": "application/vnd.overdrive.api+json"
+        },
+        "availabilityV2": {
+          "href": "https://api.overdrive.com/v2/collections/v2L1BdwAAAP____81K/products/7b4fd6e8-7eb6-41a5-bf97-4fa2ca95a474/availability",
+          "type": "application/vnd.overdrive.api+json"
+        }
+      },
+      "otherFormatIdentifiers": [
+        {
+          "type": "ISBN",
+          "value": "9781982181710"
+        }
+      ],
+      "classifications": {}
+    }
+  ],
+  "links": {
+    "self": {
+      "href": "https://api.overdrive.com/v1/collections/v2L1BdwAAAP____81K/products?limit=300&offset=12000&sort=dateadded%3Adesc",
+      "type": "application/vnd.overdrive.api+json"
+    },
+    "first": {
+      "href": "https://api.overdrive.com/v1/collections/v2L1BdwAAAP____81K/products?limit=300&offset=0&sort=dateadded%3Adesc",
+      "type": "application/vnd.overdrive.api+json"
+    },
+    "prev": {
+      "href": "https://api.overdrive.com/v1/collections/v2L1BdwAAAP____81K/products?limit=300&offset=11700&sort=dateadded%3Adesc",
+      "type": "application/vnd.overdrive.api+json"
+    },
+    "next": {
+      "href": "https://api.overdrive.com/v1/collections/v2L1BdwAAAP____81K/products?limit=300&offset=12300&sort=dateadded%3Adesc",
+      "type": "application/vnd.overdrive.api+json"
+    },
+    "last": {
+      "href": "https://api.overdrive.com/v1/collections/v2L1BdwAAAP____81K/products?limit=300&offset=38400&sort=dateadded%3Adesc",
+      "type": "application/vnd.overdrive.api+json"
+    }
+  }
+}

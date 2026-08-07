@@ -197,6 +197,52 @@ class TestMarkIdentifiersUnavailable:
         assert existing_set.exists() is False
         assert active_set.exists() is False
 
+    @pytest.mark.parametrize(
+        "status_kwargs,expected_status",
+        [
+            pytest.param({}, LicensePoolStatus.REMOVED, id="default"),
+            pytest.param(
+                {"status": LicensePoolStatus.EXHAUSTED},
+                LicensePoolStatus.EXHAUSTED,
+                id="explicit",
+            ),
+        ],
+    )
+    def test_status(
+        self,
+        db: DatabaseTransactionFixture,
+        identifier_tasks_fixture: IdentifierTasksFixture,
+        status_kwargs: dict[str, LicensePoolStatus],
+        expected_status: LicensePoolStatus,
+    ) -> None:
+        """The recorded status defaults to REMOVED but can be overridden.
+
+        Distributors that drop titles when a lease ends, rather than only when a
+        title is withdrawn, want EXHAUSTED so outstanding loans and holds survive.
+        """
+        collection = db.collection()
+        license_pools = identifier_tasks_fixture.license_pools(
+            collection=collection, count=2
+        )
+
+        existing_set = IdentifierSet(identifier_tasks_fixture.redis_client)
+        existing_set.add(*identifier_tasks_fixture.identifiers(license_pools))
+        active_set = IdentifierSet(identifier_tasks_fixture.redis_client)
+        active_set.add(*identifier_tasks_fixture.identifiers(license_pools[:1]))
+
+        with patch.object(identifiers, "circulation_apply") as mock_apply:
+            identifiers.mark_identifiers_unavailable.delay(
+                [existing_set, active_set],
+                collection_id=collection.id,
+                **status_kwargs,
+            ).wait()
+
+        mock_apply.delay.assert_called_once()
+        circulation = mock_apply.delay.call_args.kwargs["circulation"]
+        assert circulation.status == expected_status
+        assert circulation.licenses_owned == 0
+        assert circulation.licenses_available == 0
+
     def test_run_with_nonexistent_sets(
         self,
         db: DatabaseTransactionFixture,
@@ -217,6 +263,10 @@ class TestMarkIdentifiersUnavailable:
         ).wait()
         assert result is False
         assert "Existing identifiers set does not exist in Redis" in caplog.text
+        # The collection has nothing available to reap, so marking nothing is the
+        # right outcome and does not deserve an error.
+        assert "The collection has none to mark" in caplog.text
+        assert LogLevel.error not in {record.levelname for record in caplog.records}
 
         # Add an identifier to the existing set, so it now exists
         existing_set.add(IdentifierData.from_identifier(db.identifier()))
@@ -341,6 +391,65 @@ class TestCreateMarkUnavailableChord:
 
         # Check that we didn't leave any redis keys behind
         assert redis_fixture.keys() == []
+
+    def test_missing_existing_set_is_an_error_when_the_collection_has_identifiers(
+        self,
+        db: DatabaseTransactionFixture,
+        identifier_tasks_fixture: IdentifierTasksFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A set that expired mid-run threw away work; an empty collection did not.
+
+        Both reach this point as "the set does not exist in Redis", because an empty
+        set is never materialised in Redis, so the collection itself is what tells
+        the two apart.
+        """
+        caplog.set_level(LogLevel.info)
+        collection = db.collection()
+        identifier_tasks_fixture.license_pools(collection=collection, count=1)
+
+        result = identifiers.mark_identifiers_unavailable.delay(
+            [
+                IdentifierSet(identifier_tasks_fixture.redis_client),
+                IdentifierSet(identifier_tasks_fixture.redis_client),
+            ],
+            collection_id=collection.id,
+        ).wait()
+
+        assert result is False
+        assert "a completed run has been discarded" in caplog.text
+        assert LogLevel.error in {record.levelname for record in caplog.records}
+
+    def test_expire_time_covers_a_long_running_active_side(
+        self,
+        db: DatabaseTransactionFixture,
+        redis_fixture: RedisFixture,
+        identifier_tasks_fixture: IdentifierTasksFixture,
+    ) -> None:
+        """The existing-identifier set has to outlive the other half of the chord.
+
+        It is built once, at the start, and never touched again, so a distributor
+        whose active-side task runs for hours would otherwise find it expired and
+        discard the whole run.
+        """
+        collection = db.collection()
+        identifier_tasks_fixture.license_pools(collection=collection, count=2)
+        expire_time = 36 * 60 * 60
+
+        response = identifiers.existing_available_identifiers.delay(
+            collection.id, expire_time=expire_time
+        ).wait()
+
+        # The lifetime travels with the set, so the chord body rebuilds it unchanged.
+        assert response["expire_time"] == expire_time
+        default_lifetime = IdentifierSet(
+            identifier_tasks_fixture.redis_client
+        ).expire_time
+        assert expire_time > default_lifetime.total_seconds()
+
+        identifier_set = identifier_tasks_fixture.set_from_response(response)
+        assert identifier_set.exists()
+        identifier_set.delete()
 
     def test_exception(
         self,

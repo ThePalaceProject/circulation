@@ -242,10 +242,6 @@ class OverdriveRepresentationExtractor(LoggerMixin):
         # In Overdrive, 'reserved' books show up as books on hold.
         licenses_reserved = 0
 
-        licenses_owned = None
-        licenses_available = None
-        patrons_in_hold_queue = None
-
         # book_id takes precedence over the document's reserveId so that the
         # caller can override the identifier (e.g. after a circulation lookup
         # where the caller already knows the book's ID). Fall back to reserveId
@@ -280,11 +276,18 @@ class OverdriveRepresentationExtractor(LoggerMixin):
         # The current behavior will respond to errors other than
         # NotFound by leaving the book alone, but this might not be
         # the right behavior.
-        if availability.error_code == "NotFound":
+        if (
+            availability.error_code == "NotFound"
+            or availability.is_owned_by_collections is False
+        ):
+            # Either Overdrive does not have the title at all, or it is one of the
+            # weeded and expired titles Overdrive keeps in a collection's responses
+            # flagged as no longer owned. Both state that the collection has no
+            # copies, rather than being a document that omits the counts.
             licenses_owned = 0
             licenses_available = 0
             patrons_in_hold_queue = 0
-        elif availability.is_owned_by_collections is not False:
+        else:
             # We own this book.
             licenses_owned = 0
             licenses_available = 0
@@ -295,9 +298,7 @@ class OverdriveRepresentationExtractor(LoggerMixin):
 
             patrons_in_hold_queue = availability.number_of_holds
 
-        if licenses_owned is None:
-            license_status = None
-        elif licenses_owned > 0:
+        if licenses_owned > 0:
             license_status = LicensePoolStatus.ACTIVE
         else:
             license_status = LicensePoolStatus.EXHAUSTED

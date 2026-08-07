@@ -1,0 +1,174 @@
+{
+  "limit": 2,
+  "offset": 38432,
+  "totalItems": 38434,
+  "id": "v2L1BdwAAAP____81K",
+  "products": [
+    {
+      "isOwnedByCollections": true,
+      "id": "D9FFF371-29DF-4970-A436-3E406489E8D7",
+      "crossRefId": 12594215,
+      "mediaType": "Magazine",
+      "title": "Freizeitwoche",
+      "sortTitle": "Freizeitwoche",
+      "series": "Freizeitwoche",
+      "dateAdded": "2026-07-25T13:15:00Z",
+      "edition": "31/2026",
+      "formats": [
+        {
+          "id": "magazine-overdrive",
+          "name": "OverDrive Magazine",
+          "identifiers": [
+            {
+              "type": "PublisherCatalogNumber",
+              "value": "45551"
+            }
+          ]
+        }
+      ],
+      "images": {
+        "thumbnail": {
+          "href": "https://img1.od-cdn.com/ImageType-200/11052-1/{426678C8-912B-49FB-B660-6CE1567193C5}IMG200.JPG",
+          "type": "image/jpeg"
+        },
+        "cover150Wide": {
+          "href": "https://img1.od-cdn.com/ImageType-150/11052-1/{426678C8-912B-49FB-B660-6CE1567193C5}IMG150.JPG",
+          "type": "image/jpeg"
+        },
+        "cover": {
+          "href": "https://img1.od-cdn.com/ImageType-100/11052-1/{426678C8-912B-49FB-B660-6CE1567193C5}IMG100.JPG",
+          "type": "image/jpeg"
+        },
+        "cover300Wide": {
+          "href": "https://img1.od-cdn.com/ImageType-400/11052-1/{426678C8-912B-49FB-B660-6CE1567193C5}IMG400.JPG",
+          "type": "image/jpeg"
+        }
+      },
+      "contentDetails": [
+        {
+          "href": "https://link.overdrive.com?websiteID=119&titleID=12594215",
+          "type": "text/html",
+          "account": {
+            "id": 1106,
+            "name": "Library Connection, Inc. (CT)"
+          }
+        }
+      ],
+      "links": {
+        "self": {
+          "href": "https://api.overdrive.com/v1/collections/v2L1BdwAAAP____81K/products/d9fff371-29df-4970-a436-3e406489e8d7",
+          "type": "application/vnd.overdrive.api+json"
+        },
+        "metadata": {
+          "href": "https://api.overdrive.com/v1/collections/v2L1BdwAAAP____81K/products/d9fff371-29df-4970-a436-3e406489e8d7/metadata",
+          "type": "application/vnd.overdrive.api+json"
+        },
+        "availability": {
+          "href": "https://api.overdrive.com/v1/collections/v2L1BdwAAAP____81K/products/d9fff371-29df-4970-a436-3e406489e8d7/availability",
+          "type": "application/vnd.overdrive.api+json"
+        },
+        "availabilityV2": {
+          "href": "https://api.overdrive.com/v2/collections/v2L1BdwAAAP____81K/products/d9fff371-29df-4970-a436-3e406489e8d7/availability",
+          "type": "application/vnd.overdrive.api+json"
+        },
+        "issues": {
+          "href": "https://api.overdrive.com/v1/collections/v2L1BdwAAAP____81K/products/d9fff371-29df-4970-a436-3e406489e8d7/issues",
+          "type": "application/vnd.overdrive.api+json"
+        }
+      },
+      "classifications": {}
+    },
+    {
+      "isOwnedByCollections": true,
+      "id": "6FE419F7-EF10-43DB-9809-E53B03E2EA08",
+      "crossRefId": 12594214,
+      "mediaType": "Magazine",
+      "title": "Astrowoche",
+      "sortTitle": "Astrowoche",
+      "series": "Astrowoche",
+      "dateAdded": "2026-07-25T13:15:00Z",
+      "edition": "31/2026",
+      "formats": [
+        {
+          "id": "magazine-overdrive",
+          "name": "OverDrive Magazine",
+          "identifiers": [
+            {
+              "type": "PublisherCatalogNumber",
+              "value": "45544"
+            }
+          ]
+        }
+      ],
+      "images": {
+        "thumbnail": {
+          "href": "https://img1.od-cdn.com/ImageType-200/11052-1/{E1703E10-B996-49C3-A950-994E7462FF65}IMG200.JPG",
+          "type": "image/jpeg"
+        },
+        "cover150Wide": {
+          "href": "https://img1.od-cdn.com/ImageType-150/11052-1/{E1703E10-B996-49C3-A950-994E7462FF65}IMG150.JPG",
+          "type": "image/jpeg"
+        },
+        "cover": {
+          "href": "https://img1.od-cdn.com/ImageType-100/11052-1/{E1703E10-B996-49C3-A950-994E7462FF65}IMG100.JPG",
+          "type": "image/jpeg"
+        },
+        "cover300Wide": {
+          "href": "https://img1.od-cdn.com/ImageType-400/11052-1/{E1703E10-B996-49C3-A950-994E7462FF65}IMG400.JPG",
+          "type": "image/jpeg"
+        }
+      },
+      "contentDetails": [
+        {
+          "href": "https://link.overdrive.com?websiteID=119&titleID=12594214",
+          "type": "text/html",
+          "account": {
+            "id": 1106,
+            "name": "Library Connection, Inc. (CT)"
+          }
+        }
+      ],
+      "links": {
+        "self": {
+          "href": "https://api.overdrive.com/v1/collections/v2L1BdwAAAP____81K/products/6fe419f7-ef10-43db-9809-e53b03e2ea08",
+          "type": "application/vnd.overdrive.api+json"
+        },
+        "metadata": {
+          "href": "https://api.overdrive.com/v1/collections/v2L1BdwAAAP____81K/products/6fe419f7-ef10-43db-9809-e53b03e2ea08/metadata",
+          "type": "application/vnd.overdrive.api+json"
+        },
+        "availability": {
+          "href": "https://api.overdrive.com/v1/collections/v2L1BdwAAAP____81K/products/6fe419f7-ef10-43db-9809-e53b03e2ea08/availability",
+          "type": "application/vnd.overdrive.api+json"
+        },
+        "availabilityV2": {
+          "href": "https://api.overdrive.com/v2/collections/v2L1BdwAAAP____81K/products/6fe419f7-ef10-43db-9809-e53b03e2ea08/availability",
+          "type": "application/vnd.overdrive.api+json"
+        },
+        "issues": {
+          "href": "https://api.overdrive.com/v1/collections/v2L1BdwAAAP____81K/products/6fe419f7-ef10-43db-9809-e53b03e2ea08/issues",
+          "type": "application/vnd.overdrive.api+json"
+        }
+      },
+      "classifications": {}
+    }
+  ],
+  "links": {
+    "self": {
+      "href": "https://api.overdrive.com/v1/collections/v2L1BdwAAAP____81K/products?limit=2&offset=38432&sort=dateadded%3Aasc",
+      "type": "application/vnd.overdrive.api+json"
+    },
+    "first": {
+      "href": "https://api.overdrive.com/v1/collections/v2L1BdwAAAP____81K/products?limit=2&offset=0&sort=dateadded%3Aasc",
+      "type": "application/vnd.overdrive.api+json"
+    },
+    "prev": {
+      "href": "https://api.overdrive.com/v1/collections/v2L1BdwAAAP____81K/products?limit=2&offset=38430&sort=dateadded%3Aasc",
+      "type": "application/vnd.overdrive.api+json"
+    },
+    "last": {
+      "href": "https://api.overdrive.com/v1/collections/v2L1BdwAAAP____81K/products?limit=2&offset=38432&sort=dateadded%3Aasc",
+      "type": "application/vnd.overdrive.api+json"
+    }
+  }
+}

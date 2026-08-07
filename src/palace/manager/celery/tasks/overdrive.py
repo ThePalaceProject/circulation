@@ -3,7 +3,7 @@ from typing import Any, Literal, TypedDict, TypeGuard
 from uuid import uuid4
 
 from celery import chain, chord, group, shared_task
-from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from palace.util.datetime_helpers import utc_now
 
@@ -11,12 +11,18 @@ from palace.manager.celery.importer import (
     import_all as create_import_tasks,
     import_key,
     import_workflow_lock,
+    reap_key,
     reap_workflow_lock,
     workflow_lock_guard,
 )
 from palace.manager.celery.task import Task
 from palace.manager.celery.tasks import apply
-from palace.manager.celery.utils import load_from_id, signature_with
+from palace.manager.celery.tasks.identifiers import (
+    held_identifiers_query,
+    queue_unavailable_updates,
+)
+from palace.manager.celery.utils import load_from_id, signature_with, validate_not_none
+from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.integration.license.overdrive.api import (
     BookInfoEndpoint,
     OverdriveAPI,
@@ -26,7 +32,7 @@ from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.set import IdentifierSet
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.sqlalchemy.model.licensing import LicensePool
+from palace.manager.sqlalchemy.model.licensing import LicensePoolStatus
 from palace.manager.util.http.exception import (
     BadResponseException,
     RemoteIntegrationException,
@@ -34,6 +40,28 @@ from palace.manager.util.http.exception import (
 )
 
 IMPORT_SKIPPED: str = "import_skipped"
+
+# How far a completed crawl may fall short of Overdrive's reported totalItems before
+# it is treated as incomplete. A crawl of a large collection runs for hours while
+# titles are added and removed under it, so the count is expected to move a little;
+# the floor keeps small collections from being held to an unreachable standard. The
+# shortfall being allowed for is churn during the crawl, which does not scale with
+# collection size, so the cap keeps the allowance below one page -- a crawl that lost
+# a whole page must never be excused.
+REAP_CRAWL_ALLOWANCE: float = 0.001
+REAP_CRAWL_ALLOWANCE_FLOOR: int = 10
+# Capped as a fraction of the page size the crawl is actually walking in, which is the
+# one Overdrive applied rather than the one asked for.
+REAP_CRAWL_ALLOWANCE_PAGE_FRACTION: float = 0.25
+
+# How long the reaper's identifier sets outlive their creation, between two bounds.
+# Long enough to outlast a crawl of the largest collection, since the set built at the
+# start has to still be there at the end -- hours, against the default of twelve.
+# Shorter than the daily schedule, because a crawl that dies without reaching the chord
+# body leaves its sets behind: keyed on the run's task id, they cannot be picked up by
+# the next pass, so a collection that fails repeatedly would otherwise stack up a set
+# per run.
+REAP_IDENTIFIER_SET_LIFETIME: datetime.timedelta = datetime.timedelta(hours=20)
 
 
 class ImportSkippedPayload(TypedDict):
@@ -469,7 +497,10 @@ def reap_all_collections(task: Task) -> None:
     Queue a reap task for every Overdrive collection.
 
     Includes both parent collections and Advantage (child) collections, since titles
-    can be removed from either independently.
+    can be removed from either independently. Each collection is reaped against its
+    own collection token, which is what keeps parent and Advantage collections
+    consistent: an Advantage token lists only the titles that account owns, exactly
+    the titles the importer wrote into that collection.
     """
     with task.session() as session:
         registry = task.services.integration_registry().license_providers()
@@ -478,7 +509,7 @@ def reap_all_collections(task: Task) -> None:
         )
         collections = session.scalars(collection_query).all()
     for collection in collections:
-        reap_collection.delay(collection.id)
+        OverdriveAPI.reap_task(collection.id).apply_async()
 
 
 @shared_task(
@@ -494,19 +525,69 @@ def reap_collection(
     collection_id: int,
     *,
     offset: int = 0,
-    batch_size: int = 50,
-) -> None:
+    total_items: int | None = None,
+    previous_offset: int | None = None,
+    page_limit: int | None = None,
+    batch_size: int | None = None,
+) -> IdentifierSet | None:
     """
-    Check for books that are in the local collection but have left our Overdrive collection.
+    Enumerate the titles an Overdrive collection currently lists.
 
-    Processes identifiers in batches, re-queuing itself via task.replace() until all
-    identifiers have been checked. Concurrency is governed by
-    :func:`~palace.manager.celery.importer.workflow_lock_guard`.
+    Walks the collection's product list one page at a time, re-queuing itself via
+    ``task.replace()`` until the crawl is complete, and collects the identifiers into
+    a Redis set. Only ids and ownership are read -- no metadata or availability
+    lookups -- so a whole collection costs a handful of requests rather than one per
+    title. See :meth:`OverdriveAPI.next_product_offset` for how the crawl is paged.
+
+    Titles are removed from a collection in two ways, and this handles them
+    differently:
+
+    * Overdrive keeps weeded and expired titles in the product list, flagged
+      ``isOwnedByCollections: false``. That is direct evidence, so those titles are
+      marked as each page arrives, whether or not the crawl goes on to complete.
+    * A title can also leave the product list entirely. That can only be detected by
+      its *absence*, which is what the returned set is for: it is the "active" half of
+      :func:`~palace.manager.celery.tasks.identifiers.create_mark_unavailable_chord`,
+      and identifiers held locally but missing from it are marked exhausted.
+
+    Because the second half acts on absence, a partial crawl would mark live titles as
+    gone. The crawl is therefore checked against Overdrive's ``totalItems`` before the
+    set is handed on, and ``None`` is returned if it cannot be shown to be complete --
+    which the chord body treats as a failed run and aborts. Titles flagged unowned are
+    still marked in that case, since nothing about them was inferred. Concurrency is
+    governed by :func:`~palace.manager.celery.importer.workflow_lock_guard`.
 
     :param collection_id: The ID of the Overdrive collection to reap.
-    :param offset: The last Identifier.id processed; used to resume across batches.
-    :param batch_size: Number of identifiers to process per batch.
+    :param offset: Where in the product list to fetch the next page from. A crawl
+        starts at 0 and walks backwards from the end; see
+        :meth:`OverdriveAPI.next_product_offset`.
+    :param total_items: Overdrive's collection size, as reported by the crawl's first
+        page and carried across the remaining ones.
+    :param previous_offset: Where the previous page of the backwards walk started, so
+        this one can be shown to reach it. None on the first page of a walk, which has
+        nothing above it to join up with.
+    :param page_limit: The page size Overdrive applied to the crawl's first page,
+        carried like ``total_items``. Every gap check is expressed in terms of it, so
+        the walk's arithmetic only holds while it stays the same.
+    :param batch_size: Belonged to the previous per-title reaper and is ignored.
+        Accepted only so that a message carrying it still binds after a deploy; remove
+        it once no such message can be in flight.
+    :return: The identifiers the collection currently lists, or None if the crawl was
+        skipped, aborted, or could not be verified as complete.
     """
+    if offset != 0 and total_items is None and page_limit is None:
+        # A page left over from the per-title reaper, whose `offset` was the last
+        # Identifier.id it had processed. Every page this reaper queues carries the
+        # crawl's totalItems and page size along with the offset, so their absence at
+        # a non-zero offset is what identifies one. Running it as a product-list
+        # offset would crawl from an arbitrary point, so the run is dropped and the
+        # next scheduled one starts clean.
+        task.log.info(
+            f"Discarding a reap page queued by the previous reaper implementation "
+            f"for collection {collection_id}."
+        )
+        return None
+
     with workflow_lock_guard(
         task,
         collection_id,
@@ -514,54 +595,264 @@ def reap_collection(
         lock_factory=reap_workflow_lock,
     ) as proceed:
         if not proceed:
-            return
+            return None
 
-        new_offset = 0
-        processed_count = 0
-        collection_name = None
+        redis = task.services.redis().client()
+        identifier_set = IdentifierSet(
+            redis,
+            reap_key(collection_id, task.request.id),
+            # The crawl outlives the default expiry on a large collection, and its
+            # earlier pages have to still be there when the last one finishes. Matches
+            # the lifetime given to the set it will be compared against.
+            expire_time=REAP_IDENTIFIER_SET_LIFETIME,
+        )
 
+        # Committed rather than read-only: resolving the collection token refreshes
+        # the cached library document, and a crawl that discarded that write would
+        # re-fetch it from Overdrive on every page.
         with task.transaction() as session:
             collection = load_from_id(session, Collection, collection_id)
             collection_name = collection.name
 
-            identifiers = (
-                session.execute(
-                    select(Identifier)
-                    .join(Identifier.licensed_through)
-                    .where(
-                        LicensePool.collection_id == collection_id,
-                        Identifier.id > offset,
-                    )
-                    .order_by(Identifier.id)
-                    .limit(batch_size)
+            if collection.marked_for_deletion:
+                task.log.warning(
+                    f"This collection is marked for deletion. "
+                    f"Skipping reap of '{collection_name}'."
                 )
-                .unique()
-                .scalars()
-                .all()
-            )
-
-            if not identifiers:
-                task.log.info(
-                    f"Overdrive reaper complete for collection '{collection_name}'."
-                )
-                return
+                identifier_set.delete()
+                return None
 
             api = OverdriveAPI(session, collection)
-            for identifier in identifiers:
-                api.update_licensepool(identifier.identifier)
+            result = api.fetch_product_page(api.product_page_endpoint(offset))
+            next_offset = api.next_product_offset(result, offset)
+            unowned_to_mark = _unowned_identifiers_to_mark(
+                session, collection_id, result.unowned
+            )
+            data_source_name = (
+                validate_not_none(
+                    collection.data_source,
+                    message="Collection has no data source! (data_source is None).",
+                ).name
+                if unowned_to_mark
+                else None
+            )
 
-            new_offset = identifiers[-1].id
-            processed_count = len(identifiers)
-
-        task.log.info(
-            f"Overdrive reaper: processed {processed_count} identifiers for "
-            f"collection '{collection_name}' (offset: {offset} -> {new_offset})."
+        # Queued outside the transaction, as `mark_identifiers_unavailable` does: a
+        # run of broker publishes should not be holding a write transaction open.
+        marked = (
+            queue_unavailable_updates(
+                unowned_to_mark,
+                collection_id=collection_id,
+                collection_name=collection_name,
+                data_source_name=data_source_name,
+                # Overdrive drops titles from a collection when a lease ends or a
+                # purchase is returned, not only when a title is withdrawn, so this
+                # means "no copies here now" rather than "revoke outstanding loans
+                # and holds".
+                status=LicensePoolStatus.EXHAUSTED,
+                log=task.log,
+            )
+            if unowned_to_mark and data_source_name is not None
+            else 0
         )
 
-        if processed_count == batch_size:
+        if marked:
+            task.log.info(
+                f"Overdrive reaper marked {marked} title(s) Overdrive no longer owns "
+                f"in collection '{collection_name}'."
+            )
+
+        identifier_set.add(*result.listed)
+        if total_items is None:
+            total_items = result.total_items
+        if page_limit is None:
+            page_limit = result.limit
+        elif result.limit != page_limit:
+            # Where a page reaches, and so where the walk can stop, is measured in
+            # page sizes. Overdrive echoes the size it applied, and the crawl asks
+            # for the same one every time, so a change mid-crawl means the arithmetic
+            # the gap checks rely on no longer describes the list.
+            task.log.error(
+                f"Overdrive reaper aborting for collection '{collection_name}': the "
+                f"page at offset {offset} was returned with a page size of "
+                f"{result.limit}, but the crawl has been walking in steps of "
+                f"{page_limit}. Refusing to reap on a crawl whose paging changed "
+                f"underneath it."
+            )
+            identifier_set.delete()
+            return None
+
+        if (
+            offset == 0
+            and total_items > result.limit
+            and len(result.listed) < result.limit
+        ):
+            # The walk finishes by stepping back into the region this page covered,
+            # and uses the page size to decide how far that reaches. A first page
+            # that came back short does not reach that far, leaving the strip between
+            # where it ended and where the walk stopped uncrawled.
+            task.log.error(
+                f"Overdrive reaper aborting for collection '{collection_name}': the "
+                f"first page returned {len(result.listed)} titles of a possible "
+                f"{result.limit}, so the walk cannot join back onto it. Refusing to "
+                f"reap across a gap."
+            )
+            identifier_set.delete()
+            return None
+
+        must_reach = min(result.total_items, total_items)
+        if (
+            previous_offset is None
+            and offset != 0
+            and offset + len(result.listed) < must_reach
+        ):
+            # The walk's first backwards page runs to the end of the list, and is the
+            # one page with nothing above it to be checked against. Its reach is
+            # exactly knowable for that same reason: it has to arrive at the end.
+            #
+            # Which end depends on what the collection did in between. Titles removed
+            # since the first page shorten the list, so the smaller count is the one
+            # to insist on; titles added lengthen it, and under dateAdded:asc they
+            # land beyond where this page starts, so they are not this page's to
+            # reach -- nor can they be falsely reaped, being absent from the snapshot
+            # the chord took of what we hold.
+            task.log.error(
+                f"Overdrive reaper aborting for collection '{collection_name}': the "
+                f"page at offset {offset} returned {len(result.listed)} titles and so "
+                f"stops short of the {must_reach} Overdrive reports. Refusing to reap "
+                f"across a gap."
+            )
+            identifier_set.delete()
+            return None
+
+        if (
+            previous_offset is not None
+            and offset + len(result.listed) < previous_offset
+        ):
+            # The walk steps back by a page size, but a page is free to return fewer
+            # titles than that. When one does, the step overshoots and leaves a strip
+            # of the list uncrawled -- which reaches the completeness check as a
+            # shortfall indistinguishable from titles removed mid-crawl. Pages are
+            # only legitimately short at the end of the list, so every other page is
+            # required to reach the one before it.
+            task.log.error(
+                f"Overdrive reaper aborting for collection '{collection_name}': the "
+                f"page at offset {offset} returned {len(result.listed)} titles and so "
+                f"stops short of the region already crawled at {previous_offset}. "
+                f"Refusing to reap across a gap."
+            )
+            identifier_set.delete()
+            return None
+
+        if next_offset is not None:
+            task.log.info(
+                f"Overdrive reaper crawling '{collection_name}': "
+                f"{identifier_set.len()} of {total_items} titles seen."
+            )
             raise task.replace(
                 signature_with(
                     task,
-                    offset=new_offset,
+                    offset=next_offset,
+                    total_items=total_items,
+                    # The first page of a walk starts at 0 and is followed by a jump
+                    # to the end of the list, so the page after it has nothing to
+                    # join up with.
+                    previous_offset=offset or None,
+                    page_limit=page_limit,
                 )
             )
+
+        crawled = identifier_set.len()
+        if not _crawl_is_complete(
+            task,
+            collection_name,
+            crawled,
+            total_items,
+            single_page=offset == 0,
+            page_limit=page_limit,
+        ):
+            identifier_set.delete()
+            return None
+
+        task.log.info(
+            f"Overdrive reaper crawl complete for collection '{collection_name}': "
+            f"{crawled} titles listed of {total_items} reported."
+        )
+        return identifier_set
+
+
+def _unowned_identifiers_to_mark(
+    session: Session,
+    collection_id: int,
+    unowned: tuple[IdentifierData, ...],
+) -> list[IdentifierData]:
+    """Which titles on a crawled page Overdrive has stopped owning, that we still hold.
+
+    Overdrive keeps weeded and expired titles in the product list rather than dropping
+    them, so this is a statement that a title is gone rather than an inference from its
+    absence -- which is why the caller acts on it without waiting for the crawl to be
+    shown complete.
+
+    Titles we already record as holding no copies are left out, so the ones Overdrive
+    keeps listing as unowned do not generate an apply task on every pass. The test is
+    whether we still record copies, not whether one is free to borrow: a weeded title
+    whose copies are all checked out is exactly the case worth marking, and it is one
+    the set difference can never catch, since Overdrive goes on listing it.
+    """
+    if not unowned:
+        return []
+
+    identifiers = session.scalars(
+        held_identifiers_query(collection_id).where(
+            Identifier.type == Identifier.OVERDRIVE_ID,
+            Identifier.identifier.in_(
+                [identifier.identifier for identifier in unowned]
+            ),
+        )
+    ).all()
+    return [IdentifierData.from_identifier(identifier) for identifier in identifiers]
+
+
+def _crawl_is_complete(
+    task: Task,
+    collection_name: str,
+    crawled: int,
+    total_items: int,
+    *,
+    single_page: bool,
+    page_limit: int,
+) -> bool:
+    """Decide whether a finished crawl covered the whole collection.
+
+    ``crawled`` counts *distinct* identifiers, so a title returned twice cannot paper
+    over one that was missed.
+
+    A crawl runs for hours against a collection that keeps changing underneath it, so a
+    small discrepancy against ``totalItems`` is expected -- titles added or removed
+    mid-crawl move the count. A large shortfall means pages were missed, and reaping on
+    that would mark live titles as gone.
+
+    :param single_page: Whether the whole collection arrived in one response. There is
+        no window for churn in that case -- the products and the count were produced
+        together -- so they are required to agree exactly.
+    :param page_limit: The page size the crawl walked in. The allowance is held below
+        it so that a lost page can never be mistaken for churn -- including the crawl's
+        first backwards page, which has nothing above it to be checked against.
+    """
+    allowance = (
+        0
+        if single_page
+        else min(
+            max(1, int(page_limit * REAP_CRAWL_ALLOWANCE_PAGE_FRACTION)),
+            max(REAP_CRAWL_ALLOWANCE_FLOOR, int(total_items * REAP_CRAWL_ALLOWANCE)),
+        )
+    )
+    if crawled + allowance < total_items:
+        task.log.error(
+            f"Overdrive reaper aborting for collection '{collection_name}': crawl saw "
+            f"{crawled} titles but Overdrive reports {total_items} "
+            f"(allowance {allowance}). Refusing to reap on an incomplete crawl."
+        )
+        return False
+
+    return True
