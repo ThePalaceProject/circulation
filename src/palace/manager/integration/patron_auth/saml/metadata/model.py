@@ -4,7 +4,7 @@ from enum import Enum
 from json import JSONDecoder, JSONEncoder
 from json.decoder import WHITESPACE  # type: ignore
 from re import Pattern
-from typing import Any
+from typing import Any, Final
 
 from onelogin.saml2.constants import OneLogin_Saml2_Constants
 
@@ -326,6 +326,36 @@ class SAMLBinding(Enum):
     HTTP_ARTIFACT = OneLogin_Saml2_Constants.BINDING_HTTP_ARTIFACT
     SOAP = OneLogin_Saml2_Constants.BINDING_SOAP
     DEFLATE = OneLogin_Saml2_Constants.BINDING_DEFLATE
+
+
+class SAMLACSSelectionPolicy(Enum):
+    """Rule for choosing which ACS endpoint to name in an AuthnRequest.
+
+    Only applies when the SP metadata declares more than one
+    AssertionConsumerService endpoint for the required binding.
+
+    Which rule applies to a given integration is resolved by
+    SAMLOneLoginConfiguration.get_acs_selection_policy().
+
+    The values are an external contract, appearing in PALACE_SAML_SP_ACS_SELECTION_POLICY
+    and in each integration's stored settings, so they are spelled out rather than derived
+    from the member names. Renaming a member must not silently change them.
+    """
+
+    # Lowest index, ignoring isDefault. Identity providers are registered against the
+    # endpoint this picks, which is why it is the built-in fallback.
+    FIRST_INDEX = "first_index"
+
+    # The SAML rule: isDefault="true" wins, falling back to the lowest index.
+    METADATA_DEFAULT = "metadata_default"
+
+    # Name no endpoint at all, leaving the identity provider to use whichever one it
+    # has registered. Assumes we can receive at every endpoint our metadata publishes.
+    DEFER_TO_IDP = "defer_to_idp"
+
+
+# Applied when neither the integration nor the environment selects a policy.
+DEFAULT_ACS_SELECTION_POLICY: Final = SAMLACSSelectionPolicy.FIRST_INDEX
 
 
 class SAMLNameIDFormat(Enum):

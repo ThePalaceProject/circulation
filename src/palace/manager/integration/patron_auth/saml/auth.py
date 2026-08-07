@@ -6,8 +6,12 @@ from urllib.parse import urlparse
 
 from flask import request
 from flask_babel import lazy_gettext as _
+from lxml.etree import tostring
 from onelogin.saml2.auth import OneLogin_Saml2_Auth
+from onelogin.saml2.authn_request import OneLogin_Saml2_Authn_Request
 from onelogin.saml2.errors import OneLogin_Saml2_Error
+from onelogin.saml2.utils import OneLogin_Saml2_Utils
+from onelogin.saml2.xmlparser import fromstring
 
 from palace.manager.integration.patron_auth.saml.configuration.model import (
     SAMLConfigurationError,
@@ -15,6 +19,9 @@ from palace.manager.integration.patron_auth.saml.configuration.model import (
 )
 from palace.manager.integration.patron_auth.saml.configuration.service_provider import (
     SamlServiceProviderConfiguration,
+)
+from palace.manager.integration.patron_auth.saml.metadata.model import (
+    SAMLACSSelectionPolicy,
 )
 from palace.manager.integration.patron_auth.saml.metadata.parser import (
     SAMLSubjectParser,
@@ -58,6 +65,31 @@ SAML_NO_ACCESS_ERROR = pd(
     title=_("No access."),
     detail=_("Patron does not have access based on their attributes."),
 )
+
+
+# The SAML toolkit is untyped, so its classes are Any and cannot normally be subclassed.
+class AcsOmittingAuthnRequest(OneLogin_Saml2_Authn_Request):  # type: ignore[misc]
+    """An AuthnRequest that names no AssertionConsumerService endpoint.
+
+    SAML 2.0 Core section 3.4.1 permits a request to omit both
+    AssertionConsumerServiceURL and ProtocolBinding, in which case the IdP responds to
+    the endpoint it has registered for the SP. The toolkit always writes both, so they
+    are removed after the request is built.
+    """
+
+    ACS_ATTRIBUTES = ("AssertionConsumerServiceURL", "ProtocolBinding")
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+
+        # get_request() and the redirect signature are both derived from this value, so
+        # stripping it here keeps the signature over what is actually sent.
+        root = fromstring(self.get_xml().encode())
+
+        for attribute in self.ACS_ATTRIBUTES:
+            root.attrib.pop(attribute, None)
+
+        self._authn_request = tostring(root, encoding="unicode")
 
 
 class SAMLAuthenticationManager:
@@ -124,6 +156,49 @@ class SAMLAuthenticationManager:
 
         return request_data
 
+    @staticmethod
+    def _get_asserted_acs_url(auth: OneLogin_Saml2_Auth) -> str | None:
+        """Return the ACS URL that we send in our authentication requests.
+
+        This is the endpoint selected from the SP metadata by the configuration
+        layer. It is the value an IdP compares against its own registered ACS URL.
+
+        :param auth: OneLogin_Saml2_Auth object
+        :return: Asserted ACS URL, or None if none is configured
+        """
+        acs = auth.get_settings().get_sp_data().get("assertionConsumerService", {})
+        url = acs.get("url")
+
+        return url if isinstance(url, str) and url else None
+
+    def _warn_on_acs_endpoint_mismatch(
+        self, idp_entity_id: str, asserted_url: str | None, received_url: str
+    ) -> None:
+        """Warn when a response arrives at an ACS endpoint that we did not expect.
+
+        An SP may publish several AssertionConsumerService endpoints, and a request
+        names at most one of them. Requests naming none leave nothing to compare, so
+        they are ignored. Otherwise an IdP registered against a different endpoint
+        fails authentication with an IdP-authored message that names both URLs but
+        not which side chose which, so recording both makes the mismatch diagnosable
+        from our own logs.
+        """
+        if asserted_url is None:
+            return
+
+        # Normalize like OneLogin, so that we get only legitimate warnings.
+        if OneLogin_Saml2_Utils.normalize_url(
+            asserted_url
+        ) == OneLogin_Saml2_Utils.normalize_url(received_url):
+            return
+
+        self._logger.warning(
+            f"SAML response for IdP '{idp_entity_id}' arrived at '{received_url}', but the "
+            f"authentication request asserted '{asserted_url}'. The identity provider is "
+            f"likely registered against a different Assertion Consumer Service endpoint "
+            f"than the one selected from our Service Provider metadata."
+        )
+
     def _create_auth_object(
         self,
         db: sqlalchemy.orm.session.Session,
@@ -148,9 +223,25 @@ class SAMLAuthenticationManager:
         request_data = self._get_request_data()
         if settings is None:
             settings = self._configuration.get_settings(db, idp_entity_id)
+
         auth = OneLogin_Saml2_Auth(request_data, old_settings=settings)
 
+        if self._defers_acs_to_idp():
+            # Set on the instance rather than globally, so integrations using other
+            # policies are unaffected.
+            auth.authn_request_class = AcsOmittingAuthnRequest
+
         return auth
+
+    def _defers_acs_to_idp(self) -> bool:
+        """Whether requests should name no ACS endpoint at all.
+
+        Resolved through the configuration rather than read from the integration
+        setting, so that a site-wide default from the environment is honored.
+        """
+        policy = self._configuration.get_acs_selection_policy()
+
+        return policy is SAMLACSSelectionPolicy.DEFER_TO_IDP
 
     def _get_auth_object(self, db, idp_entity_id):
         """Return a cached OneLogin_Saml2_Auth object.
@@ -209,6 +300,16 @@ class SAMLAuthenticationManager:
             redirect_url = auth.login(return_to_url, force_authn=force_authn)
 
             if self._logger.isEnabledFor(logging.DEBUG):
+                if self._defers_acs_to_idp():
+                    self._logger.debug(
+                        f"AuthnRequest for IdP '{idp_entity_id}' names no ACS endpoint; "
+                        f"the identity provider will use the one it has registered"
+                    )
+                else:
+                    self._logger.debug(
+                        f"AuthnRequest for IdP '{idp_entity_id}' asserts ACS endpoint "
+                        f"'{self._get_asserted_acs_url(auth)}'"
+                    )
                 self._logger.debug(f"SAML request: {auth.get_last_request_xml()}")
 
             self._logger.info(
@@ -258,6 +359,24 @@ class SAMLAuthenticationManager:
             )
 
         auth = self._get_auth_object(db, idp_entity_id)
+
+        received_acs_url = OneLogin_Saml2_Utils.get_self_url_no_query(request_data)
+
+        if self._defers_acs_to_idp():
+            # The request named no endpoint, so there is nothing to compare. Record the
+            # identity provider's choice, which is what pinning a policy would select.
+            asserted_acs_url = None
+            if self._logger.isEnabledFor(logging.DEBUG):
+                self._logger.debug(
+                    f"SAML response for IdP '{idp_entity_id}' arrived at "
+                    f"'{received_acs_url}', chosen by the identity provider"
+                )
+        else:
+            asserted_acs_url = self._get_asserted_acs_url(auth)
+            self._warn_on_acs_endpoint_mismatch(
+                idp_entity_id, asserted_acs_url, received_acs_url
+            )
+
         auth.process_response()
 
         if self._logger.isEnabledFor(logging.DEBUG):
@@ -276,9 +395,16 @@ class SAMLAuthenticationManager:
 
             return subject
         else:
-            self._logger.error(auth.get_last_error_reason())
+            error_reason = auth.get_last_error_reason()
 
-            return SAML_AUTHENTICATION_ERROR.detailed(auth.get_last_error_reason())
+            asserted = f"'{asserted_acs_url}'" if asserted_acs_url else "none"
+            self._logger.error(
+                f"SAML authentication failed for IdP '{idp_entity_id}': {error_reason} "
+                f"(request asserted ACS endpoint {asserted}; response arrived "
+                f"at '{received_acs_url}')"
+            )
+
+            return SAML_AUTHENTICATION_ERROR.detailed(error_reason)
 
     def start_logout(
         self,

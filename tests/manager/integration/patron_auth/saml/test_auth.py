@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Callable
 from copy import copy
 from unittest.mock import MagicMock, create_autospec, patch
@@ -19,6 +20,7 @@ from palace.manager.integration.patron_auth.saml.configuration.model import (
     SAMLWebSSOAuthSettings,
 )
 from palace.manager.integration.patron_auth.saml.metadata.model import (
+    SAMLACSSelectionPolicy,
     SAMLAttribute,
     SAMLAttributeStatement,
     SAMLAttributeType,
@@ -283,6 +285,379 @@ class TestSAMLAuthenticationManager:
 
                     # Assert
                     assert expected_value == result
+
+    def _create_authentication_manager(
+        self,
+        create_saml_configuration,
+        create_mock_onelogin_configuration: Callable[..., SAMLOneLoginConfiguration],
+        identity_provider_entity_id: str,
+        strict_mode: bool,
+        acs_selection_policy: SAMLACSSelectionPolicy = SAMLACSSelectionPolicy.FIRST_INDEX,
+    ) -> SAMLAuthenticationManager:
+        """Build a manager whose SP asserts saml_strings.SP_ACS_URL."""
+        identity_providers = [
+            copy(identity_provider) for identity_provider in IDENTITY_PROVIDERS
+        ]
+        identity_providers[0].entity_id = identity_provider_entity_id
+
+        configuration = create_saml_configuration(
+            service_provider_debug_mode=False,
+            service_provider_strict_mode=strict_mode,
+            service_provider_acs_selection_policy=acs_selection_policy,
+        )
+        onelogin_configuration = create_mock_onelogin_configuration(
+            SERVICE_PROVIDER_WITH_UNSIGNED_REQUESTS, identity_providers, configuration
+        )
+
+        return SAMLAuthenticationManager(onelogin_configuration, SAMLSubjectParser())
+
+    @pytest.mark.parametrize(
+        "service_provider",
+        [
+            pytest.param(SERVICE_PROVIDER_WITH_UNSIGNED_REQUESTS, id="unsigned"),
+            pytest.param(SERVICE_PROVIDER_WITH_SIGNED_REQUESTS, id="signed"),
+        ],
+    )
+    @pytest.mark.parametrize(
+        "policy, expect_acs_attributes",
+        [
+            pytest.param(
+                SAMLACSSelectionPolicy.FIRST_INDEX,
+                True,
+                id="first-index-names-an-endpoint",
+            ),
+            pytest.param(
+                SAMLACSSelectionPolicy.METADATA_DEFAULT,
+                True,
+                id="metadata-default-names-an-endpoint",
+            ),
+            pytest.param(
+                SAMLACSSelectionPolicy.DEFER_TO_IDP,
+                False,
+                id="defer-to-idp-names-no-endpoint",
+            ),
+        ],
+    )
+    def test_start_authentication_acs_attributes_follow_policy(
+        self,
+        controller_fixture: ControllerFixture,
+        create_saml_configuration,
+        create_mock_onelogin_configuration: Callable[..., SAMLOneLoginConfiguration],
+        service_provider: SAMLServiceProviderMetadata,
+        policy: SAMLACSSelectionPolicy,
+        expect_acs_attributes: bool,
+    ):
+        """Deferring to the IdP omits both endpoint attributes from the request."""
+        configuration = create_saml_configuration(
+            service_provider_acs_selection_policy=policy
+        )
+        onelogin_configuration = create_mock_onelogin_configuration(
+            service_provider, IDENTITY_PROVIDERS, configuration
+        )
+        authentication_manager = SAMLAuthenticationManager(
+            onelogin_configuration, SAMLSubjectParser()
+        )
+
+        with controller_fixture.app.test_request_context("/"):
+            result = authentication_manager.start_authentication(
+                controller_fixture.db.session, saml_strings.IDP_1_ENTITY_ID, ""
+            )
+
+        assert isinstance(result, str)
+        query_items = parse_qs(urlsplit(result).query)
+        decoded_saml_request = OneLogin_Saml2_Utils.decode_base64_and_inflate(
+            query_items["SAMLRequest"][0]
+        )
+
+        # Removing the attributes must leave a schema-valid AuthnRequest.
+        validation_result = OneLogin_Saml2_XML.validate_xml(
+            decoded_saml_request, "saml-schema-protocol-2.0.xsd", False
+        )
+        assert isinstance(validation_result, OneLogin_Saml2_XML._element_class)
+
+        saml_request_dom = fromstring(decoded_saml_request)
+        assert (
+            saml_request_dom.get("AssertionConsumerServiceURL") is not None
+        ) is expect_acs_attributes
+        assert (
+            saml_request_dom.get("ProtocolBinding") is not None
+        ) is expect_acs_attributes
+
+        # The signature is computed from the request as sent, so it survives stripping.
+        if service_provider.authn_requests_signed:
+            assert "Signature" in query_items
+
+    def test_start_authentication_logs_that_no_acs_endpoint_is_named(
+        self,
+        controller_fixture: ControllerFixture,
+        create_saml_configuration,
+        create_mock_onelogin_configuration: Callable[..., SAMLOneLoginConfiguration],
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """Deferring names no endpoint, so the log must not claim one was asserted."""
+        caplog.set_level(logging.DEBUG)
+
+        onelogin_configuration = create_mock_onelogin_configuration(
+            SERVICE_PROVIDER_WITH_UNSIGNED_REQUESTS,
+            IDENTITY_PROVIDERS,
+            create_saml_configuration(
+                service_provider_acs_selection_policy=SAMLACSSelectionPolicy.DEFER_TO_IDP
+            ),
+        )
+        authentication_manager = SAMLAuthenticationManager(
+            onelogin_configuration, SAMLSubjectParser()
+        )
+
+        with controller_fixture.app.test_request_context("/"):
+            authentication_manager.start_authentication(
+                controller_fixture.db.session, saml_strings.IDP_1_ENTITY_ID, ""
+            )
+
+        assert "names no ACS endpoint" in caplog.text
+        assert "asserts ACS endpoint" not in caplog.text
+
+    def test_start_authentication_defers_to_idp_from_the_environment(
+        self,
+        controller_fixture: ControllerFixture,
+        monkeypatch: pytest.MonkeyPatch,
+        create_saml_configuration,
+        create_mock_onelogin_configuration: Callable[..., SAMLOneLoginConfiguration],
+    ):
+        """A site-wide policy has to reach request building, not just metadata parsing."""
+        monkeypatch.setenv("PALACE_SAML_SP_ACS_SELECTION_POLICY", "defer_to_idp")
+
+        onelogin_configuration = create_mock_onelogin_configuration(
+            SERVICE_PROVIDER_WITH_UNSIGNED_REQUESTS,
+            IDENTITY_PROVIDERS,
+            create_saml_configuration(),
+        )
+        authentication_manager = SAMLAuthenticationManager(
+            onelogin_configuration, SAMLSubjectParser()
+        )
+
+        with controller_fixture.app.test_request_context("/"):
+            result = authentication_manager.start_authentication(
+                controller_fixture.db.session, saml_strings.IDP_1_ENTITY_ID, ""
+            )
+
+        assert isinstance(result, str)
+        query_items = parse_qs(urlsplit(result).query)
+        saml_request_dom = fromstring(
+            OneLogin_Saml2_Utils.decode_base64_and_inflate(
+                query_items["SAMLRequest"][0]
+            )
+        )
+
+        assert saml_request_dom.get("AssertionConsumerServiceURL") is None
+        assert saml_request_dom.get("ProtocolBinding") is None
+
+    def test_finish_authentication_does_not_warn_when_deferring_to_idp(
+        self,
+        controller_fixture: ControllerFixture,
+        create_saml_configuration,
+        create_mock_onelogin_configuration: Callable[..., SAMLOneLoginConfiguration],
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """Nothing was asserted, so an unexpected endpoint is not a mismatch."""
+        caplog.set_level(logging.WARNING)
+
+        identity_provider_entity_id = "http://idp.hilbertteam.net/idp/shibboleth"
+        authentication_manager = self._create_authentication_manager(
+            create_saml_configuration,
+            create_mock_onelogin_configuration,
+            identity_provider_entity_id,
+            strict_mode=False,
+            acs_selection_policy=SAMLACSSelectionPolicy.DEFER_TO_IDP,
+        )
+        saml_response = base64.b64encode(saml_strings.SAML_COLUMBIA_RESPONSE)
+
+        with controller_fixture.app.test_request_context(
+            "/SAML2/POST",
+            base_url="http://localhost",
+            data={"SAMLResponse": saml_response},
+        ):
+            authentication_manager.finish_authentication(
+                controller_fixture.db.session, identity_provider_entity_id
+            )
+
+        assert self._acs_mismatch_warned(caplog) is False
+
+    def test_start_authentication_logs_asserted_acs_endpoint(
+        self,
+        controller_fixture: ControllerFixture,
+        create_saml_configuration,
+        create_mock_onelogin_configuration: Callable[..., SAMLOneLoginConfiguration],
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """The endpoint named in the AuthnRequest is recorded for later comparison."""
+        caplog.set_level(logging.DEBUG)
+
+        identity_provider_entity_id = "http://idp.hilbertteam.net/idp/shibboleth"
+        authentication_manager = self._create_authentication_manager(
+            create_saml_configuration,
+            create_mock_onelogin_configuration,
+            identity_provider_entity_id,
+            strict_mode=False,
+        )
+
+        with controller_fixture.app.test_request_context("/"):
+            authentication_manager.start_authentication(
+                controller_fixture.db.session,
+                identity_provider_entity_id,
+                "http://localhost/return",
+            )
+
+        assert f"asserts ACS endpoint '{saml_strings.SP_ACS_URL}'" in caplog.text
+
+    @staticmethod
+    def _acs_mismatch_warned(caplog: pytest.LogCaptureFixture) -> bool:
+        """Whether the ACS endpoint mismatch warning was emitted.
+
+        Matched on a phrase unique to the warning, since the failure branch names
+        both endpoints too.
+        """
+        return any(
+            record.levelno == logging.WARNING
+            and "but the authentication request asserted" in record.getMessage()
+            for record in caplog.records
+        )
+
+    @pytest.mark.parametrize(
+        "asserted_url, received_url, expected_warning",
+        [
+            pytest.param(
+                "https://example.org/saml_callback",
+                "https://example.org/saml/callback",
+                True,
+                id="different-paths",
+            ),
+            pytest.param(
+                "https://example.org/saml/callback",
+                "https://example.org/saml/callback",
+                False,
+                id="identical",
+            ),
+            pytest.param(
+                "https://EXAMPLE.org/saml/callback",
+                "https://example.org/saml/callback",
+                False,
+                id="host-case-only",
+            ),
+            pytest.param(
+                None,
+                "https://example.org/saml/callback",
+                False,
+                id="no-asserted-url",
+            ),
+        ],
+    )
+    def test_warn_on_acs_endpoint_mismatch(
+        self,
+        create_saml_configuration,
+        create_mock_onelogin_configuration: Callable[..., SAMLOneLoginConfiguration],
+        caplog: pytest.LogCaptureFixture,
+        asserted_url: str | None,
+        received_url: str,
+        expected_warning: bool,
+    ):
+        caplog.set_level(logging.WARNING)
+
+        authentication_manager = self._create_authentication_manager(
+            create_saml_configuration,
+            create_mock_onelogin_configuration,
+            "http://idp.hilbertteam.net/idp/shibboleth",
+            strict_mode=False,
+        )
+
+        authentication_manager._warn_on_acs_endpoint_mismatch(
+            "http://idp.example.com", asserted_url, received_url
+        )
+
+        assert self._acs_mismatch_warned(caplog) is expected_warning
+
+    @pytest.mark.parametrize(
+        "request_path, base_url, expected_warning",
+        [
+            pytest.param(
+                "/SAML2/POST",
+                "http://localhost",
+                True,
+                id="response-at-endpoint-we-did-not-assert",
+            ),
+            pytest.param(
+                "/idp/profile/SAML2/POST",
+                "http://sp.hilbertteam.net",
+                False,
+                id="response-at-asserted-endpoint",
+            ),
+        ],
+    )
+    def test_finish_authentication_warns_on_acs_endpoint_mismatch(
+        self,
+        controller_fixture: ControllerFixture,
+        create_saml_configuration,
+        create_mock_onelogin_configuration: Callable[..., SAMLOneLoginConfiguration],
+        caplog: pytest.LogCaptureFixture,
+        request_path: str,
+        base_url: str,
+        expected_warning: bool,
+    ):
+        caplog.set_level(logging.WARNING)
+
+        identity_provider_entity_id = "http://idp.hilbertteam.net/idp/shibboleth"
+        authentication_manager = self._create_authentication_manager(
+            create_saml_configuration,
+            create_mock_onelogin_configuration,
+            identity_provider_entity_id,
+            strict_mode=False,
+        )
+        saml_response = base64.b64encode(saml_strings.SAML_COLUMBIA_RESPONSE)
+
+        with controller_fixture.app.test_request_context(
+            request_path, base_url=base_url, data={"SAMLResponse": saml_response}
+        ):
+            authentication_manager.finish_authentication(
+                controller_fixture.db.session, identity_provider_entity_id
+            )
+
+        assert self._acs_mismatch_warned(caplog) is expected_warning
+
+        if expected_warning:
+            assert saml_strings.SP_ACS_URL in caplog.text
+            assert "http://localhost/SAML2/POST" in caplog.text
+
+    def test_finish_authentication_failure_logs_acs_endpoints(
+        self,
+        controller_fixture: ControllerFixture,
+        create_saml_configuration,
+        create_mock_onelogin_configuration: Callable[..., SAMLOneLoginConfiguration],
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """A failed authentication records both ACS endpoints alongside the IdP's reason."""
+        caplog.set_level(logging.ERROR)
+
+        identity_provider_entity_id = "http://idp.hilbertteam.net/idp/shibboleth"
+        authentication_manager = self._create_authentication_manager(
+            create_saml_configuration,
+            create_mock_onelogin_configuration,
+            identity_provider_entity_id,
+            strict_mode=True,
+        )
+        saml_response = base64.b64encode(saml_strings.SAML_COLUMBIA_RESPONSE)
+
+        with controller_fixture.app.test_request_context(
+            "/SAML2/POST",
+            base_url="http://localhost",
+            data={"SAMLResponse": saml_response},
+        ):
+            result = authentication_manager.finish_authentication(
+                controller_fixture.db.session, identity_provider_entity_id
+            )
+
+        assert isinstance(result, ProblemDetail)
+        assert "SAML authentication failed" in caplog.text
+        assert saml_strings.SP_ACS_URL in caplog.text
+        assert "http://localhost/SAML2/POST" in caplog.text
 
     def test_start_logout_success(
         self,

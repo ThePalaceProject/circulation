@@ -1,3 +1,5 @@
+import json
+import logging
 from collections.abc import Callable
 from datetime import datetime
 from unittest.mock import MagicMock, call, create_autospec
@@ -10,6 +12,7 @@ from palace.manager.api.admin.problem_details import (
     INVALID_CONFIGURATION_OPTION,
 )
 from palace.manager.integration.patron_auth.saml.configuration.model import (
+    ACS_SELECTION_POLICY_LABELS,
     SAMLOneLoginConfiguration,
     SAMLWebSSOAuthSettings,
 )
@@ -17,8 +20,13 @@ from palace.manager.integration.patron_auth.saml.configuration.problem_details i
     SAML_INCORRECT_METADATA,
     SAML_INCORRECT_PRIVATE_KEY,
 )
+from palace.manager.integration.patron_auth.saml.configuration.service_provider import (
+    ACS_SELECTION_POLICY_ENV_VAR,
+)
 from palace.manager.integration.patron_auth.saml.metadata.federations import incommon
 from palace.manager.integration.patron_auth.saml.metadata.model import (
+    DEFAULT_ACS_SELECTION_POLICY,
+    SAMLACSSelectionPolicy,
     SAMLBinding,
     SAMLIdentityProviderMetadata,
     SAMLNameIDFormat,
@@ -34,6 +42,7 @@ from palace.manager.sqlalchemy.model.saml import (
     SAMLFederatedIdentityProvider,
     SAMLFederation,
 )
+from palace.manager.util.json import json_serializer
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.test_utils import MonkeyPatchEnvFixture
@@ -715,7 +724,213 @@ class TestSAMLSettings:
         )
 
 
+SP_METADATA_WITH_TWO_ACS_ENDPOINTS = (
+    '<md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" '
+    'entityID="http://sp.example.org/metadata">'
+    '<md:SPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">'
+    '<md:AssertionConsumerService index="1" '
+    'Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" '
+    'Location="https://example.org/saml_callback"/>'
+    '<md:AssertionConsumerService index="2" isDefault="true" '
+    'Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" '
+    'Location="https://example.org/saml/callback"/>'
+    "</md:SPSSODescriptor>"
+    "</md:EntityDescriptor>"
+)
+
+
 class TestSAMLOneLoginConfiguration:
+    def test_acs_selection_policy_is_unset_by_default(self, create_saml_configuration):
+        """An unset integration setting means 'use the site-wide default'."""
+        configuration = create_saml_configuration()
+
+        assert configuration.service_provider_acs_selection_policy is None
+
+    @pytest.mark.parametrize(
+        "policy",
+        [pytest.param(policy, id=policy.value) for policy in SAMLACSSelectionPolicy],
+    )
+    def test_acs_selection_policy_survives_settings_dict_round_trip(
+        self, policy: SAMLACSSelectionPolicy
+    ):
+        """settings_dict is stored as JSONB, so the policy has to survive that trip.
+
+        Serialized through the session's own serializer, which is what the write
+        actually uses.
+        """
+        settings = SAMLWebSSOAuthSettings(
+            service_provider_xml_metadata=saml_strings.CORRECT_XML_WITH_ONE_SP,
+            service_provider_acs_selection_policy=policy,
+        )
+
+        settings_dict = json.loads(json_serializer(settings.model_dump()))
+
+        assert settings_dict["service_provider_acs_selection_policy"] == policy.value
+        assert (
+            SAMLWebSSOAuthSettings(
+                **settings_dict
+            ).service_provider_acs_selection_policy
+            is policy
+        )
+
+    def test_acs_selection_policy_form_field_tracks_the_policies(self):
+        """The description states the default rather than restating it as fixed prose.
+
+        Guards against the description drifting from DEFAULT_ACS_SELECTION_POLICY, and
+        against a new policy being added without being offered in the form.
+        """
+        field = SAMLWebSSOAuthSettings.model_fields[
+            "service_provider_acs_selection_policy"
+        ]
+        form_metadata = next(m for m in field.metadata if hasattr(m, "label"))
+
+        assert (
+            f"'{ACS_SELECTION_POLICY_LABELS[DEFAULT_ACS_SELECTION_POLICY]}'"
+            in form_metadata.description
+        )
+        assert ACS_SELECTION_POLICY_ENV_VAR in form_metadata.description
+        assert set(form_metadata.options) == {""} | {
+            policy.value for policy in SAMLACSSelectionPolicy
+        }
+
+    def test_acs_selection_policy_can_be_reset_from_the_admin_interface(self):
+        """The admin interface clears a setting by sending an empty string."""
+        settings = SAMLWebSSOAuthSettings(
+            service_provider_xml_metadata=saml_strings.CORRECT_XML_WITH_ONE_SP,
+            service_provider_acs_selection_policy="",
+        )
+
+        assert settings.service_provider_acs_selection_policy is None
+
+    @pytest.mark.parametrize(
+        "env_policy, settings_policy, expected_policy",
+        [
+            pytest.param(
+                None,
+                None,
+                SAMLACSSelectionPolicy.FIRST_INDEX,
+                id="neither-set-uses-built-in-default",
+            ),
+            pytest.param(
+                SAMLACSSelectionPolicy.METADATA_DEFAULT.value,
+                None,
+                SAMLACSSelectionPolicy.METADATA_DEFAULT,
+                id="environment-supplies-the-default",
+            ),
+            pytest.param(
+                None,
+                SAMLACSSelectionPolicy.DEFER_TO_IDP,
+                SAMLACSSelectionPolicy.DEFER_TO_IDP,
+                id="integration-setting-is-used",
+            ),
+            pytest.param(
+                SAMLACSSelectionPolicy.METADATA_DEFAULT.value,
+                SAMLACSSelectionPolicy.DEFER_TO_IDP,
+                SAMLACSSelectionPolicy.DEFER_TO_IDP,
+                id="integration-setting-overrides-the-environment",
+            ),
+            pytest.param(
+                "not-a-policy",
+                None,
+                SAMLACSSelectionPolicy.FIRST_INDEX,
+                id="invalid-environment-value-falls-back",
+            ),
+            pytest.param(
+                "not-a-policy",
+                SAMLACSSelectionPolicy.METADATA_DEFAULT,
+                SAMLACSSelectionPolicy.METADATA_DEFAULT,
+                id="invalid-environment-value-does-not-disturb-the-setting",
+            ),
+        ],
+    )
+    def test_get_acs_selection_policy(
+        self,
+        monkeypatch_env: MonkeyPatchEnvFixture,
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
+        env_policy: str | None,
+        settings_policy: SAMLACSSelectionPolicy | None,
+        expected_policy: SAMLACSSelectionPolicy,
+    ):
+        """The integration setting wins, then the environment, then the built-in default."""
+        monkeypatch_env("PALACE_SAML_SP_ACS_SELECTION_POLICY", env_policy)
+        configuration = create_saml_configuration(
+            service_provider_acs_selection_policy=settings_policy
+        )
+
+        onelogin_configuration = SAMLOneLoginConfiguration(configuration)
+
+        assert onelogin_configuration.get_acs_selection_policy() is expected_policy
+
+    def test_empty_acs_selection_policy_in_environment_is_not_an_error(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """An explicitly empty value means 'unset', not a misconfiguration.
+
+        Set through monkeypatch directly, because the monkeypatch_env fixture deletes
+        the variable for a falsy value rather than setting it empty.
+        """
+        caplog.set_level(logging.ERROR)
+        monkeypatch.setenv("PALACE_SAML_SP_ACS_SELECTION_POLICY", "")
+
+        onelogin_configuration = SAMLOneLoginConfiguration(create_saml_configuration())
+
+        assert (
+            onelogin_configuration.get_acs_selection_policy()
+            is SAMLACSSelectionPolicy.FIRST_INDEX
+        )
+        assert "PALACE_SAML_SP_ACS_SELECTION_POLICY" not in caplog.text
+
+    def test_invalid_acs_selection_policy_in_environment_is_logged(
+        self,
+        monkeypatch_env: MonkeyPatchEnvFixture,
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """A misconfigured default is otherwise invisible until a login fails."""
+        caplog.set_level(logging.ERROR)
+        monkeypatch_env("PALACE_SAML_SP_ACS_SELECTION_POLICY", "not-a-policy")
+
+        SAMLOneLoginConfiguration(create_saml_configuration())
+
+        assert "PALACE_SAML_SP_ACS_SELECTION_POLICY" in caplog.text
+        assert "not-a-policy" in caplog.text
+        assert SAMLACSSelectionPolicy.FIRST_INDEX.value in caplog.text
+
+    @pytest.mark.parametrize(
+        "policy, expected_url",
+        [
+            pytest.param(
+                SAMLACSSelectionPolicy.FIRST_INDEX,
+                "https://example.org/saml_callback",
+                id="first-index-ignores-is-default",
+            ),
+            pytest.param(
+                SAMLACSSelectionPolicy.METADATA_DEFAULT,
+                "https://example.org/saml/callback",
+                id="metadata-default-honors-is-default",
+            ),
+        ],
+    )
+    def test_acs_selection_policy_reaches_the_parser(
+        self,
+        create_saml_configuration,
+        policy: SAMLACSSelectionPolicy,
+        expected_url: str,
+    ):
+        """The integration setting decides which published ACS endpoint is asserted."""
+        configuration = create_saml_configuration(
+            service_provider_xml_metadata=SP_METADATA_WITH_TWO_ACS_ENDPOINTS,
+            service_provider_acs_selection_policy=policy,
+        )
+        onelogin_configuration = SAMLOneLoginConfiguration(configuration)
+
+        service_provider = onelogin_configuration.get_service_provider()
+
+        assert service_provider.acs_service.url == expected_url
+
     def test_get_identity_provider_settings_returns_correct_result(self):
         # Arrange
         configuration = create_autospec(spec=SAMLWebSSOAuthSettings)

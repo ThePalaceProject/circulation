@@ -10,6 +10,8 @@ from onelogin.saml2.xmlparser import RestrictedElement, fromstring
 from palace.util.exceptions import BasePalaceException
 
 from palace.manager.integration.patron_auth.saml.metadata.model import (
+    DEFAULT_ACS_SELECTION_POLICY,
+    SAMLACSSelectionPolicy,
     SAMLAttribute,
     SAMLAttributeStatement,
     SAMLAttributeType,
@@ -65,14 +67,21 @@ class SAMLMetadataParsingResult:
 class SAMLMetadataParser:
     """Parses SAML metadata"""
 
-    def __init__(self, skip_incorrect_providers=False):
+    def __init__(
+        self,
+        skip_incorrect_providers: bool = False,
+        acs_selection_policy: SAMLACSSelectionPolicy = DEFAULT_ACS_SELECTION_POLICY,
+    ) -> None:
         """Initialize a new instance of MetadataParser class.
 
         :param skip_incorrect_providers: Boolean value indicating whether the parse should skip
             incorrect SAML provider declarations instead of raising an exception
-        :type skip_incorrect_providers: bool
+
+        :param acs_selection_policy: Rule for choosing among several
+            AssertionConsumerService endpoints declared in SP metadata
         """
         self._skip_incorrect_providers = skip_incorrect_providers
+        self._acs_selection_policy = acs_selection_policy
 
         self._logger = logging.getLogger(__name__)
 
@@ -376,8 +385,9 @@ class SAMLMetadataParser:
             "./md:SingleSignOnService[@Binding='%s']" % required_sso_binding.value,
         )
         if len(sso_nodes) > 0:
-            sso_node = self._select_default_or_first_indexed_element(sso_nodes)
-            sso_url = sso_node.get("Location", None)
+            # SingleSignOnService is an EndpointType, which declares neither index nor
+            # isDefault, so there is nothing to select by and the first declaration wins.
+            sso_url = sso_nodes[0].get("Location", None)
             sso_service = SAMLService(sso_url, required_sso_binding)
         else:
             raise SAMLMetadataParsingError(
@@ -394,8 +404,9 @@ class SAMLMetadataParser:
             "./md:SingleLogoutService[@Binding='%s']" % required_slo_binding.value,
         )
         if len(slo_nodes) > 0:
-            slo_node = self._select_default_or_first_indexed_element(slo_nodes)
-            slo_url = slo_node.get("Location", None)
+            # SingleLogoutService is an EndpointType, which declares neither index nor
+            # isDefault, so there is nothing to select by and the first declaration wins.
+            slo_url = slo_nodes[0].get("Location", None)
             slo_service = SAMLService(slo_url, required_slo_binding)
 
         signing_certificate_nodes = OneLogin_Saml2_XML.query(
@@ -426,34 +437,22 @@ class SAMLMetadataParser:
 
     def _parse_sp_metadata(
         self,
-        provider_node,
-        entity_id,
-        ui_info,
-        organization,
-        required_acs_binding=SAMLBinding.HTTP_POST,
-    ):
+        provider_node: RestrictedElement,
+        entity_id: str,
+        ui_info: SAMLUIInfo,
+        organization: SAMLOrganization,
+        required_acs_binding: SAMLBinding = SAMLBinding.HTTP_POST,
+    ) -> SAMLServiceProviderMetadata:
         """Parses SPSSODescriptor node and translates it into a ServiceProvider object
 
         :param provider_node: SPSSODescriptor node containing SP metadata
-        :param provider_node: onelogin.saml2.xmlparser.RestrictedElement
-
-        :param entity_id: String containing IdP's entityID
-        :type entity_id: string
-
-        :param ui_info: UIInfo object containing IdP's description
-        :type ui_info: UIInfo
-
+        :param entity_id: String containing SP's entityID
+        :param ui_info: UIInfo object containing SP's description
         :param organization: Organization object containing basic information about an organization
             responsible for a SAML entity or role
-        :type organization: Organization
-
-        :param required_acs_binding: Required binding for Assertion Consumer Service (HTTP-Redirect by default)
-        :type required_acs_binding: Binding
-
-        :return: ServiceProvider containing SP metadata
-        :rtype: ServiceProvider
-
-        :raise: MetadataParsingError
+        :param required_acs_binding: Required binding for Assertion Consumer Service
+        :return: SAMLServiceProviderMetadata containing SP metadata
+        :raise SAMLMetadataParsingError: If the SP metadata cannot be parsed
         """
         authn_requests_signed = provider_node.get("AuthnRequestsSigned", False)
         want_assertions_signed = provider_node.get("WantAssertionsSigned", False)
@@ -465,10 +464,17 @@ class SAMLMetadataParser:
             provider_node,
             "./md:AssertionConsumerService[@Binding='%s']" % required_acs_binding.value,
         )
-        if len(acs_service_nodes) > 0:
+        # DEFER_TO_IDP resolves an endpoint just as METADATA_DEFAULT does, even though
+        # requests under it name no endpoint, because the SAML toolkit requires an ACS
+        # URL in its settings. Choosing the policy is the caller's business.
+        if self._acs_selection_policy is SAMLACSSelectionPolicy.FIRST_INDEX:
+            acs_service_node = self._select_first_indexed_element(acs_service_nodes)
+        else:
             acs_service_node = self._select_default_or_first_indexed_element(
                 acs_service_nodes
             )
+
+        if acs_service_node is not None:
             acs_url = acs_service_node.get("Location", None)
             acs_service = SAMLService(acs_url, required_acs_binding)
         else:
@@ -504,49 +510,76 @@ class SAMLMetadataParser:
 
         return sp
 
-    def _select_default_element(self, nodes):
+    @staticmethod
+    def _parse_index(node: RestrictedElement) -> int:
+        """Return a node's "index" attribute, treating an absent one as 0.
+
+        Only AssertionConsumerService reaches this, and the schema requires "index"
+        there, so an absent one means invalid metadata rather than a meaningful rank.
+        Such a node ties with any endpoint declaring index="0", and document order
+        then decides between them.
+
+        :param node: XML node
+        :return: Value of the "index" attribute, or 0 when it is absent
+        :raise SAMLMetadataParsingError: If "index" is present but not an integer
+        """
+        index = node.get("index")
+
+        if index is None:
+            return 0
+
+        try:
+            return int(index)
+        except ValueError as exception:
+            raise SAMLMetadataParsingError(
+                _(f"Invalid index attribute '{index}': expected an integer")
+            ) from exception
+
+    @staticmethod
+    def _parse_is_default(node: RestrictedElement) -> bool:
+        """Return a node's "isDefault" attribute as an XML schema boolean.
+
+        :param node: XML node
+        :return: True when the node is marked as the default endpoint
+        """
+        return node.get("isDefault") in ("true", "1")
+
+    def _select_default_element(
+        self, nodes: list[RestrictedElement]
+    ) -> RestrictedElement | None:
         """Selects a node with attribute "isDefault=true"
 
         :param nodes: List of XML nodes
-        :type nodes: List[onelogin.saml2.xmlparser.RestrictedElement]
-
         :return: "Default" node or None if there is no one
-        :rtype: Optional[onelogin.saml2.xmlparser.RestrictedElement]
         """
-        default_nodes = [node for node in nodes if node.get("isDefault", False)]
+        default_nodes = [node for node in nodes if self._parse_is_default(node)]
 
-        default_node = self._select_first_indexed_element(default_nodes)
+        return self._select_first_indexed_element(default_nodes)
 
-        return default_node
-
-    def _select_first_indexed_element(self, nodes):
+    def _select_first_indexed_element(
+        self, nodes: list[RestrictedElement]
+    ) -> RestrictedElement | None:
         """Sorts a list of XML nodes by "index" attribute and selects the first node
 
         :param nodes: List of XML nodes
-        :type nodes: List[onelogin.saml2.xmlparser.RestrictedElement]
-
         :return: Node with the smallest index or None if there is no one
-        :rtype: Optional[onelogin.saml2.xmlparser.RestrictedElement]
         """
         if not nodes:
             return None
 
-        nodes = sorted(nodes, key=lambda node: node.get("index", 0))
+        return sorted(nodes, key=self._parse_index)[0]
 
-        return nodes[0]
-
-    def _select_default_or_first_indexed_element(self, nodes):
+    def _select_default_or_first_indexed_element(
+        self, nodes: list[RestrictedElement]
+    ) -> RestrictedElement | None:
         """Selects a node with attribute "isDefault=true" or a node with the smallest "index" attribute
 
         :param nodes: List of XML nodes
-        :type nodes: List[onelogin.saml2.xmlparser.RestrictedElement]
-
         :return: "Default" node or the node with the smallest "index" attribute or None if there is no one
-        :rtype: Optional[onelogin.saml2.xmlparser.RestrictedElement]
         """
         default_node = self._select_default_element(nodes)
 
-        if default_node:
+        if default_node is not None:
             return default_node
 
         return self._select_first_indexed_element(nodes)

@@ -1,11 +1,13 @@
 import re
+from collections.abc import Mapping
 from datetime import datetime
 from re import Pattern
 from threading import Lock
-from typing import Annotated, Any
+from typing import Annotated, Any, Final
 
 from annotated_types import Ge, Le
 from flask_babel import lazy_gettext as _
+from frozendict import frozendict
 from onelogin.saml2.settings import OneLogin_Saml2_Settings
 from pydantic import PositiveInt, field_validator
 from sqlalchemy.orm import Session
@@ -26,10 +28,13 @@ from palace.manager.integration.patron_auth.saml.configuration.problem_details i
     SAML_INCORRECT_PRIVATE_KEY,
 )
 from palace.manager.integration.patron_auth.saml.configuration.service_provider import (
+    ACS_SELECTION_POLICY_ENV_VAR,
     SamlServiceProviderConfiguration,
 )
 from palace.manager.integration.patron_auth.saml.metadata.federations import incommon
 from palace.manager.integration.patron_auth.saml.metadata.model import (
+    DEFAULT_ACS_SELECTION_POLICY,
+    SAMLACSSelectionPolicy,
     SAMLAttributeType,
     SAMLBinding,
     SAMLIdentityProviderMetadata,
@@ -125,6 +130,17 @@ def _validate_filter_expression(cls: type[BaseSettings], v: str | None) -> str |
     return v
 
 
+# Names shown in the administrative interface. Also used in the field's description, so
+# that the stated default follows DEFAULT_ACS_SELECTION_POLICY rather than being restated.
+ACS_SELECTION_POLICY_LABELS: Final[Mapping[SAMLACSSelectionPolicy, str]] = frozendict(
+    {
+        SAMLACSSelectionPolicy.FIRST_INDEX: "Lowest index",
+        SAMLACSSelectionPolicy.METADATA_DEFAULT: "Metadata default",
+        SAMLACSSelectionPolicy.DEFER_TO_IDP: "Defer to identity provider",
+    }
+)
+
+
 class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
     """SAML Web SSO Authentication settings"""
 
@@ -151,6 +167,35 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
             "Leave empty to use environment configuration (PALACE_SAML_SP_PRIVATE_KEY or PALACE_SAML_SP_PRIVATE_KEY_FILE).",
             type=FormFieldType.TEXTAREA,
             use_monospace_font=True,
+        ),
+    ] = None
+    service_provider_acs_selection_policy: Annotated[
+        SAMLACSSelectionPolicy | None,
+        FormMetadata(
+            label="Assertion Consumer Service Endpoint Selection",
+            description=(
+                "(Optional) How we choose which Assertion Consumer Service (ACS) endpoint "
+                "(if any) to name in authentication requests when the Service Provider "
+                "metadata declares more than one. "
+                f"'{ACS_SELECTION_POLICY_LABELS[SAMLACSSelectionPolicy.FIRST_INDEX]}' "
+                "deliberately ignores the isDefault attribute and selects the lowest index "
+                "attribute value. Leave unset to use the site-wide default (currently "
+                f"'{ACS_SELECTION_POLICY_LABELS[DEFAULT_ACS_SELECTION_POLICY]}' unless "
+                f"overridden by the {ACS_SELECTION_POLICY_ENV_VAR} environment variable)."
+                "<br>"
+                "<br>"
+                "NOTE: The selected ACS endpoint, if present, must align with the Identity "
+                "Provider's configuration, so coordination with our IdP partner may be "
+                "required when changing this value."
+            ),
+            type=FormFieldType.SELECT,
+            options={
+                "": "Use site-wide default",
+                **{
+                    policy.value: label
+                    for policy, label in ACS_SELECTION_POLICY_LABELS.items()
+                },
+            },
         ),
     ] = None
     federated_identity_provider_entity_ids: Annotated[
@@ -602,6 +647,25 @@ class SAMLOneLoginConfiguration(LoggerMixin):
 
         return identity_providers
 
+    def get_acs_selection_policy(self) -> SAMLACSSelectionPolicy:
+        """Resolve the ACS endpoint selection policy for this integration.
+
+        The integration's own setting wins. An integration that leaves it unset uses
+        the site-wide default from the environment, and failing that the built-in
+        default.
+
+        This is the single source of truth for the policy: callers that need to know
+        how requests are built must use it rather than reading the setting, which on
+        its own does not account for the environment.
+
+        :return: Policy to apply when parsing this integration's SP metadata
+        """
+        return (
+            self._configuration.service_provider_acs_selection_policy
+            or self._sp_configuration.acs_selection_policy
+            or DEFAULT_ACS_SELECTION_POLICY
+        )
+
     def _load_service_provider(self) -> SAMLServiceProviderMetadata:
         """Loads SP settings from integration configuration or environment.
 
@@ -638,7 +702,12 @@ class SAMLOneLoginConfiguration(LoggerMixin):
                 )
             )
 
-        parsing_results = self._metadata_parser.parse(metadata)
+        # The ACS selection policy applies only to SP metadata, so this parse uses its
+        # own parser rather than the one shared with identity provider parsing.
+        service_provider_parser = SAMLMetadataParser(
+            acs_selection_policy=self.get_acs_selection_policy()
+        )
+        parsing_results = service_provider_parser.parse(metadata)
 
         if not isinstance(parsing_results, list) or len(parsing_results) != 1:
             raise SAMLConfigurationError(
