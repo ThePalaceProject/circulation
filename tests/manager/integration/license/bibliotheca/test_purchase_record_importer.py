@@ -11,8 +11,8 @@ from palace.util.datetime_helpers import datetime_utc, utc_now
 from palace.util.log import LogLevel
 
 from palace.manager.celery.tasks import apply
-from palace.manager.integration.license.bibliotheca import BibliothecaAPI
-from palace.manager.integration.license.bibliotheca_purchase_record_importer import (
+from palace.manager.integration.license.bibliotheca.api import BibliothecaAPI
+from palace.manager.integration.license.bibliotheca.purchase_record_importer import (
     _MARC_PAGE_SIZE,
     DEFAULT_PURCHASE_RECORD_START_TIME,
     PURCHASE_RECORD_SERVICE_NAME,

@@ -8,8 +8,8 @@ from unittest.mock import MagicMock, patch
 from palace.util.datetime_helpers import utc_now
 
 from palace.manager.celery.tasks import apply
-from palace.manager.integration.license.bibliotheca import BibliothecaAPI
-from palace.manager.integration.license.bibliotheca_importer import (
+from palace.manager.integration.license.bibliotheca.api import BibliothecaAPI
+from palace.manager.integration.license.bibliotheca.importer import (
     DEFAULT_SLICE_SIZE,
     EVENT_IMPORT_OVERLAP,
     EVENT_IMPORT_SERVICE_NAME,
