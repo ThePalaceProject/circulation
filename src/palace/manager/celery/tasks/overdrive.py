@@ -54,6 +54,12 @@ IMPORT_SKIPPED: str = "import_skipped"
 # per run.
 REAP_IDENTIFIER_SET_LIFETIME: datetime.timedelta = datetime.timedelta(hours=20)
 
+# How far apart the collections' reap chords are launched. Each chord opens with a
+# scan of the collection's every identifier into Redis, so launching every
+# collection in the same minute stacks all of those scans onto the default queue
+# at once -- the spread keeps the nightly kickoff from crowding out other work.
+REAP_KICKOFF_STAGGER: datetime.timedelta = datetime.timedelta(minutes=2)
+
 
 class ImportSkippedPayload(TypedDict):
     """Payload returned when import is skipped (workflow lock already held)."""
@@ -499,8 +505,10 @@ def reap_all_collections(task: Task) -> None:
             OverdriveAPI, registry=registry
         )
         collections = session.scalars(collection_query).all()
-    for collection in collections:
-        OverdriveAPI.reap_task(collection.id).apply_async()
+    for position, collection in enumerate(collections):
+        OverdriveAPI.reap_task(collection.id).apply_async(
+            countdown=position * REAP_KICKOFF_STAGGER.total_seconds()
+        )
 
 
 @shared_task(

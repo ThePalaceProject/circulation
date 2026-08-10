@@ -1310,7 +1310,14 @@ class TestOverdriveReaper:
             ],
             any_order=True,
         )
-        assert mock_reap_task.return_value.apply_async.call_count == 3
+        # Kickoffs are staggered: each reap chord opens with a full-collection
+        # identifier scan, and launching them all in the same minute would stack
+        # those scans onto the default queue at once.
+        stagger = overdrive.REAP_KICKOFF_STAGGER.total_seconds()
+        assert sorted(
+            kickoff.kwargs["countdown"]
+            for kickoff in mock_reap_task.return_value.apply_async.call_args_list
+        ) == [0 * stagger, 1 * stagger, 2 * stagger]
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
     def test_reap_collection_returns_listed_identifiers(
