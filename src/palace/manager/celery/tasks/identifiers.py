@@ -227,8 +227,11 @@ def mark_identifiers_unavailable(
             # An empty set is never materialised in Redis, so this is either a
             # collection with nothing available to reap -- normal, and marking nothing
             # is the right outcome -- or a set that expired before the other half of
-            # the chord finished, which throws away a completed run. Only the second
-            # is worth waking anyone up for.
+            # the chord finished, which throws away a completed run. The database
+            # check below cannot tell those apart precisely: it runs when the chord
+            # body fires, which for a long crawl is hours after the set was (or was
+            # not) built, and a collection that was empty at the start may have
+            # gained identifiers from imports in between.
             with task.session() as session:
                 collection_has_identifiers = (
                     session.execute(
@@ -238,9 +241,10 @@ def mark_identifiers_unavailable(
                 )
             message = "Existing identifiers set does not exist in Redis. No identifiers to mark as unavailable."
             if collection_has_identifiers:
-                task.log.error(
-                    f"{message} The collection does have available identifiers, so a "
-                    f"completed run has been discarded."
+                task.log.warning(
+                    f"{message} The collection has available identifiers now, so "
+                    f"either a completed run outlived its set and was discarded, or "
+                    f"the collection gained identifiers while the run was underway."
                 )
             else:
                 task.log.info(f"{message} The collection has none to mark.")

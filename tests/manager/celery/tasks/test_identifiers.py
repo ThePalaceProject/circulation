@@ -392,7 +392,7 @@ class TestCreateMarkUnavailableChord:
         # Check that we didn't leave any redis keys behind
         assert redis_fixture.keys() == []
 
-    def test_missing_existing_set_is_an_error_when_the_collection_has_identifiers(
+    def test_missing_existing_set_is_a_warning_when_the_collection_has_identifiers(
         self,
         db: DatabaseTransactionFixture,
         identifier_tasks_fixture: IdentifierTasksFixture,
@@ -401,8 +401,11 @@ class TestCreateMarkUnavailableChord:
         """A set that expired mid-run threw away work; an empty collection did not.
 
         Both reach this point as "the set does not exist in Redis", because an empty
-        set is never materialised in Redis, so the collection itself is what tells
-        the two apart.
+        set is never materialised in Redis. The collection is checked to tell the two
+        apart, but only loosely: the check runs when the chord body fires, hours
+        after a long crawl began, and imports may have added identifiers in
+        between -- so this is a warning about work possibly lost, not an error about
+        work certainly lost.
         """
         caplog.set_level(LogLevel.info)
         collection = db.collection()
@@ -417,8 +420,9 @@ class TestCreateMarkUnavailableChord:
         ).wait()
 
         assert result is False
-        assert "a completed run has been discarded" in caplog.text
-        assert LogLevel.error in {record.levelname for record in caplog.records}
+        assert "outlived its set and was discarded" in caplog.text
+        assert LogLevel.warning in {record.levelname for record in caplog.records}
+        assert LogLevel.error not in {record.levelname for record in caplog.records}
 
     def test_expire_time_covers_a_long_running_active_side(
         self,
