@@ -39,7 +39,6 @@ from palace.manager.integration.license.overdrive.api import (
     BookInfoEndpoint,
     OverdriveAPI,
     OverdriveToken,
-    ProductPage,
 )
 from palace.manager.integration.license.overdrive.constants import OverdriveConstants
 from palace.manager.integration.license.overdrive.exception import (
@@ -129,68 +128,6 @@ class TestOverdriveAPI:
         endpoint = overdrive_api_fixture.api.product_page_endpoint(page_size=100_000)
         assert f"limit={OverdriveAPI.PRODUCTS_PAGE_SIZE_LIMIT}" in endpoint.url
 
-    @pytest.mark.parametrize(
-        "offset,limit,total_items,expected",
-        [
-            pytest.param(0, 2000, 1500, None, id="first page covers the collection"),
-            pytest.param(
-                0, 2000, 2000, None, id="first page is exactly the collection"
-            ),
-            pytest.param(0, 2000, 5000, 3000, id="first page jumps to the end"),
-            pytest.param(3000, 2000, 5000, 1100, id="steps back by less than a page"),
-            pytest.param(2500, 2000, 5000, 600, id="steps back from a ragged offset"),
-            pytest.param(1000, 2000, 5000, None, id="stops inside the first page"),
-            pytest.param(2000, 2000, 5000, None, id="stops at the first page boundary"),
-        ],
-    )
-    def test_next_product_offset(
-        self,
-        overdrive_api_fixture: OverdriveAPIFixture,
-        offset: int,
-        limit: int,
-        total_items: int,
-        expected: int | None,
-    ) -> None:
-        page = ProductPage(listed=(), unowned=(), total_items=total_items, limit=limit)
-
-        assert overdrive_api_fixture.api.next_product_offset(page, offset) == expected
-
-    @pytest.mark.parametrize(
-        "total_items,limit",
-        [
-            pytest.param(1050, 100, id="ragged final page"),
-            pytest.param(1000, 100, id="exact multiple"),
-            pytest.param(100, 100, id="single page"),
-            pytest.param(1, 100, id="single title"),
-            pytest.param(101, 100, id="one title past the first page"),
-        ],
-    )
-    def test_next_product_offset_leaves_no_gap(
-        self, overdrive_api_fixture: OverdriveAPIFixture, total_items: int, limit: int
-    ) -> None:
-        """Walking the pages must cover every offset in the collection.
-
-        A gap would be indistinguishable from titles that left the collection, and
-        the reaper would mark them as gone. The walk must also terminate, so every
-        step after the first has to move towards the start of the list.
-        """
-        api = overdrive_api_fixture.api
-        page = ProductPage(listed=(), unowned=(), total_items=total_items, limit=limit)
-        covered: set[int] = set()
-        offset = 0
-
-        for _ in range(100):
-            covered.update(range(offset, min(offset + limit, total_items)))
-            next_offset = api.next_product_offset(page, offset)
-            if next_offset is None:
-                break
-            assert offset == 0 or next_offset < offset
-            offset = next_offset
-        else:
-            pytest.fail("The crawl never reached the start of the collection.")
-
-        assert covered == set(range(total_items))
-
     def test_fetch_product_page(
         self, overdrive_api_fixture: OverdriveAPIFixture
     ) -> None:
@@ -205,6 +142,10 @@ class TestOverdriveAPI:
         # title Overdrive still returns is never reaped for being absent.
         assert len(page.listed) == len(raw["products"]) == 3
         assert page.total_items == raw["totalItems"]
+
+        # The raw product dictionaries ride along untouched, for consumers that
+        # need more than identifiers -- metadata and availability links, say.
+        assert page.products == tuple(raw["products"])
 
         # The title Overdrive no longer owns is reported separately, so it can be
         # marked from Overdrive's own flag rather than inferred from its absence.

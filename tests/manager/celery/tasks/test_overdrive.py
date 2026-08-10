@@ -22,6 +22,9 @@ from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.integration.license.overdrive.api import (
     BookInfoEndpoint,
     OverdriveAPI,
+)
+from palace.manager.integration.license.overdrive.crawl import (
+    CrawlCursor,
     ProductPage,
 )
 from palace.manager.integration.license.overdrive.importer import (
@@ -1246,14 +1249,13 @@ def product_page(
 def mock_crawl(mock_api_class: MagicMock, *pages: ProductPage) -> MagicMock:
     """Point a mocked OverdriveAPI at the given pages, walked in order.
 
-    The mocked API has to be told where the walk ends; otherwise
-    `next_product_offset` returns a Mock and the crawl never finishes.
+    Only the fetch is mocked: the pages drive the real
+    :class:`~palace.manager.integration.license.overdrive.crawl.CrawlCursor`,
+    so their ``total_items`` and ``limit`` have to describe a walk the cursor
+    would actually take.
     """
     api = mock_api_class.return_value
     api.fetch_product_page.side_effect = list(pages)
-    api.next_product_offset.side_effect = [
-        (index + 1) * 100 for index in range(len(pages) - 1)
-    ] + [None]
     return api
 
 
@@ -1346,22 +1348,31 @@ class TestOverdriveReaper:
         almost the whole collection as gone.
         """
         collection = overdrive_api_fixture.collection
+        # A three-title list crawled in pages of two: the first page learns the
+        # count, the walk jumps to the end, and it finishes with a fresh page
+        # at the start of the list.
         first_page = overdrive_identifiers("id-one", "id-two")
-        second_page = overdrive_identifiers("id-three")
+        end_page = overdrive_identifiers("id-two", "id-three")
         api = mock_crawl(
             mock_api_class,
             product_page(listed=first_page, total_items=3, limit=2),
-            product_page(listed=second_page, total_items=3, limit=2),
+            product_page(listed=end_page, total_items=3, limit=2),
+            product_page(listed=first_page, total_items=3, limit=2),
         )
 
         result = overdrive.reap_collection.delay(collection.id).wait()
 
-        assert api.fetch_product_page.call_count == 2
-        # Each page was requested at the offset the walk handed back, so a crawl
-        # cannot be talked into re-requesting the page it just fetched.
-        assert api.product_page_endpoint.call_args_list == [call(0), call(100)]
+        assert api.fetch_product_page.call_count == 3
+        # Each page was requested at the offset the walk handed back, and the
+        # walk ends by re-fetching offset 0 rather than trusting the first
+        # page's stale snapshot of the start of the list.
+        assert api.product_page_endpoint.call_args_list == [
+            call(0),
+            call(1),
+            call(0),
+        ]
         identifier_set = IdentifierSet(redis_fixture.client, result["key"])
-        assert identifier_set.get() == set(first_page) | set(second_page)
+        assert identifier_set.get() == set(first_page) | set(end_page)
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
     def test_reap_collection_aborts_on_incomplete_crawl(
@@ -1381,13 +1392,21 @@ class TestOverdriveReaper:
         """
         collection = overdrive_api_fixture.collection
         caplog.set_level(LogLevel.error)
-        # The page returned everything its own limit allowed, so the structural
-        # checks pass and the shortfall is left to the completeness gate.
+        # A 30-title collection crawled in pages of 20 while six titles are
+        # removed from the uncrawled region after the first page: every page
+        # reaches the one before it, so the structural checks pass, and the
+        # shortfall of six -- past the allowance of five -- is left for the
+        # completeness gate.
+        first_and_last = overdrive_identifiers(*(f"k{index}" for index in range(20)))
+        end_page = overdrive_identifiers(
+            *(f"k{index}" for index in range(10, 20)),
+            *(f"k{index}" for index in range(26, 30)),
+        )
         mock_crawl(
             mock_api_class,
-            product_page(
-                listed=overdrive_identifiers("id-one"), total_items=5000, limit=1
-            ),
+            product_page(listed=first_and_last, total_items=30, limit=20),
+            product_page(listed=end_page, total_items=24, limit=20),
+            product_page(listed=first_and_last, total_items=24, limit=20),
         )
 
         async_result = overdrive.reap_collection.delay(collection.id)
@@ -1416,20 +1435,27 @@ class TestOverdriveReaper:
         it.
         """
         collection = overdrive_api_fixture.collection
-        first_page = overdrive_identifiers("id-one", "id-two")
-        second_page = overdrive_identifiers("id-three")
-        listed = first_page + second_page
-        total_items = len(listed) + overdrive.REAP_CRAWL_ALLOWANCE_FLOOR
+        # A 30-title collection crawled in pages of 20 while three titles are
+        # removed from the uncrawled region after the first page -- a shortfall
+        # inside the allowance of five.
+        first_and_last = overdrive_identifiers(*(f"k{index}" for index in range(20)))
+        end_page = overdrive_identifiers(
+            *(f"k{index}" for index in range(10, 20)),
+            *(f"k{index}" for index in range(23, 30)),
+        )
         mock_crawl(
             mock_api_class,
-            product_page(listed=first_page, total_items=total_items),
-            product_page(listed=second_page, total_items=total_items),
+            product_page(listed=first_and_last, total_items=30, limit=20),
+            product_page(listed=end_page, total_items=27, limit=20),
+            product_page(listed=first_and_last, total_items=27, limit=20),
         )
 
         result = overdrive.reap_collection.delay(collection.id).wait()
 
         assert result is not None
-        assert IdentifierSet(redis_fixture.client, result["key"]).get() == set(listed)
+        assert IdentifierSet(redis_fixture.client, result["key"]).get() == set(
+            first_and_last
+        ) | set(end_page)
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
     def test_reap_collection_requires_an_exact_count_for_a_single_page(
@@ -1486,7 +1512,10 @@ class TestOverdriveReaper:
         )
 
         async_result = overdrive.reap_collection.delay(
-            collection.id, offset=4000, total_items=6000, page_limit=2000
+            collection.id,
+            cursor=CrawlCursor(
+                offset=4000, total_items=6000, page_limit=2000
+            ).__json__(),
         )
 
         assert async_result.wait() is None
@@ -1495,56 +1524,6 @@ class TestOverdriveReaper:
             redis_fixture.client, reap_key(collection.id, async_result.id)
         )
         assert not partial_set.exists()
-
-    @pytest.mark.parametrize(
-        "reported_now,returned,aborts",
-        [
-            pytest.param(6000, 2000, False, id="unchanged, full page"),
-            pytest.param(6001, 2000, False, id="a title added since the first page"),
-            pytest.param(6100, 2000, False, id="many titles added"),
-            pytest.param(5990, 1990, False, id="titles removed since the first page"),
-            pytest.param(6000, 1990, True, id="page truncated"),
-        ],
-    )
-    @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
-    def test_reap_collection_first_backwards_page_tolerates_a_growing_collection(
-        self,
-        mock_api_class: MagicMock,
-        db: DatabaseTransactionFixture,
-        celery_fixture: CeleryFixture,
-        overdrive_api_fixture: OverdriveAPIFixture,
-        redis_fixture: RedisFixture,
-        caplog: pytest.LogCaptureFixture,
-        reported_now: int,
-        returned: int,
-        aborts: bool,
-    ):
-        """Which end the first backwards page must reach depends on what changed.
-
-        It starts one page back from where the collection ended when the crawl began,
-        so a full page arrives exactly at that count. Titles added since then sit
-        beyond it -- not this page's to reach, and absent from the snapshot the chord
-        took of what we hold, so they cannot be falsely reaped. Titles removed shorten
-        the list, and that shorter count is the one it has to reach.
-        """
-        collection = overdrive_api_fixture.collection
-        caplog.set_level(LogLevel.error)
-        mock_crawl(
-            mock_api_class,
-            product_page(
-                listed=overdrive_identifiers(*(f"id-{i}" for i in range(returned))),
-                total_items=reported_now,
-                limit=2000,
-            ),
-        )
-
-        overdrive.reap_collection.delay(
-            collection.id, offset=4000, total_items=6000, page_limit=2000
-        ).wait()
-
-        # Asserted on this check rather than the run's outcome: a single mocked page
-        # is not a complete crawl, so the run ends either way.
-        assert ("Refusing to reap across a gap" in caplog.text) is aborts
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
     def test_reap_collection_aborts_on_a_gap_between_pages(
@@ -1564,23 +1543,23 @@ class TestOverdriveReaper:
         """
         collection = overdrive_api_fixture.collection
         caplog.set_level(LogLevel.error)
-        api = mock_crawl(
+        mock_crawl(
             mock_api_class,
-            product_page(listed=overdrive_identifiers("id-one"), total_items=6000),
             # Requested at offset 3000, but reaches only 3001 -- short of the 4000
             # the previous page started at.
             product_page(listed=overdrive_identifiers("id-two"), total_items=6000),
         )
-        api.next_product_offset.side_effect = [4000, 3000, None]
 
-        # Mid-crawl pages carry the crawl's state, which is also what tells them apart
-        # from a page left over from the previous reaper.
+        # Mid-crawl pages carry the crawl's cursor, which is also what tells them
+        # apart from a page left over from the previous reaper.
         async_result = overdrive.reap_collection.delay(
             collection.id,
-            offset=3000,
-            previous_offset=4000,
-            total_items=6000,
-            page_limit=2000,
+            cursor=CrawlCursor(
+                offset=3000,
+                previous_offset=4000,
+                total_items=6000,
+                page_limit=2000,
+            ).__json__(),
         )
 
         assert async_result.wait() is None
@@ -1589,36 +1568,6 @@ class TestOverdriveReaper:
             redis_fixture.client, reap_key(collection.id, async_result.id)
         )
         assert not partial_set.exists()
-
-    @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
-    def test_reap_collection_aborts_on_a_short_first_page(
-        self,
-        mock_api_class: MagicMock,
-        db: DatabaseTransactionFixture,
-        celery_fixture: CeleryFixture,
-        overdrive_api_fixture: OverdriveAPIFixture,
-        redis_fixture: RedisFixture,
-        caplog: pytest.LogCaptureFixture,
-    ):
-        """The walk joins back onto the first page using the page size.
-
-        A first page that returned fewer titles than that does not reach where the
-        walk stops, so the strip in between would never be crawled -- the same gap
-        the per-page check catches everywhere else in the walk.
-        """
-        collection = overdrive_api_fixture.collection
-        caplog.set_level(LogLevel.error)
-        mock_crawl(
-            mock_api_class,
-            product_page(
-                listed=overdrive_identifiers("id-one"), total_items=6000, limit=2000
-            ),
-        )
-
-        result = overdrive.reap_collection.delay(collection.id).wait()
-
-        assert result is None
-        assert "cannot join back onto it" in caplog.text
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
     def test_reap_collection_aborts_when_the_page_size_changes(
@@ -1638,16 +1587,17 @@ class TestOverdriveReaper:
         """
         collection = overdrive_api_fixture.collection
         caplog.set_level(LogLevel.error)
-        api = mock_crawl(
+        mock_crawl(
             mock_api_class,
+            # The first page walks in twenties; the next page comes back sized
+            # ten.
             product_page(
-                listed=overdrive_identifiers("id-one"), total_items=6000, limit=1
+                listed=overdrive_identifiers("id-one"), total_items=30, limit=20
             ),
             product_page(
-                listed=overdrive_identifiers("id-two"), total_items=6000, limit=500
+                listed=overdrive_identifiers("id-two"), total_items=30, limit=10
             ),
         )
-        api.next_product_offset.side_effect = [4000, None]
 
         result = overdrive.reap_collection.delay(collection.id).wait()
 
@@ -1666,8 +1616,8 @@ class TestOverdriveReaper:
         Its `offset` was the last Identifier.id it had processed, so binding it as a
         product-list offset would crawl from an arbitrary point in the collection. It
         re-queued itself with only a collection id and an offset -- never a
-        `batch_size`, which was left at its default -- so the absence of the crawl
-        state this reaper always carries is what identifies one.
+        `batch_size`, which was left at its default -- so a bare non-zero offset
+        without the cursor this reaper always carries is what identifies one.
         """
         collection = overdrive_api_fixture.collection
         caplog.set_level(LogLevel.info)
@@ -1705,75 +1655,6 @@ class TestOverdriveReaper:
             ).wait()
 
         assert result is not None
-
-    @pytest.mark.parametrize(
-        "crawled,total_items,single_page,expected",
-        [
-            pytest.param(1_000, 1_000, False, True, id="exact match"),
-            pytest.param(0, 5, False, True, id="floor covers a tiny collection"),
-            pytest.param(0, 100, False, False, id="shortfall beyond the floor"),
-            pytest.param(
-                4_000_000 - 400, 4_000_000, False, True, id="churn within the cap"
-            ),
-            pytest.param(
-                4_000_000 - 2_000,
-                4_000_000,
-                False,
-                False,
-                id="a lost page is not excused",
-            ),
-            pytest.param(1_000, 1_000, True, True, id="single page, counts agree"),
-            pytest.param(999, 1_000, True, False, id="single page, one short"),
-        ],
-    )
-    def test_crawl_is_complete(
-        self,
-        crawled: int,
-        total_items: int,
-        single_page: bool,
-        expected: bool,
-    ):
-        """The allowance absorbs churn during a crawl, but never a whole lost page.
-
-        It is capped because the churn it exists for does not scale with collection
-        size, while a proportional allowance does: 0.1% of a 4M-title collection would
-        be two full pages, so a crawl that silently dropped one would be accepted and
-        those titles reaped. A collection that arrived in a single response had no
-        window for churn at all, so its counts have to agree exactly.
-        """
-        assert (
-            overdrive._crawl_is_complete(
-                MagicMock(),
-                "collection name",
-                crawled,
-                total_items,
-                single_page=single_page,
-                page_limit=2000,
-            )
-            is expected
-        )
-
-    def test_crawl_allowance_stays_under_a_page(self):
-        """A lost page must never be excused, whatever page size Overdrive applied.
-
-        The allowance is meant to absorb churn during a crawl, and the crawl's first
-        backwards page has nothing above it to be checked against -- so if the
-        allowance ever reached a whole page, an empty response there would be
-        indistinguishable from titles removed mid-crawl.
-        """
-        for page_limit in (2000, 300, 25):
-            lost_page = 10_000_000
-            assert (
-                overdrive._crawl_is_complete(
-                    MagicMock(),
-                    "collection name",
-                    lost_page - page_limit,
-                    lost_page,
-                    single_page=False,
-                    page_limit=page_limit,
-                )
-                is False
-            )
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
     def test_reap_collection_marks_titles_overdrive_no_longer_owns(
@@ -1850,9 +1731,11 @@ class TestOverdriveReaper:
         collection = overdrive_api_fixture.collection
         overdrive_pool(db, collection, "id-weeded")
         weeded = overdrive_identifiers("id-weeded")
+        # A single-page crawl one title short of Overdrive's count: the
+        # completeness gate rejects it, but the weed was stated outright.
         mock_crawl(
             mock_api_class,
-            product_page(listed=weeded, unowned=weeded, total_items=5000, limit=1),
+            product_page(listed=weeded, unowned=weeded, total_items=2),
         )
 
         with patch.object(identifiers, "circulation_apply") as mock_apply:

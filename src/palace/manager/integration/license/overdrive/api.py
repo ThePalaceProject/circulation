@@ -74,6 +74,7 @@ from palace.manager.integration.license.overdrive.constants import (
 from palace.manager.integration.license.overdrive.coverage import (
     OverdriveBibliographicCoverageProvider,
 )
+from palace.manager.integration.license.overdrive.crawl import ProductPage
 from palace.manager.integration.license.overdrive.exception import (
     InvalidFieldOptionError,
     OverdriveModelError,
@@ -137,30 +138,6 @@ class OverdriveToken(NamedTuple):
 @dataclass
 class BookInfoEndpoint:
     url: str
-
-
-@dataclass(frozen=True)
-class ProductPage:
-    """One page of a collection's product list, as consumed by the reaper.
-
-    :param listed: Identifiers for every title on the page, owned or not. The
-        reaper's set difference is taken against these, so a title Overdrive still
-        lists is never reaped for being absent -- if it is no longer owned it is
-        marked from ``unowned`` instead.
-    :param unowned: The subset of ``listed`` that Overdrive flags
-        ``isOwnedByCollections: false``. Overdrive keeps weeded and expired titles in
-        the product list rather than dropping them, so this is direct evidence that a
-        title is gone, as opposed to the inference drawn from an identifier's absence.
-    :param total_items: Overdrive's count of the whole result set.
-    :param limit: The page size Overdrive applied, which may be smaller than the one
-        requested. Always the size applied, never the number of titles returned, so a
-        page at the end of the list still reports a full one.
-    """
-
-    listed: tuple[IdentifierData, ...]
-    unowned: tuple[IdentifierData, ...]
-    total_items: int
-    limit: int
 
 
 class OverdriveAPI(
@@ -281,11 +258,6 @@ class OverdriveAPI(
     # nothing but ids, so the response stays manageable.
     PRODUCTS_PAGE_SIZE_LIMIT = 2000
 
-    # How much of a page consecutive crawl pages share. See `next_product_offset`
-    # for what the overlap absorbs; it is a fraction so that it scales with whatever
-    # page size Overdrive actually applies.
-    PRODUCTS_CRAWL_OVERLAP = 0.05
-
     # The reaper's crawl pages through offsets, so it needs an ordering that does
     # not shift under it. Ties cannot be broken from here: Overdrive rejects every
     # unique sort key (`id`, `reserveId` and `crossRefId` all return 400) and accepts
@@ -294,7 +266,8 @@ class OverdriveAPI(
     # consistently: the same offsets return the same titles across repeated requests,
     # across page sizes, and across whole crawls. dateAdded is also immutable, so
     # nothing the crawl reads can move a title from one position to another mid-run.
-    # See `next_product_offset` for titles removed mid-crawl.
+    # See :class:`~palace.manager.integration.license.overdrive.crawl.CrawlCursor`
+    # for titles removed mid-crawl.
     PRODUCTS_CRAWL_SORT = "dateAdded:asc"
 
     EVENT_SOURCE = "Overdrive"
@@ -790,42 +763,6 @@ class OverdriveAPI(
         )
         return BookInfoEndpoint(_make_link_safe(url))
 
-    def next_product_offset(self, page: ProductPage, offset: int) -> int | None:
-        """Where a reaper crawl goes next, or None once the collection is covered.
-
-        The crawl walks the product list *backwards*: the first page is fetched at
-        offset 0 to learn ``totalItems``, and from there each page steps back towards
-        the start of the list.
-
-        Walking forwards -- following Overdrive's ``next`` links -- would lose a
-        title every time one was removed mid-crawl. Removing a title shifts every
-        title behind it down one position, so the title sitting at the next page's
-        starting offset is never returned, and a title the crawl never saw is
-        indistinguishable from one that left the collection. Walking backwards, a
-        removal below the cursor can only shift a not-yet-crawled title further into
-        the region still being walked, and a removal above it cannot move that region
-        at all.
-
-        The step back is shorter than a page, so consecutive pages overlap. That
-        covers the mirror image of the same problem -- a title *inserted* below the
-        cursor pushes its neighbours up, one of them into the region already
-        crawled -- along with any ordering jitter within a tie group. Overlapping is
-        free: the identifiers are collected into a set.
-
-        :param page: The page just fetched.
-        :param offset: The offset that page was requested at. Taken from the caller
-            rather than the response so the walk cannot be talked into standing still.
-        """
-        if offset == 0:
-            if page.total_items <= page.limit:
-                return None
-            return page.total_items - page.limit
-        if offset <= page.limit:
-            # The first page already covered everything below this one.
-            return None
-        step = max(1, page.limit - int(page.limit * self.PRODUCTS_CRAWL_OVERLAP))
-        return max(0, offset - step)
-
     def fetch_product_page(self, endpoint: BookInfoEndpoint) -> ProductPage:
         """Fetch a single page of the collection's product list.
 
@@ -840,8 +777,10 @@ class OverdriveAPI(
 
         :param endpoint: The page to fetch.
         :raise BadResponseException: If Overdrive returns anything but a 200.
-        :return: The page's identifiers, the unowned subset, and the paging fields
-            needed to walk the rest of the crawl.
+        :return: The page's identifiers, the unowned subset, the raw product
+            dictionaries, and the paging fields a
+            :class:`~palace.manager.integration.license.overdrive.crawl.CrawlCursor`
+            needs to walk the rest of the crawl.
         """
         status_code, headers, content = self.get(endpoint.url)
 
@@ -907,6 +846,7 @@ class OverdriveAPI(
             unowned=unowned,
             total_items=total_items,
             limit=limit,
+            products=tuple(products),
         )
 
     async def fetch_book_info_list(
