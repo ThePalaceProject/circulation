@@ -1657,6 +1657,33 @@ class TestOverdriveReaper:
         assert result is not None
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
+    def test_reap_collection_skips_an_empty_collection(
+        self,
+        mock_api_class: MagicMock,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        redis_fixture: RedisFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """A collection Overdrive lists nothing for is skipped, not an error.
+
+        An empty identifier set is never materialised in Redis, and the chord
+        body deliberately refuses to reap a whole collection from a missing
+        set -- so handing it one would raise on every scheduled run. The
+        documented "skipped" result (None) lets the chord end quietly instead.
+        """
+        collection = overdrive_api_fixture.collection
+        caplog.set_level(LogLevel.info)
+        mock_crawl(mock_api_class, product_page(listed=(), total_items=0))
+
+        result = overdrive.reap_collection.delay(collection.id).wait()
+
+        assert result is None
+        assert "lists no titles" in caplog.text
+        assert "aborting" not in caplog.text
+
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
     def test_reap_collection_marks_titles_overdrive_no_longer_owns(
         self,
         mock_api_class: MagicMock,

@@ -677,6 +677,19 @@ def reap_collection(
             identifier_set.delete()
             return None
 
+        if crawled == 0:
+            # Overdrive lists nothing for this collection, so there is no set for
+            # the chord to act on -- an empty set is never materialised in Redis.
+            # The chord body deliberately refuses to reap a whole collection from a
+            # missing set, so hand it the documented "skipped" result instead of a
+            # set that reads as an error.
+            task.log.info(
+                f"Overdrive lists no titles for collection '{collection_name}'; "
+                f"skipping the set-difference reap."
+            )
+            identifier_set.delete()
+            return None
+
         task.log.info(
             f"Overdrive reaper crawl complete for collection '{collection_name}' "
             f"in {step.elapsed}: {crawled} titles listed of {step.total_items} "
