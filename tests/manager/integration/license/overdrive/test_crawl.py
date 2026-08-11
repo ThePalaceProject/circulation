@@ -213,7 +213,7 @@ class TestCrawlCursor:
 
         if faults:
             assert isinstance(step, CrawlFault)
-            assert "Refusing to reap across a gap" in step.reason
+            assert "cannot be shown to reach the end of the list" in step.reason
         else:
             assert isinstance(step, CrawlCursor)
 
@@ -228,7 +228,7 @@ class TestCrawlCursor:
         step = cursor.advance(page_of(listed=identifiers("only"), total_items=6000))
 
         assert isinstance(step, CrawlFault)
-        assert "Refusing to reap across a gap" in step.reason
+        assert "leaving a strip of the list uncovered" in step.reason
         assert "already crawled at 4000" in step.reason
 
     def test_page_size_change_faults(self) -> None:
@@ -245,7 +245,7 @@ class TestCrawlCursor:
         )
 
         assert isinstance(step, CrawlFault)
-        assert "whose paging changed underneath it" in step.reason
+        assert "no longer describes the list" in step.reason
 
     def test_serialization_round_trip(self) -> None:
         """A cursor survives the JSON wire format a task kwarg travels as."""
@@ -307,7 +307,7 @@ class TestCrawlComplete:
             assert fault is None
         else:
             assert isinstance(fault, CrawlFault)
-            assert "Refusing to reap on an incomplete crawl" in fault.reason
+            assert "distinct titles" in fault.reason
 
     def test_allowance_stays_under_a_page(self) -> None:
         """A lost page must never be excused, whatever page size Overdrive applied.

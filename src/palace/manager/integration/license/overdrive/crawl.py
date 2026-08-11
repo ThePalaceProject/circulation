@@ -98,9 +98,11 @@ class ProductPage:
 class CrawlFault:
     """A page the crawl cannot reconcile with the walk so far.
 
-    :param reason: What the page failed to show, in terms a log line can carry.
-        The caller decides what a fault costs: the reaper aborts, since it acts
-        on absence; a harvest may only note it.
+    :param reason: What the page failed to show. The wording is deliberately
+        consequence-free -- it states the arithmetic, not what to do about
+        it -- because the caller decides what a fault costs: the reaper aborts,
+        since it acts on absence; a harvest stops the walk but keeps what it
+        imported. Each caller appends its own consequence when it logs.
     """
 
     reason: str
@@ -150,9 +152,8 @@ class CrawlComplete:
         )
         if crawled + allowance < self.total_items:
             return CrawlFault(
-                f"The crawl saw {crawled} titles but Overdrive reports "
-                f"{self.total_items} (allowance {allowance}). Refusing to reap "
-                f"on an incomplete crawl."
+                f"The crawl saw {crawled} distinct titles of the "
+                f"{self.total_items} Overdrive reports (allowance {allowance})."
             )
         return None
 
@@ -226,10 +227,10 @@ class CrawlCursor:
             # crawl asks for the same one every time, so a change mid-crawl
             # means this arithmetic no longer describes the list.
             return CrawlFault(
-                f"The page at offset {self.offset} was returned with a page "
-                f"size of {page.limit}, but the crawl has been walking in "
-                f"steps of {self.page_limit}. Refusing to reap on a crawl "
-                f"whose paging changed underneath it."
+                f"The page at offset {self.offset} came back with a page size "
+                f"of {page.limit} after the crawl had been walking in steps of "
+                f"{self.page_limit}, so the walk's arithmetic no longer "
+                f"describes the list."
             )
 
         if self.previous_offset is None:
@@ -249,9 +250,9 @@ class CrawlCursor:
             if self.offset + len(page.listed) < must_reach:
                 return CrawlFault(
                     f"The page at offset {self.offset} returned "
-                    f"{len(page.listed)} titles and so stops short of the "
-                    f"{must_reach} Overdrive reports. Refusing to reap across "
-                    f"a gap."
+                    f"{len(page.listed)} titles and stops short of the "
+                    f"{must_reach} Overdrive reports, so the walk cannot be "
+                    f"shown to reach the end of the list."
                 )
         elif self.offset + len(page.listed) < self.previous_offset:
             # The walk steps back by a page size, but a page is free to return
@@ -263,9 +264,9 @@ class CrawlCursor:
             # before it.
             return CrawlFault(
                 f"The page at offset {self.offset} returned "
-                f"{len(page.listed)} titles and so stops short of the region "
-                f"already crawled at {self.previous_offset}. Refusing to reap "
-                f"across a gap."
+                f"{len(page.listed)} titles and stops short of the region "
+                f"already crawled at {self.previous_offset}, leaving a strip "
+                f"of the list uncovered."
             )
 
         if self.offset == 0:

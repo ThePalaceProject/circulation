@@ -664,7 +664,8 @@ def reap_collection(
         if isinstance(step, CrawlFault):
             task.log.error(
                 f"Overdrive reaper aborting for collection '{collection_name}' "
-                f"after {crawl_cursor.elapsed}: {step.reason}"
+                f"after {crawl_cursor.elapsed}: {step.reason} Refusing to reap "
+                f"on a crawl that cannot be shown complete."
             )
             identifier_set.delete()
             return None
@@ -680,7 +681,8 @@ def reap_collection(
         if (fault := step.completeness_fault(crawled)) is not None:
             task.log.error(
                 f"Overdrive reaper aborting for collection '{collection_name}' "
-                f"after {step.elapsed}: {fault.reason}"
+                f"after {step.elapsed}: {fault.reason} Refusing to reap on a "
+                f"crawl that cannot be shown complete."
             )
             identifier_set.delete()
             return None

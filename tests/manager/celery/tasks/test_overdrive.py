@@ -1419,7 +1419,9 @@ class TestOverdriveReaper:
         async_result = overdrive.reap_collection.delay(collection.id)
 
         assert async_result.wait() is None
-        assert "Refusing to reap on an incomplete crawl" in caplog.text
+        assert (
+            "Refusing to reap on a crawl that cannot be shown complete" in caplog.text
+        )
         # The partial set is not left behind in Redis for the chord to pick up.
         partial_set = IdentifierSet(
             redis_fixture.client, reap_key(collection.id, async_result.id)
@@ -1490,7 +1492,9 @@ class TestOverdriveReaper:
         result = overdrive.reap_collection.delay(collection.id).wait()
 
         assert result is None
-        assert "Refusing to reap on an incomplete crawl" in caplog.text
+        assert (
+            "Refusing to reap on a crawl that cannot be shown complete" in caplog.text
+        )
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
     def test_reap_collection_aborts_when_the_first_backwards_page_is_short(
@@ -1570,7 +1574,8 @@ class TestOverdriveReaper:
         )
 
         assert async_result.wait() is None
-        assert "Refusing to reap across a gap" in caplog.text
+        assert "leaving a strip of the list uncovered" in caplog.text
+        assert "Refusing to reap" in caplog.text
         partial_set = IdentifierSet(
             redis_fixture.client, reap_key(collection.id, async_result.id)
         )
@@ -1609,7 +1614,7 @@ class TestOverdriveReaper:
         result = overdrive.reap_collection.delay(collection.id).wait()
 
         assert result is None
-        assert "whose paging changed underneath it" in caplog.text
+        assert "no longer describes the list" in caplog.text
 
     def test_reap_collection_discards_a_page_from_the_previous_reaper(
         self,
