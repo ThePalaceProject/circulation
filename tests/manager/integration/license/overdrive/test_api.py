@@ -3038,6 +3038,43 @@ class TestSyncBookshelf:
         assert book_info_list[0]["metadata"]
         assert book_info_list[0]["availabilityV2"]
 
+    async def test_hydrate_products(
+        self,
+        overdrive_api_fixture: OverdriveAPIFixture,
+    ):
+        """Raw product dictionaries can be hydrated on their own.
+
+        This is the per-title half of an import, split from the page fetch so
+        that any enumeration of products -- the update feed or a product-list
+        crawl -- can share it.
+        """
+        availability_data, _ = overdrive_api_fixture.sample_json(
+            "overdrive_availability_information.json"
+        )
+        metadata_data, _ = overdrive_api_fixture.sample_json(
+            "bibliographic_information_book_list_test.json"
+        )
+        _, product_page_json = overdrive_api_fixture.sample_json(
+            "overdrive_product_page.json"
+        )
+        api = overdrive_api_fixture.api
+
+        product = dict(product_page_json["products"][0])
+        mock_async_client = overdrive_api_fixture.mock_async_client
+        mock_async_client.queue_response(200, content=metadata_data)
+        mock_async_client.queue_response(200, content=availability_data)
+
+        books = await api.hydrate_products(
+            [product], fetch_metadata=True, fetch_availability=True
+        )
+
+        assert len(books) == 1
+        assert books[0]["metadata"]
+        assert books[0]["availabilityV2"]
+        # The hydrated book is the product dictionary itself, so everything the
+        # feed carried -- ownership, dateAdded -- rides along untouched.
+        assert books[0] is product
+
     async def test_fetch_book_info_list_retry_and_unrecoverable_error(
         self,
         overdrive_api_fixture: OverdriveAPIFixture,

@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import datetime
 import json
-from collections.abc import Generator, Iterable
+from collections.abc import Generator, Iterable, Sequence
 from dataclasses import dataclass
 from functools import partial
 from threading import RLock
@@ -866,7 +866,6 @@ class OverdriveAPI(
         """
         base_url = self.endpoint(self.HOST_ENDPOINT_BASE)
         async with self._create_configured_async_client(base_url=base_url) as client:
-            books: dict[str, Any] = {}
             extractor_class = extractor_class or OverdriveRepresentationExtractor
             req = client.get(endpoint.url)
             response = await req
@@ -875,7 +874,6 @@ class OverdriveAPI(
             next_endpoint: BookInfoEndpoint | None = (
                 BookInfoEndpoint(next_url) if next_url else None
             )
-            async_task_list = list()
             response_products = data.get("products")
             if response_products is None:
                 # Overdrive omits the 'products' key entirely when a collection
@@ -897,26 +895,81 @@ class OverdriveAPI(
                     f"Overdrive response missing 'products' key. Response data: {data}",
                     response,
                 )
-            for product in response_products:
-                identifier = product["id"].lower()
-                books[identifier] = product
-                if fetch_metadata:
-                    async_task_list.append(
-                        self._get_metadata_async(base_url, product, client)
+            books = await self._hydrate_products(
+                client,
+                base_url,
+                response_products,
+                fetch_metadata=fetch_metadata,
+                fetch_availability=fetch_availability,
+            )
+            return books, next_endpoint
+
+    async def hydrate_products(
+        self,
+        products: Sequence[dict[str, Any]],
+        *,
+        fetch_metadata: bool = False,
+        fetch_availability: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Attach metadata and availability documents to raw product dictionaries.
+
+        This is the per-title half of an import: given the product entries from
+        any products response -- an update-filtered page or a full product-list
+        crawl -- it fetches each title's ``metadata`` and ``availabilityV2``
+        documents concurrently and attaches them under those keys, ready for
+        :class:`~palace.manager.integration.license.overdrive.importer.OverdriveImporter`
+        to process. Products are de-duplicated by (lowercased) id, matching the
+        behaviour of :meth:`fetch_book_info_list`.
+
+        :param products: Raw product dictionaries, e.g.
+            :attr:`~palace.manager.integration.license.overdrive.crawl.ProductPage.products`.
+        :param fetch_metadata: Whether to fetch each title's metadata document.
+        :param fetch_availability: Whether to fetch each title's availability
+            document.
+        :return: The hydrated product dictionaries.
+        """
+        base_url = self.endpoint(self.HOST_ENDPOINT_BASE)
+        async with self._create_configured_async_client(base_url=base_url) as client:
+            return await self._hydrate_products(
+                client,
+                base_url,
+                products,
+                fetch_metadata=fetch_metadata,
+                fetch_availability=fetch_availability,
+            )
+
+    async def _hydrate_products(
+        self,
+        client: AsyncClient,
+        base_url: str,
+        products: Sequence[dict[str, Any]],
+        *,
+        fetch_metadata: bool,
+        fetch_availability: bool,
+    ) -> list[dict[str, Any]]:
+        """Hydrate ``products`` using an already-open async client."""
+        books: dict[str, Any] = {}
+        async_task_list = []
+        for product in products:
+            identifier = product["id"].lower()
+            books[identifier] = product
+            if fetch_metadata:
+                async_task_list.append(
+                    self._get_metadata_async(base_url, product, client)
+                )
+
+            if fetch_availability:
+                async_task_list.append(
+                    self._get_availability_async(
+                        base_url,
+                        product,
+                        client,
                     )
+                )
 
-                if fetch_availability:
-                    async_task_list.append(
-                        self._get_availability_async(
-                            base_url,
-                            product,
-                            client,
-                        )
-                    )
+        await asyncio.gather(*async_task_list)
 
-            await asyncio.gather(*async_task_list)
-
-            return list(books.values()), next_endpoint
+        return list(books.values())
 
     async def _get_availability_async(
         self, base_url: str, book_info: dict[str, Any], client: AsyncClient
