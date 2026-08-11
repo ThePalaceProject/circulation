@@ -17,7 +17,7 @@ from palace.manager.core.monitor import (
     TimelineMonitor,
     TimestampData,
 )
-from palace.manager.integration.license.bibliotheca import BibliothecaAPI
+from palace.manager.integration.license.bibliotheca.api import BibliothecaAPI
 from palace.manager.integration.license.opds.opds1.api import OPDSAPI
 from palace.manager.integration.license.overdrive.api import OverdriveAPI
 from palace.manager.service import container

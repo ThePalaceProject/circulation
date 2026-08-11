@@ -13,7 +13,7 @@ from palace.util.log import LoggerMixin
 
 from palace.manager.celery.tasks import apply
 from palace.manager.data_layer.policy.replacement import ReplacementPolicy
-from palace.manager.integration.license.bibliotheca import BibliothecaAPI
+from palace.manager.integration.license.bibliotheca.api import BibliothecaAPI
 from palace.manager.sqlalchemy.constants import DataSourceConstants
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.coverage import Timestamp
@@ -157,7 +157,7 @@ class BibliothecaCirculationUpdater(LoggerMixin):
     def process_identifiers(self, identifiers: Sequence[Identifier]) -> None:
         """Process a caller-supplied list of identifiers without touching the Timestamp.
 
-        Used by :meth:`~palace.manager.integration.license.bibliotheca.BibliothecaAPI.update_availability`
+        Used by :meth:`~palace.manager.integration.license.bibliotheca.api.BibliothecaAPI.update_availability`
         and :class:`~palace.manager.scripts.availability.AvailabilityRefreshScript` for
         on-demand single-title refreshes.  Reconciles the same way as
         :meth:`update_batch` — bibliographic metadata is hash-deduplicated and
@@ -168,7 +168,7 @@ class BibliothecaCirculationUpdater(LoggerMixin):
         in the caller's session rather than queued as ``bibliographic_apply`` /
         ``circulation_apply`` tasks, so the updated availability is visible as soon as
         this method returns.  Callers such
-        as :meth:`~palace.manager.integration.license.bibliotheca.BibliothecaAPI.update_availability`
+        as :meth:`~palace.manager.integration.license.bibliotheca.api.BibliothecaAPI.update_availability`
         rely on this — e.g. the circulation dispatcher reads ``LicensePool.licenses_available``
         immediately after requesting an availability refresh.
 

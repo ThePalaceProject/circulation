@@ -9,10 +9,10 @@ import pytest
 from palace.util.exceptions import PalaceValueError
 
 from palace.manager.celery.tasks import bibliotheca
-from palace.manager.integration.license.bibliotheca_purchase_record_importer import (
+from palace.manager.integration.license.bibliotheca.purchase_record_importer import (
     DEFAULT_PURCHASE_RECORD_START_TIME,
 )
-from palace.manager.integration.license.bibliotheca_scripts import (
+from palace.manager.integration.license.bibliotheca.scripts import (
     CirculationUpdateCollection,
     ImportEventCollection,
     ImportPurchaseRecordCollection,

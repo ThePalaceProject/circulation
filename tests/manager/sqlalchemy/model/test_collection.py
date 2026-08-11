@@ -9,7 +9,7 @@ from palace.util.log import LogLevel
 
 from palace.manager.integration.base import integration_settings_update
 from palace.manager.integration.goals import Goals
-from palace.manager.integration.license.bibliotheca import BibliothecaAPI
+from palace.manager.integration.license.bibliotheca.api import BibliothecaAPI
 from palace.manager.integration.license.boundless.api import BoundlessApi
 from palace.manager.integration.license.opds.opds1.settings import OPDSImporterSettings
 from palace.manager.integration.license.overdrive.api import OverdriveAPI

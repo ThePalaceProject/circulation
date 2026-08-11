@@ -49,10 +49,8 @@ from palace.manager.integration.discovery.opds_registration import (
     OpdsRegistrationServiceSettings,
 )
 from palace.manager.integration.goals import Goals
-from palace.manager.integration.license.bibliotheca import (
-    BibliothecaAPI,
-    BibliothecaSettings,
-)
+from palace.manager.integration.license.bibliotheca.api import BibliothecaAPI
+from palace.manager.integration.license.bibliotheca.settings import BibliothecaSettings
 from palace.manager.integration.license.boundless.api import BoundlessApi
 from palace.manager.integration.license.boundless.settings import BoundlessSettings
 from palace.manager.integration.license.opds.for_distributors.api import (

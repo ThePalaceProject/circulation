@@ -20,7 +20,7 @@ from palace.manager.celery.tasks.playtime_entries import (
     sum_playtime_entries,
 )
 from palace.manager.core.config import Configuration
-from palace.manager.integration.license.bibliotheca import BibliothecaAPI
+from palace.manager.integration.license.bibliotheca.api import BibliothecaAPI
 from palace.manager.integration.license.opds.for_distributors.api import (
     OPDSForDistributorsAPI,
 )
