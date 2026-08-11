@@ -67,6 +67,12 @@ dependencies = [
     "joserfc>=1.7.4,<2",
     "jsonschema>=4.22.0,<5",
     "jwcrypto>=1.5.8,<2",
+    # kombu is a dependency of celery. We pin it to an unreleased commit here, because we
+    # need the fix from https://github.com/celery/kombu/pull/2498, so that celery workers
+    # recover when their redis broker connection is reset. This pin should be removed
+    # (see the git source in [tool.uv.sources]) once a kombu release containing that fix
+    # is published and picked up by our celery dependency.
+    "kombu",
     "levenshtein>=0.27,<0.28",
     "lxml[html-clean]==6.1.1",
     "nameparser>=2.0.0,<3",  # nameparser is for author name manipulations
@@ -394,6 +400,7 @@ spaces_indent_inline_array = 4
 trailing_comma_inline_array = true
 
 [tool.uv.sources]
+kombu = {git = "https://github.com/celery/kombu.git", rev = "2c8372c6b35b6c61bb6cf93470c57d9eab8836b8"}
 palace-opds = {workspace = true}
 palace-util = {workspace = true}
 

@@ -1457,16 +1457,12 @@ wheels = [
 [[package]]
 name = "kombu"
 version = "5.6.2"
-source = { registry = "https://pypi.org/simple" }
+source = { git = "https://github.com/celery/kombu.git?rev=2c8372c6b35b6c61bb6cf93470c57d9eab8836b8#2c8372c6b35b6c61bb6cf93470c57d9eab8836b8" }
 dependencies = [
     { name = "amqp" },
     { name = "packaging" },
     { name = "tzdata" },
     { name = "vine" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/b6/a5/607e533ed6c83ae1a696969b8e1c137dfebd5759a2e9682e26ff1b97740b/kombu-5.6.2.tar.gz", hash = "sha256:8060497058066c6f5aed7c26d7cd0d3b574990b09de842a8c5aaed0b92cc5a55", size = 472594, upload-time = "2025-12-29T20:30:07.779Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/fb/0f/834427d8c03ff1d7e867d3db3d176470c64871753252b21b4f4897d1fa45/kombu-5.6.2-py3-none-any.whl", hash = "sha256:efcfc559da324d41d61ca311b0c64965ea35b4c55cc04ee36e55386145dace93", size = 214219, upload-time = "2025-12-29T20:30:05.74Z" },
 ]
 
 [package.optional-dependencies]
@@ -2067,6 +2063,7 @@ dependencies = [
     { name = "joserfc" },
     { name = "jsonschema" },
     { name = "jwcrypto" },
+    { name = "kombu" },
     { name = "levenshtein" },
     { name = "lxml", extra = ["html-clean"] },
     { name = "nameparser" },
@@ -2172,6 +2169,7 @@ requires-dist = [
     { name = "joserfc", specifier = ">=1.7.4,<2" },
     { name = "jsonschema", specifier = ">=4.22.0,<5" },
     { name = "jwcrypto", specifier = ">=1.5.8,<2" },
+    { name = "kombu", git = "https://github.com/celery/kombu.git?rev=2c8372c6b35b6c61bb6cf93470c57d9eab8836b8" },
     { name = "levenshtein", specifier = ">=0.27,<0.28" },
     { name = "lxml", extras = ["html-clean"], specifier = "==6.1.1" },
     { name = "nameparser", specifier = ">=2.0.0,<3" },
