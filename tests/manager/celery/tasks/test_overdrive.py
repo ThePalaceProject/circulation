@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import MagicMock, Mock, call, patch
 from uuid import uuid4
 
 import pytest
 from celery.result import AsyncResult
 
-from palace.util.datetime_helpers import datetime_utc
+from palace.util.datetime_helpers import datetime_utc, utc_now
 from palace.util.log import LogLevel
 
 from palace.manager.celery.importer import (
@@ -24,12 +25,15 @@ from palace.manager.integration.license.overdrive.api import (
     OverdriveAPI,
 )
 from palace.manager.integration.license.overdrive.crawl import (
+    CrawlComplete,
     CrawlCursor,
+    CrawlFault,
     ProductPage,
 )
 from palace.manager.integration.license.overdrive.importer import (
     FeedImportResult,
     OverdriveImporter,
+    ProductsImportResult,
 )
 from palace.manager.service.redis.models.set import IdentifierSet
 from palace.manager.sqlalchemy.constants import IdentifierType
@@ -102,6 +106,27 @@ class OverdriveImportFixture:
         mock_importer.import_collection.return_value = mock_result
         return mock_importer, mock_timestamp
 
+    @staticmethod
+    def create_mock_products_importer(
+        *steps: CrawlCursor | CrawlComplete | CrawlFault,
+    ) -> tuple[Mock, Mock]:
+        """Create a mock importer whose product-list crawl walks the given steps.
+
+        :param steps: What each successive import_products_page call's cursor
+            decided, one entry per page.
+        :return: Tuple of (mock_importer, mock_timestamp)
+        """
+        mock_importer = Mock(spec=OverdriveImporter)
+        mock_timestamp = Mock(spec=Timestamp)
+        mock_timestamp.start = None
+        mock_timestamp.finish = None
+        mock_timestamp.elapsed = "10 seconds"
+        mock_importer.get_timestamp.return_value = mock_timestamp
+        mock_importer.import_products_page.side_effect = [
+            ProductsImportResult(step=step, processed_count=5) for step in steps
+        ]
+        return mock_importer, mock_timestamp
+
 
 @pytest.fixture
 def overdrive_import_fixture(
@@ -157,26 +182,170 @@ class TestImportCollection:
         mock_importer_class: MagicMock,
         overdrive_import_fixture: OverdriveImportFixture,
     ):
-        """Test import_collection with import_all=True.
+        """import_all crawls the whole product list, not the update feed.
 
-        When import_all=True, modified_since should be set to None,
-        which bypasses the out-of-scope check in the importer.
+        The update feed is ordered by update time, which reshuffles on every
+        circulation event, so a multi-hour walk of the whole collection over it
+        skips titles; the product list's dateAdded ordering never changes.
         """
         collection = overdrive_import_fixture.collection
 
-        # Create mock importer
-        mock_importer, _ = overdrive_import_fixture.create_mock_importer()
+        mock_importer, mock_timestamp = (
+            overdrive_import_fixture.create_mock_products_importer(
+                CrawlComplete(
+                    total_items=0,
+                    page_limit=100,
+                    single_page=True,
+                    started_at=utc_now(),
+                )
+            )
+        )
         mock_importer_class.return_value = mock_importer
 
         # Run the task with import_all=True
         overdrive.import_collection.delay(collection.id, import_all=True).wait()
 
-        # Verify importer was created WITHOUT import_all parameter (removed)
-        call_kwargs = mock_importer_class.call_args.kwargs
-        assert "import_all" not in call_kwargs
+        # The crawl ran, starting from a fresh cursor; the feed walk did not.
+        mock_importer.import_products_page.assert_called_once()
+        cursor = mock_importer.import_products_page.call_args.kwargs["cursor"]
+        assert cursor == CrawlCursor(started_at=cursor.started_at)
+        mock_importer.import_collection.assert_not_called()
 
-        # Verify modified_since is None when import_all is True (bypasses out-of-scope check)
+        # The crawl completed, so the timestamp was finalized.
+        assert mock_timestamp.start is not None
+        assert mock_timestamp.finish is not None
+
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveImporter")
+    def test_import_collection_import_all_replaces_with_cursor(
+        self,
+        mock_importer_class: MagicMock,
+        overdrive_import_fixture: OverdriveImportFixture,
+    ):
+        """A multi-page crawl carries its cursor across task.replace()."""
+        collection = overdrive_import_fixture.collection
+
+        next_cursor = CrawlCursor(
+            offset=150, previous_offset=250, total_items=1000, page_limit=100
+        )
+        mock_importer, _ = overdrive_import_fixture.create_mock_products_importer(
+            next_cursor,
+            CrawlComplete(
+                total_items=0, page_limit=100, single_page=False, started_at=utc_now()
+            ),
+        )
+        mock_importer_class.return_value = mock_importer
+
+        overdrive.import_collection.delay(collection.id, import_all=True).wait()
+
+        # The second page was driven by the cursor the first page handed back,
+        # round-tripped through the task kwargs.
+        assert mock_importer.import_products_page.call_count == 2
+        second_cursor = mock_importer.import_products_page.call_args_list[1].kwargs[
+            "cursor"
+        ]
+        assert second_cursor == next_cursor
+
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveImporter")
+    def test_import_collection_import_all_fault_keeps_what_was_imported(
+        self,
+        mock_importer_class: MagicMock,
+        overdrive_import_fixture: OverdriveImportFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """A crawl fault ends a full import early without discarding it.
+
+        Unlike the reaper, nothing here acts on a title's absence, so an
+        unfinishable crawl costs staleness rather than correctness: the run
+        still returns its identifier set (a child import can use a partial
+        set), but the import timestamp is left unchanged so the incomplete
+        sweep is not recorded as a finished import.
+        """
+        collection = overdrive_import_fixture.collection
+        caplog.set_level(LogLevel.error)
+
+        mock_importer, mock_timestamp = (
+            overdrive_import_fixture.create_mock_products_importer(
+                CrawlFault("The page at offset 100 could not be reconciled.")
+            )
+        )
+        mock_importer_class.return_value = mock_importer
+
+        result = overdrive.import_collection.delay(
+            collection.id, import_all=True
+        ).wait()
+
+        assert result is not None
+        assert result["key"]
+        assert mock_timestamp.start is None
+        assert mock_timestamp.finish is None
+        assert "could not be reconciled" in caplog.text
+        assert "timestamp is unchanged" in caplog.text
+
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveImporter")
+    def test_import_collection_import_all_completeness_is_advisory(
+        self,
+        mock_importer_class: MagicMock,
+        overdrive_import_fixture: OverdriveImportFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """A count shortfall warns but still finishes a full import.
+
+        The shortfall marks titles this sweep did not reach, not titles
+        wrongly touched, so the import completes and the timestamp advances.
+        """
+        collection = overdrive_import_fixture.collection
+        caplog.set_level(LogLevel.warning)
+
+        # The mock importer adds nothing to the identifier set, so a non-zero
+        # totalItems reads as a shortfall at the completeness gate.
+        mock_importer, mock_timestamp = (
+            overdrive_import_fixture.create_mock_products_importer(
+                CrawlComplete(
+                    total_items=500,
+                    page_limit=100,
+                    single_page=False,
+                    started_at=utc_now(),
+                )
+            )
+        )
+        mock_importer_class.return_value = mock_importer
+
+        result = overdrive.import_collection.delay(
+            collection.id, import_all=True
+        ).wait()
+
+        assert result is not None
+        assert "finished short" in caplog.text
+        assert "distinct titles" in caplog.text
+        assert mock_timestamp.start is not None
+        assert mock_timestamp.finish is not None
+
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveImporter")
+    def test_import_collection_import_all_legacy_page_uses_feed(
+        self,
+        mock_importer_class: MagicMock,
+        overdrive_import_fixture: OverdriveImportFixture,
+    ):
+        """A full-import page from the previous release finishes the old way.
+
+        The release that paged full imports over the update feed re-queued
+        them with a `page` url. Restarting such a run as a crawl would repeat
+        hours of work, so the page is honored on the path that queued it.
+        """
+        collection = overdrive_import_fixture.collection
+
+        mock_importer, _ = overdrive_import_fixture.create_mock_importer()
+        mock_importer_class.return_value = mock_importer
+
+        overdrive.import_collection.delay(
+            collection.id, import_all=True, page="http://legacy.page/"
+        ).wait()
+
+        mock_importer.import_products_page.assert_not_called()
         import_call = mock_importer.import_collection.call_args
+        assert import_call.kwargs["endpoint"] == BookInfoEndpoint(
+            url="http://legacy.page/"
+        )
         assert import_call.kwargs["modified_since"] is None
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveImporter")
@@ -1153,7 +1322,12 @@ class TestIntegration:
         redis_fixture: RedisFixture,
         apply_task_fixture: ApplyTaskFixture,
     ):
-        """Test import with parent identifiers provided and Overdrive data."""
+        """A full import flows from Overdrive data to database records.
+
+        import_all crawls the product list: the page itself arrives over the
+        synchronous client, and each title's metadata and availability are
+        hydrated over the async client.
+        """
         collection = overdrive_api_fixture.collection
         availability_data, availability_json = overdrive_api_fixture.sample_json(
             "overdrive_availability_information.json"
@@ -1162,29 +1336,23 @@ class TestIntegration:
             "bibliographic_information_book_list_test.json"
         )
         (
-            overdrive_book_list_with_next_link_data,
+            _,
             overdrive_book_list_with_next_link_json,
         ) = overdrive_api_fixture.sample_json("overdrive_book_list_with_next_link.json")
 
         book = overdrive_book_list_with_next_link_json["products"][0]
 
-        (
-            overdrive_book_list_last_page_no_products_data,
-            overdrive_book_list_last_page_no_products_json,
-        ) = overdrive_api_fixture.sample_json(
-            "overdrive_book_list_last_page_no_products.json"
-        )
-        mock_async_client = overdrive_api_fixture.mock_async_client
-        mock_async_client.queue_response(
-            200, content=overdrive_book_list_with_next_link_data
+        # A single-page product list carrying the one book.
+        overdrive_api_fixture.mock_http.queue_response(
+            200,
+            content=json.dumps(
+                {"totalItems": 1, "limit": 300, "products": [book]}
+            ).encode(),
         )
 
+        mock_async_client = overdrive_api_fixture.mock_async_client
         mock_async_client.queue_response(200, content=metadata_data)
         mock_async_client.queue_response(200, content=availability_data)
-
-        mock_async_client.queue_response(
-            200, content=overdrive_book_list_last_page_no_products_data
-        )
 
         # sanity check that the identifier does not exist
         assert not self._get_identifier(book, overdrive_api_fixture)

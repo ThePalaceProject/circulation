@@ -28,10 +28,14 @@ from palace.manager.integration.license.overdrive.api import (
     OverdriveAPI,
 )
 from palace.manager.integration.license.overdrive.crawl import (
+    CrawlComplete,
     CrawlCursor,
     CrawlFault,
 )
-from palace.manager.integration.license.overdrive.importer import OverdriveImporter
+from palace.manager.integration.license.overdrive.importer import (
+    FeedImportResult,
+    OverdriveImporter,
+)
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.set import IdentifierSet
 from palace.manager.sqlalchemy.model.collection import Collection
@@ -88,6 +92,7 @@ def import_collection(
     *,
     import_all: bool = False,
     page: str | None = None,
+    cursor: dict[str, Any] | None = None,
     modified_since: datetime.datetime | None = None,
     start_time: datetime.datetime | None = None,
     return_identifiers: bool = True,
@@ -101,11 +106,31 @@ def import_collection(
     to process subsequent pages while maintaining the same modified_since timestamp
     and start_time across all pages.
 
+    The two kinds of import page through the API differently:
+
+    * A delta import (``import_all=False``) follows the update-filtered feed's
+      ``next`` links, carrying the page url in ``page``.
+    * A full import (``import_all=True``) crawls the whole ``dateAdded:asc``
+      product list with a
+      :class:`~palace.manager.integration.license.overdrive.crawl.CrawlCursor`,
+      carried in ``cursor``. The update feed is ordered by update time, which
+      reshuffles on every circulation event anywhere in the collection, so a
+      multi-hour walk of the whole list over it skips titles; the product list
+      is ordered by a key that never changes. A structural fault ends the crawl
+      early: the titles already processed stay imported and the identifier set
+      is still returned (a child import can use a partial set), but the import
+      timestamp is left unchanged so the next delta import's window still
+      reaches back past the incomplete run. A message queued by a release that
+      paged full imports over the update feed still carries ``page``, and is
+      finished the old way.
+
     :param collection_id: The ID of the collection to import
     :param import_all: If True, import all titles regardless of whether they have changed.
         If False, import titles that have changed since the modified_since date.
     :param page: The "page" to be processed. The page param is a url represented as a string. A None value means the
         import will start from the beginning of the set.
+    :param cursor: The serialized crawl cursor for a full import's next page.
+        None starts the crawl from the beginning.
     :param modified_since: Only process titles modified after this datetime. This field parameter is ignored if
         import_all is True. If import_all is False and modified_since is None, then only titles after the last import
         timestamp's start time will be imported. If there is no prior timestamp, all titles will be imported.
@@ -163,47 +188,140 @@ def import_collection(
                 parent_identifier_set=parent_identifier_set,
             )
 
-            if modified_since is None:
-                if import_all:
-                    modified_since = None
-                else:
+            crawl_step: CrawlCursor | CrawlComplete | CrawlFault | None = None
+            result: FeedImportResult | None = None
+
+            if import_all and page is None:
+                # Full import: crawl the whole product list. A message from a
+                # release that paged full imports over the update feed carries
+                # `page`, and falls through to the branch below to be finished
+                # the way it was started.
+                crawl_cursor = (
+                    CrawlCursor.from_json(cursor)
+                    if cursor is not None
+                    else CrawlCursor()
+                )
+                task.log.info(
+                    f"OverDrive full import started: '{collection_name}' "
+                    f"offset: {crawl_cursor.offset}"
+                )
+                products_result = importer.import_products_page(
+                    apply_bibliographic=apply.bibliographic_apply.delay,
+                    apply_circulation=apply.circulation_apply.delay,
+                    cursor=crawl_cursor,
+                )
+                crawl_step = products_result.step
+
+                task.log.info(
+                    f"OverDrive full import page complete: '{collection_name}' "
+                    f"Offset: {crawl_cursor.offset}. "
+                    f"Processed: {products_result.processed_count}. "
+                )
+
+                if identifier_set:
+                    task.log.info(
+                        f"OverDrive collection import '{collection_name}': Total processed in run so far: {identifier_set.len()}"
+                    )
+
+                if isinstance(crawl_step, CrawlFault):
+                    # Unlike the reaper, nothing here acts on a title's absence:
+                    # a crawl that cannot be continued costs staleness, not
+                    # correctness, and everything already processed is real. The
+                    # timestamp is left unchanged so the incomplete sweep is not
+                    # recorded as a finished import.
+                    task.log.error(
+                        f"OverDrive full import of '{collection_name}' stopped "
+                        f"after {crawl_cursor.elapsed}: {crawl_step.reason} The "
+                        f"titles already processed are imported; the import "
+                        f"timestamp is unchanged."
+                    )
+                elif isinstance(crawl_step, CrawlComplete):
+                    if (
+                        identifier_set is not None
+                        and (
+                            fault := crawl_step.completeness_fault(identifier_set.len())
+                        )
+                        is not None
+                    ):
+                        # Advisory for the same reason a fault is not fatal: the
+                        # shortfall marks titles this sweep did not reach, not
+                        # titles wrongly touched.
+                        task.log.warning(
+                            f"OverDrive full import of '{collection_name}' finished "
+                            f"short after {crawl_step.elapsed}: {fault.reason}"
+                        )
                     timestamp = importer.get_timestamp()
-                    modified_since = timestamp.start
+                    timestamp.start = start_time
+                    timestamp.finish = utc_now()
+                    task.log.info(
+                        f"OverDrive full import complete: '{collection_name}' "
+                        f"Total time: {timestamp.elapsed}."
+                    )
+            else:
+                if modified_since is None:
+                    if import_all:
+                        modified_since = None
+                    else:
+                        timestamp = importer.get_timestamp()
+                        modified_since = timestamp.start
 
-            task.log.info(
-                f"OverDrive import started: '{collection_name}' Modified since: {modified_since}, "
-                f"page: {None if not page else page}"
-            )
-
-            endpoint = None if not page else BookInfoEndpoint(page)
-
-            result = importer.import_collection(
-                apply_bibliographic=apply.bibliographic_apply.delay,
-                apply_circulation=apply.circulation_apply.delay,
-                endpoint=endpoint,
-                modified_since=modified_since,
-            )
-
-            task.log.info(
-                f"OverDrive import page complete: '{collection_name}' Page: {result.current_page}. "
-                f"Processed: {result.processed_count}. "
-            )
-
-            if identifier_set:
                 task.log.info(
-                    f"OverDrive collection import '{collection_name}': Total processed in run so far: {identifier_set.len()}"
+                    f"OverDrive import started: '{collection_name}' Modified since: {modified_since}, "
+                    f"page: {None if not page else page}"
                 )
 
-            if result.next_page is None:
-                # We are done. We only update the timestamp once we have processed all pages.
-                # To make sure that if we fail or are interrupted, we re-process any
-                # titles we may have missed.
-                timestamp = importer.get_timestamp()
-                timestamp.start = start_time
-                timestamp.finish = utc_now()
-                task.log.info(
-                    f"OverDrive import complete: '{collection_name}' Total time: {timestamp.elapsed}."
+                endpoint = None if not page else BookInfoEndpoint(page)
+
+                result = importer.import_collection(
+                    apply_bibliographic=apply.bibliographic_apply.delay,
+                    apply_circulation=apply.circulation_apply.delay,
+                    endpoint=endpoint,
+                    modified_since=modified_since,
                 )
+
+                task.log.info(
+                    f"OverDrive import page complete: '{collection_name}' Page: {result.current_page}. "
+                    f"Processed: {result.processed_count}. "
+                )
+
+                if identifier_set:
+                    task.log.info(
+                        f"OverDrive collection import '{collection_name}': Total processed in run so far: {identifier_set.len()}"
+                    )
+
+                if result.next_page is None:
+                    # We are done. We only update the timestamp once we have processed all pages.
+                    # To make sure that if we fail or are interrupted, we re-process any
+                    # titles we may have missed.
+                    timestamp = importer.get_timestamp()
+                    timestamp.start = start_time
+                    timestamp.finish = utc_now()
+                    task.log.info(
+                        f"OverDrive import complete: '{collection_name}' Total time: {timestamp.elapsed}."
+                    )
+
+        if isinstance(crawl_step, CrawlCursor):
+            task.log.info(
+                f"OverDrive full import re-queueing: '{collection_name}' "
+                f"Next offset: {crawl_step.offset}."
+            )
+            raise task.replace(
+                signature_with(
+                    task,
+                    cursor=crawl_step.__json__(),
+                    # start_time is resolved from None on the first page, so it
+                    # must be carried forward explicitly rather than refilled
+                    # from the original arguments.
+                    start_time=start_time,
+                )
+            )
+        elif crawl_step is not None:
+            # The crawl finished or faulted; either way this run is over and
+            # whatever was collected is the result.
+            return identifier_set
+
+        # The delta path always produced a result when the crawl did not run.
+        assert result is not None
 
         if result.next_page is not None:
             task.log.info(

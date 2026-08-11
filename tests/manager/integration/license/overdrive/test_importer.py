@@ -18,9 +18,15 @@ from palace.manager.integration.license.overdrive.api import (
     BookInfoEndpoint,
     OverdriveAPI,
 )
+from palace.manager.integration.license.overdrive.crawl import (
+    CrawlComplete,
+    CrawlCursor,
+    ProductPage,
+)
 from palace.manager.integration.license.overdrive.importer import (
     FeedImportResult,
     OverdriveImporter,
+    ProductsImportResult,
 )
 from palace.manager.integration.license.overdrive.representation import (
     OverdriveRepresentationExtractor,
@@ -664,6 +670,234 @@ class TestOverdriveImporter:
         # Circulation should be applied for both books
         assert mock_apply_circ.call_count == 2
 
+        assert result.processed_count == 2
+
+    @staticmethod
+    def _product_page(
+        *product_ids: str, total_items: int, limit: int = 100
+    ) -> ProductPage:
+        """Build a ProductPage whose products carry only ids, hydration-ready."""
+        products = tuple({"id": product_id} for product_id in product_ids)
+        listed = tuple(
+            IdentifierData(type=Identifier.OVERDRIVE_ID, identifier=product_id.lower())
+            for product_id in product_ids
+        )
+        return ProductPage(
+            listed=listed,
+            unowned=(),
+            total_items=total_items,
+            limit=limit,
+            products=products,
+        )
+
+    def _mock_extractor(self, importer: OverdriveImporter) -> tuple[Mock, Mock]:
+        """Point the importer's extractor at bibliographic/circulation mocks."""
+        mock_bibliographic = Mock(spec=BibliographicData)
+        mock_bibliographic.needs_apply.return_value = True
+        mock_circulation = Mock(spec=CirculationData)
+        mock_circulation.needs_apply.return_value = True
+        importer._extractor.book_info_to_bibliographic = Mock(
+            return_value=mock_bibliographic
+        )
+        importer._extractor.book_info_to_circulation = Mock(
+            return_value=mock_circulation
+        )
+        return mock_bibliographic, mock_circulation
+
+    def test_import_products_page_basic(
+        self,
+        db: DatabaseTransactionFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        services_fixture: ServicesFixture,
+    ):
+        """A page of the product-list crawl is hydrated and processed."""
+        collection = overdrive_api_fixture.collection
+        registry = services_fixture.services.integration_registry.license_providers()
+        api = overdrive_api_fixture.api
+
+        importer = OverdriveImporter(
+            db=db.session, collection=collection, registry=registry, api=api
+        )
+        self._mock_extractor(importer)
+
+        page = self._product_page("overdrive-id-1", total_items=1)
+        endpoint = BookInfoEndpoint(url="http://products/?offset=0")
+        api.product_page_endpoint = Mock(return_value=endpoint)
+        api.fetch_product_page = Mock(return_value=page)
+        api.hydrate_products = AsyncMock(
+            return_value=[
+                {
+                    "id": "overdrive-id-1",
+                    "metadata": {"title": "A Book"},
+                    "availabilityV2": {"copiesOwned": 1},
+                }
+            ]
+        )
+        mock_apply_bib = Mock()
+        mock_apply_circ = Mock()
+
+        result = importer.import_products_page(
+            apply_bibliographic=mock_apply_bib,
+            apply_circulation=mock_apply_circ,
+            cursor=CrawlCursor(),
+        )
+
+        assert isinstance(result, ProductsImportResult)
+        assert result.processed_count == 1
+        # The whole collection arrived in one page, so the crawl is complete.
+        assert isinstance(result.step, CrawlComplete)
+        assert result.step.single_page
+
+        # The page was requested at the cursor's offset, and hydration was
+        # handed the page's raw products with metadata fetched upfront (this
+        # is a main collection -- there is no parent identifier set).
+        api.product_page_endpoint.assert_called_once_with(
+            0, OverdriveImporter.DEFAULT_PAGE_SIZE
+        )
+        api.fetch_product_page.assert_called_once_with(endpoint)
+        hydrate_kwargs = api.hydrate_products.call_args.kwargs
+        assert api.hydrate_products.call_args.args == (page.products,)
+        assert hydrate_kwargs["fetch_metadata"] is True
+        assert hydrate_kwargs["fetch_availability"] is True
+
+        assert mock_apply_bib.call_count == 1
+        assert mock_apply_circ.call_count == 1
+
+    def test_import_products_page_advances_cursor(
+        self,
+        db: DatabaseTransactionFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        services_fixture: ServicesFixture,
+    ):
+        """A page from a larger collection hands back the cursor for the next one."""
+        collection = overdrive_api_fixture.collection
+        registry = services_fixture.services.integration_registry.license_providers()
+        api = overdrive_api_fixture.api
+
+        importer = OverdriveImporter(
+            db=db.session, collection=collection, registry=registry, api=api
+        )
+        self._mock_extractor(importer)
+
+        api.product_page_endpoint = Mock(
+            return_value=BookInfoEndpoint(url="http://products/?offset=0")
+        )
+        api.fetch_product_page = Mock(
+            return_value=self._product_page(
+                "overdrive-id-1", total_items=250, limit=100
+            )
+        )
+        api.hydrate_products = AsyncMock(return_value=[])
+
+        result = importer.import_products_page(
+            apply_bibliographic=Mock(),
+            apply_circulation=Mock(),
+            cursor=CrawlCursor(),
+        )
+
+        # The first page learned the paging facts; the walk jumps to the end.
+        assert isinstance(result.step, CrawlCursor)
+        assert result.step.offset == 150
+        assert result.step.total_items == 250
+
+    def test_import_products_page_with_identifier_set(
+        self,
+        db: DatabaseTransactionFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        services_fixture: ServicesFixture,
+        redis_fixture: RedisFixture,
+    ):
+        """Processed identifiers land in the run's identifier set."""
+        collection = overdrive_api_fixture.collection
+        registry = services_fixture.services.integration_registry.license_providers()
+        api = overdrive_api_fixture.api
+
+        identifier_set = IdentifierSet(redis_fixture.client, ["import", "test"])
+        importer = OverdriveImporter(
+            db=db.session,
+            collection=collection,
+            registry=registry,
+            api=api,
+            identifier_set=identifier_set,
+        )
+        self._mock_extractor(importer)
+
+        api.product_page_endpoint = Mock(
+            return_value=BookInfoEndpoint(url="http://products/?offset=0")
+        )
+        api.fetch_product_page = Mock(
+            return_value=self._product_page("overdrive-id-1", total_items=1)
+        )
+        api.hydrate_products = AsyncMock(
+            return_value=[
+                {
+                    "id": "overdrive-id-1",
+                    "metadata": {"title": "A Book"},
+                    "availabilityV2": {"copiesOwned": 1},
+                }
+            ]
+        )
+
+        importer.import_products_page(
+            apply_bibliographic=Mock(),
+            apply_circulation=Mock(),
+            cursor=CrawlCursor(),
+        )
+
+        assert identifier_set.get() == {
+            IdentifierData(type=Identifier.OVERDRIVE_ID, identifier="overdrive-id-1")
+        }
+
+    def test_import_products_page_with_parent_identifiers_skips_metadata(
+        self,
+        db: DatabaseTransactionFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        services_fixture: ServicesFixture,
+    ):
+        """An advantage collection's crawl fetches metadata lazily, as the feed
+        import does: books already imported by the parent skip the lookup."""
+        collection = overdrive_api_fixture.collection
+        registry = services_fixture.services.integration_registry.license_providers()
+        api = overdrive_api_fixture.api
+
+        mock_parent_set = Mock(spec=IdentifierSet)
+        mock_parent_set.get.return_value = {
+            IdentifierData(type=Identifier.OVERDRIVE_ID, identifier="overdrive-id-1")
+        }
+        importer = OverdriveImporter(
+            db=db.session,
+            collection=collection,
+            registry=registry,
+            api=api,
+            parent_identifier_set=mock_parent_set,
+        )
+        self._mock_extractor(importer)
+
+        api.product_page_endpoint = Mock(
+            return_value=BookInfoEndpoint(url="http://products/?offset=0")
+        )
+        api.fetch_product_page = Mock(
+            return_value=self._product_page(
+                "overdrive-id-1", "overdrive-id-3", total_items=2
+            )
+        )
+        api.hydrate_products = AsyncMock(
+            return_value=[
+                {"id": "overdrive-id-1", "availabilityV2": {"copiesOwned": 1}},
+                {"id": "overdrive-id-3", "availabilityV2": {"copiesOwned": 1}},
+            ]
+        )
+        api.metadata_lookup = Mock(return_value={"title": "New Book"})
+
+        result = importer.import_products_page(
+            apply_bibliographic=Mock(),
+            apply_circulation=Mock(),
+            cursor=CrawlCursor(),
+        )
+
+        assert api.hydrate_products.call_args.kwargs["fetch_metadata"] is False
+        # Only the book absent from the parent set needed a metadata lookup.
+        assert api.metadata_lookup.call_count == 1
         assert result.processed_count == 2
 
 

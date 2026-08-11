@@ -19,6 +19,11 @@ from palace.manager.integration.license.overdrive.api import (
     BookInfoEndpoint,
     OverdriveAPI,
 )
+from palace.manager.integration.license.overdrive.crawl import (
+    CrawlComplete,
+    CrawlCursor,
+    CrawlFault,
+)
 from palace.manager.integration.license.overdrive.model import Availability
 from palace.manager.integration.license.overdrive.representation import (
     OverdriveRepresentationExtractor,
@@ -37,6 +42,19 @@ from palace.manager.sqlalchemy.util import get_one_or_create
 class FeedImportResult:
     current_page: BookInfoEndpoint
     next_page: BookInfoEndpoint | None = None
+    processed_count: int = 0
+
+
+@dataclass(frozen=True)
+class ProductsImportResult:
+    """The outcome of importing one page of a full product-list crawl.
+
+    :param step: What the crawl cursor decided after this page: the cursor for
+        the next page, completion, or a fault.
+    :param processed_count: The number of books processed from this page.
+    """
+
+    step: CrawlCursor | CrawlComplete | CrawlFault
     processed_count: int = 0
 
 
@@ -288,3 +306,83 @@ class OverdriveImporter(LoggerMixin):
             current_page=endpoint,
             processed_count=len(identifiers),
         )
+
+    def import_products_page(
+        self,
+        *,
+        apply_bibliographic: ApplyBibliographicCallable,
+        apply_circulation: ApplyCirculationCallable,
+        cursor: CrawlCursor,
+        page_size: int = DEFAULT_PAGE_SIZE,
+    ) -> ProductsImportResult:
+        """Import one page of a full crawl of the collection's product list.
+
+        This is the full-harvest counterpart of :meth:`import_collection`: the
+        same hydration and processing, but enumerated by a
+        :class:`~palace.manager.integration.license.overdrive.crawl.CrawlCursor`
+        over the ``dateAdded:asc`` product list rather than by following the
+        update-filtered feed's ``next`` links. dateAdded is immutable, so a
+        multi-hour crawl of a large collection walks an ordering that does not
+        reshuffle on every circulation event the way the update feed's does --
+        the cursor's coverage guarantees hold, and every title is visited once.
+
+        The page's books are hydrated and processed whatever the cursor decides:
+        a fault ends the crawl, but the titles this page carried are still
+        real -- interpreting the fault is the caller's job.
+
+        :param apply_bibliographic: Callback to apply bibliographic updates.
+        :param apply_circulation: Callback to apply circulation updates.
+        :param cursor: The crawl cursor for the page to fetch.
+        :param page_size: Titles per page. Sized for the per-title hydration
+            cost, not the crawl: each book on the page costs its own metadata
+            and availability requests.
+        :return: A :class:`ProductsImportResult` carrying the cursor's decision
+            and the number of books processed.
+        """
+        policy = ReplacementPolicy(
+            identifiers=False,
+            subjects=True,
+            contributions=True,
+            formats=True,
+            links=True,
+        )
+
+        page = self._api.fetch_product_page(
+            self._api.product_page_endpoint(cursor.offset, page_size)
+        )
+        step = cursor.advance(page)
+
+        # Metadata is fetched upfront for main collections and lazily for
+        # advantage collections, exactly as in import_collection: the parent
+        # identifier set implies the parent already imported the metadata.
+        fetch_metadata = self._parent_identifiers is None
+        books = asyncio.run(
+            self._api.hydrate_products(
+                page.products,
+                fetch_metadata=fetch_metadata,
+                fetch_availability=True,
+            )
+        )
+
+        identifiers = []
+        for book in books:
+            identifier, _ = self._process_book(
+                book, fetch_metadata, policy, apply_bibliographic, apply_circulation
+            )
+            identifiers.append(identifier)
+
+        if self._identifier_set is not None:
+            self._identifier_set.add(*identifiers)
+
+        timestamp = self.get_timestamp()
+        achievements = [f"Total items queued for import: {len(identifiers)}."]
+        if (elapsed_time := timestamp.elapsed_seconds) is not None:
+            achievements.append(f"Elapsed time: {elapsed_time:.2f} seconds.")
+        timestamp.achievements = "\n".join(achievements)
+
+        self.log.info(
+            f"Imported {len(identifiers)} book(s) at offset {cursor.offset} of the "
+            f"product list for collection {self._collection.name} "
+            f"(id={self._collection.id})."
+        )
+        return ProductsImportResult(step=step, processed_count=len(identifiers))
