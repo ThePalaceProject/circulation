@@ -1457,13 +1457,14 @@ wheels = [
 [[package]]
 name = "kombu"
 version = "5.6.2"
-source = { git = "https://github.com/celery/kombu.git?rev=2c8372c6b35b6c61bb6cf93470c57d9eab8836b8#2c8372c6b35b6c61bb6cf93470c57d9eab8836b8" }
+source = { url = "https://github.com/celery/kombu/archive/2c8372c6b35b6c61bb6cf93470c57d9eab8836b8.tar.gz" }
 dependencies = [
     { name = "amqp" },
     { name = "packaging" },
     { name = "tzdata" },
     { name = "vine" },
 ]
+sdist = { hash = "sha256:9cc46518bd8eba06fd6ce9704dc7f6e492269a930db0282c87f30a16ce3f0a10" }
 
 [package.optional-dependencies]
 redis = [
@@ -1474,6 +1475,38 @@ sqs = [
     { name = "pycurl", marker = "platform_python_implementation == 'CPython' and sys_platform != 'win32'" },
     { name = "urllib3" },
 ]
+
+[package.metadata]
+requires-dist = [
+    { name = "amqp", specifier = ">=5.1.1,<6.0.0" },
+    { name = "azure-identity", marker = "extra == 'azurestoragequeues'", specifier = ">=1.12.0" },
+    { name = "azure-servicebus", marker = "extra == 'azureservicebus'", specifier = ">=7.10.0" },
+    { name = "azure-storage-queue", marker = "extra == 'azurestoragequeues'", specifier = ">=12.6.0" },
+    { name = "boto3", marker = "extra == 'sqs'", specifier = ">=1.26.143" },
+    { name = "confluent-kafka", marker = "extra == 'confluentkafka'", specifier = ">=2.2.0" },
+    { name = "google-cloud-monitoring", marker = "extra == 'gcpubsub'", specifier = ">=2.16.0" },
+    { name = "google-cloud-pubsub", marker = "extra == 'gcpubsub'", specifier = ">=2.18.4" },
+    { name = "grpcio", marker = "extra == 'gcpubsub'", specifier = "==1.76.0" },
+    { name = "kazoo", marker = "extra == 'zookeeper'", specifier = ">=2.8.0" },
+    { name = "librabbitmq", marker = "python_full_version < '3.11' and extra == 'librabbitmq'", specifier = ">=2.0.0" },
+    { name = "msgpack", marker = "extra == 'msgpack'", specifier = "==1.1.2" },
+    { name = "packaging" },
+    { name = "protobuf", marker = "extra == 'gcpubsub'", specifier = "==6.33.6" },
+    { name = "pycurl", marker = "platform_python_implementation == 'CPython' and sys_platform != 'win32' and extra == 'sqs'", specifier = ">=7.43.0.5" },
+    { name = "pymongo", marker = "extra == 'mongodb'", specifier = "==4.15.3" },
+    { name = "pyro4", marker = "extra == 'pyro'", specifier = "==4.82" },
+    { name = "python-consul2", marker = "extra == 'consul'", specifier = "==0.1.5" },
+    { name = "pyyaml", marker = "extra == 'yaml'", specifier = ">=3.10" },
+    { name = "qpid-python", marker = "extra == 'qpid'", specifier = "==1.36.0.post1" },
+    { name = "qpid-tools", marker = "extra == 'qpid'", specifier = "==1.36.0.post1" },
+    { name = "redis", marker = "extra == 'redis'", specifier = ">=4.5.2,!=4.5.5,!=5.0.2,<7.1" },
+    { name = "softlayer-messaging", marker = "extra == 'slmq'", specifier = ">=1.0.3" },
+    { name = "sqlalchemy", marker = "extra == 'sqlalchemy'", specifier = ">=1.4.48,<2.1" },
+    { name = "tzdata", specifier = ">=2025.2" },
+    { name = "urllib3", marker = "extra == 'sqs'", specifier = ">=1.26.16" },
+    { name = "vine", specifier = "==5.1.0" },
+]
+provides-extras = ["msgpack", "yaml", "redis", "mongodb", "sqs", "gcpubsub", "zookeeper", "sqlalchemy", "librabbitmq", "pyro", "slmq", "azurestoragequeues", "azureservicebus", "qpid", "consul", "confluentkafka"]
 
 [[package]]
 name = "levenshtein"
@@ -2169,7 +2202,7 @@ requires-dist = [
     { name = "joserfc", specifier = ">=1.7.4,<2" },
     { name = "jsonschema", specifier = ">=4.22.0,<5" },
     { name = "jwcrypto", specifier = ">=1.5.8,<2" },
-    { name = "kombu", git = "https://github.com/celery/kombu.git?rev=2c8372c6b35b6c61bb6cf93470c57d9eab8836b8" },
+    { name = "kombu", url = "https://github.com/celery/kombu/archive/2c8372c6b35b6c61bb6cf93470c57d9eab8836b8.tar.gz" },
     { name = "levenshtein", specifier = ">=0.27,<0.28" },
     { name = "lxml", extras = ["html-clean"], specifier = "==6.1.1" },
     { name = "nameparser", specifier = ">=2.0.0,<3" },
