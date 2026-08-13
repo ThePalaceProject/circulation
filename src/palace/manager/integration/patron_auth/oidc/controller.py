@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from urllib.parse import SplitResult, parse_qs, urlencode, urlsplit
 
 import jwt
@@ -247,7 +247,7 @@ class OIDCController(LoggerMixin):
         }
 
         code_challenge = None
-        if provider._settings.use_pkce:
+        if authentication_manager.use_pkce:
             code_verifier, code_challenge = utility.generate_pkce()
             state_data["code_verifier"] = code_verifier
 
@@ -436,7 +436,7 @@ class OIDCController(LoggerMixin):
         if isinstance(provider, ProblemDetail):
             return provider
 
-        auth_manager = provider.get_authentication_manager()  # type: ignore[attr-defined]
+        auth_manager = provider.get_authentication_manager()
 
         # The bearer token's payload IS the credential JSON — parse it directly.
         # This avoids a DB lookup that would fail after token refresh (the credential
@@ -448,7 +448,7 @@ class OIDCController(LoggerMixin):
             return OIDC_INVALID_REQUEST.detailed(_("Invalid credential data"))
 
         id_token_claims = token_data["id_token_claims"]
-        patron_identifier = id_token_claims.get(provider._settings.patron_id_claim)  # type: ignore[attr-defined]
+        patron_identifier = provider.extract_patron_identifier(id_token_claims)
 
         # Best-effort: revoke access and refresh tokens to prevent silent re-authentication
         # at the IdP after local CM logout. revoke_token suppresses all errors internally.
@@ -464,7 +464,7 @@ class OIDCController(LoggerMixin):
 
         # Invalidate our local patron credentials.
         try:
-            credential_manager = provider._credential_manager  # type: ignore[attr-defined]
+            credential_manager = provider.credential_manager
             patron = credential_manager.lookup_patron_by_identifier(
                 db, patron_identifier, library.id
             )
@@ -474,7 +474,7 @@ class OIDCController(LoggerMixin):
                 self.log.info(f"Invalidated credentials for patron {patron_identifier}")
             else:
                 self.log.warning(f"Patron not found for identifier {patron_identifier}")
-        except (SQLAlchemyError, AttributeError):
+        except SQLAlchemyError:
             self.log.exception("Failed to invalidate credentials")
 
         # If the provider does not support RP-Initiated Logout (only token revocation),
@@ -604,7 +604,18 @@ class OIDCController(LoggerMixin):
             return "", 400
 
         # We need to determine which provider sent this logout token.
-        # Try all configured OIDC providers until we find one that can validate the token.
+        # Every provider that validates it gets to invalidate its own
+        # library's sessions: an integration associated with several
+        # libraries appears as a sibling provider in each library's
+        # authenticator, and patron lookup is library-scoped, so stopping
+        # at the first match would log the patron out of only one library.
+        # Sibling providers share one integration's settings, so once one
+        # of them validates the token the claims are reused. Only
+        # successes are cached: a transient failure for one library's
+        # provider must not prevent a sibling from validating.
+        claims_by_integration: dict[int, dict[str, Any]] = {}
+        processed = False
+        failed = False
         for (
             library_authenticator
         ) in self._authenticator.library_authenticators.values():
@@ -614,47 +625,63 @@ class OIDCController(LoggerMixin):
                 if not isinstance(provider, BaseOIDCAuthenticationProvider):
                     continue
 
-                try:
-                    auth_manager = provider._authentication_manager_factory.create(  # type: ignore[attr-defined]
-                        provider._settings  # type: ignore[attr-defined]
-                    )
-
-                    # Try to validate the logout token with this provider
-                    claims = auth_manager.validate_logout_token(logout_token)
-
-                    # Successfully validated - get patron identifier
-                    patron_identifier = claims.get(
-                        provider._settings.patron_id_claim  # type: ignore[attr-defined]
-                    )
-                    if not patron_identifier:
-                        self.log.warning("Logout token missing patron identifier claim")
-                        return "", 400
-
-                    # Invalidate patron credentials
-                    credential_manager = provider._credential_manager  # type: ignore[attr-defined]
-                    patron = credential_manager.lookup_patron_by_identifier(
-                        db, patron_identifier, provider.library_id
-                    )
-
-                    if patron:
-                        credential_manager.invalidate_patron_credentials(db, patron.id)
-                        self.log.info(
-                            f"Back-channel logout: invalidated credentials for patron {patron_identifier}"
+                claims = claims_by_integration.get(provider.integration_id)
+                if claims is None:
+                    try:
+                        auth_manager = provider.get_authentication_manager()
+                        claims = auth_manager.validate_logout_token(logout_token)
+                    except Exception as e:
+                        # This provider couldn't validate the token; try the next one.
+                        self.log.debug(
+                            f"Provider {provider.label()} could not validate logout token: {e}"
                         )
-                    else:
-                        self.log.warning(
-                            f"Back-channel logout: patron not found for identifier {patron_identifier}"
-                        )
+                        continue
+                    claims_by_integration[provider.integration_id] = claims
 
-                    return "", 200
-
-                except Exception as e:
-                    # This provider couldn't validate the token, try the next one
-                    self.log.debug(
-                        f"Provider {provider.label()} could not validate logout token: {e}"
-                    )
+                patron_identifier = provider.extract_patron_identifier(claims)
+                if not patron_identifier:
+                    self.log.warning("Logout token missing patron identifier claim")
                     continue
 
-        # No provider could validate the logout token
-        self.log.error("No OIDC provider could validate the logout token")
+                # Invalidate patron credentials. Failures here must not be
+                # mistaken for validation failures: they mark the whole
+                # request failed so the IdP gets a 400 it can retry. The
+                # savepoint scopes the rollback to the failing provider,
+                # so completed invalidations for other libraries survive.
+                try:
+                    with db.begin_nested():
+                        credential_manager = provider.credential_manager
+                        patron = credential_manager.lookup_patron_by_identifier(
+                            db, patron_identifier, provider.library_id
+                        )
+
+                        if patron:
+                            credential_manager.invalidate_patron_credentials(
+                                db, patron.id
+                            )
+                            self.log.info(
+                                "Back-channel logout: invalidated credentials for patron "
+                                f"{patron_identifier} in library {provider.library_id}"
+                            )
+                        else:
+                            self.log.warning(
+                                "Back-channel logout: patron not found for identifier "
+                                f"{patron_identifier} in library {provider.library_id}"
+                            )
+
+                    processed = True
+                except SQLAlchemyError:
+                    self.log.exception(
+                        f"Back-channel logout failed for provider {provider.label()} "
+                        f"in library {provider.library_id}"
+                    )
+                    failed = True
+
+        if processed and not failed:
+            return "", 200
+
+        if not claims_by_integration:
+            self.log.error("No OIDC provider could validate the logout token")
+        else:
+            self.log.error("Back-channel logout did not complete successfully")
         return "", 400

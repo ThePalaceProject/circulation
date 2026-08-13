@@ -81,6 +81,20 @@ class TestOIDCAuthenticationManagerInit:
 
         assert manager._secret_key is None
 
+    @pytest.mark.parametrize(
+        "use_pkce",
+        [
+            pytest.param(True, id="pkce-enabled"),
+            pytest.param(False, id="pkce-disabled"),
+        ],
+    )
+    def test_use_pkce_property(self, create_oidc_settings, use_pkce: bool) -> None:
+        """Test that use_pkce reflects the configured settings value."""
+        settings = create_oidc_settings(use_pkce=use_pkce)
+        manager = OIDCAuthenticationManager(settings=settings)
+
+        assert manager.use_pkce is use_pkce
+
 
 class TestOIDCAuthenticationManagerMetadata:
     """Tests for provider metadata loading."""

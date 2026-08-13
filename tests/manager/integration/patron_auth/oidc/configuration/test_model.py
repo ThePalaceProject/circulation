@@ -17,6 +17,7 @@ from palace.manager.integration.patron_auth.oidc.configuration.model import (
     OIDCAuthSettings,
 )
 from palace.manager.util.problem_detail import ProblemDetailException
+from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class TestOIDCAuthSettings:
@@ -602,6 +603,46 @@ class TestOIDCAuthSettings:
         assert "'Extra Data' must be valid JSON" in (
             exc_info.value.problem_detail.detail or ""
         )
+
+    def test_configuration_form_field_order(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        """The admin form must present fields in this exact order.
+
+        Field order is determined by declaration order within the settings
+        class, with the weighted authentication link fields sorted last.
+        This guards against reorderings from refactors of the settings
+        model, including moves of field definitions to module level.
+        """
+        form = OIDCAuthSettings.configuration_form(db.session)
+
+        assert [entry["key"] for entry in form] == [
+            "test_mode",
+            "issuer_url",
+            "issuer",
+            "authorization_endpoint",
+            "token_endpoint",
+            "jwks_uri",
+            "userinfo_endpoint",
+            "end_session_endpoint",
+            "revocation_endpoint",
+            "client_id",
+            "client_secret",
+            "scopes",
+            "patron_id_claim",
+            "patron_id_regular_expression",
+            "session_lifetime",
+            "filter_expression",
+            "extra_data",
+            "use_pkce",
+            "token_endpoint_auth_method",
+            "access_type",
+            "auth_link_display_name",
+            "auth_link_description",
+            "auth_link_logo_url",
+            "auth_link_information_url",
+            "auth_link_privacy_statement_url",
+        ]
 
 
 class TestOIDCAuthLibrarySettings:

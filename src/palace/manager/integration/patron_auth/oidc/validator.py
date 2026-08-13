@@ -3,13 +3,11 @@
 This module provides functionality for validating OIDC ID tokens including:
 - Signature verification using JWKS
 - Claims validation (issuer, audience, expiry, etc.)
-- Patron ID extraction from claims
 """
 
 from __future__ import annotations
 
 import time
-from re import Pattern
 from typing import Any, cast
 
 from joserfc import jwt
@@ -30,10 +28,6 @@ class OIDCTokenSignatureError(OIDCTokenValidationError):
 
 class OIDCTokenClaimsError(OIDCTokenValidationError):
     """Raised when ID token claims validation fails."""
-
-
-class OIDCPatronIDExtractionError(OIDCTokenValidationError):
-    """Raised when patron ID cannot be extracted from claims."""
 
 
 class OIDCTokenValidator(LoggerMixin):
@@ -184,111 +178,3 @@ class OIDCTokenValidator(LoggerMixin):
             raise OIDCTokenClaimsError(f"Invalid ID token claims: {error_msg}")
 
         self.log.debug("ID token claims validated successfully")
-
-    def extract_patron_id(
-        self,
-        claims: dict[str, Any],
-        claim_name: str,
-        regex_pattern: Pattern[str] | None = None,
-    ) -> str:
-        """Extract patron ID from ID token claims.
-
-        :param claims: Decoded ID token claims
-        :param claim_name: Name of claim containing patron ID
-        :param regex_pattern: Optional regex pattern to extract ID from claim value.
-                              Must contain a named group 'patron_id'.
-        :raises OIDCPatronIDExtractionError: If patron ID cannot be extracted
-        :return: Extracted patron ID
-        """
-        # Get claim value
-        claim_value = claims.get(claim_name)
-        if claim_value is None:
-            self.log.error(f"Claim '{claim_name}' not found in ID token")
-            available_claims = ", ".join(claims.keys())
-            raise OIDCPatronIDExtractionError(
-                f"Patron ID claim '{claim_name}' not found in ID token. "
-                f"Available claims: {available_claims}"
-            )
-
-        # Convert to string if needed
-        if not isinstance(claim_value, str):
-            try:
-                claim_value = str(claim_value)
-            except Exception as e:
-                raise OIDCPatronIDExtractionError(
-                    f"Cannot convert claim '{claim_name}' value to string: {claim_value}"
-                ) from e
-
-        # Apply regex if provided
-        if regex_pattern:
-            match = regex_pattern.search(claim_value)
-            if not match:
-                self.log.error(
-                    f"Regex pattern did not match claim value: '{claim_value}'"
-                )
-                raise OIDCPatronIDExtractionError(
-                    f"Patron ID regex pattern did not match claim '{claim_name}' value: '{claim_value}'"
-                )
-
-            try:
-                patron_id = match.group("patron_id")
-            except IndexError:
-                raise OIDCPatronIDExtractionError(
-                    "Regex pattern must contain a named group 'patron_id'"
-                )
-
-            if not patron_id:
-                raise OIDCPatronIDExtractionError(
-                    f"Regex pattern matched but 'patron_id' group is empty"
-                )
-
-            self.log.debug(
-                f"Extracted patron ID '{patron_id}' from claim '{claim_name}' "
-                "using regex pattern"
-            )
-            return patron_id
-
-        # No regex - use full claim value
-        if not claim_value:
-            raise OIDCPatronIDExtractionError(
-                f"Claim '{claim_name}' is empty or whitespace-only"
-            )
-
-        self.log.debug(f"Extracted patron ID '{claim_value}' from claim '{claim_name}'")
-        return claim_value
-
-    def validate_and_extract(
-        self,
-        id_token: str,
-        jwks: dict[str, Any],
-        expected_issuer: str,
-        expected_audience: str,
-        patron_id_claim: str,
-        nonce: str | None = None,
-        patron_id_regex: Pattern[str] | None = None,
-    ) -> tuple[dict[str, Any], str]:
-        """Validate ID token and extract patron ID in one operation.
-
-        Convenience method that combines signature validation, claims validation,
-        and patron ID extraction.
-
-        :param id_token: Raw ID token (JWT)
-        :param jwks: JSON Web Key Set from provider
-        :param expected_issuer: Expected issuer URL
-        :param expected_audience: Expected audience (client_id)
-        :param patron_id_claim: Name of claim containing patron ID
-        :param nonce: Expected nonce value (if used)
-        :param patron_id_regex: Optional regex pattern for patron ID extraction
-        :raises OIDCTokenValidationError: If validation fails
-        :return: Tuple of (claims dict, patron_id)
-        """
-        # Validate signature
-        claims = self.validate_signature(id_token, jwks)
-
-        # Validate claims
-        self.validate_claims(claims, expected_issuer, expected_audience, nonce)
-
-        # Extract patron ID
-        patron_id = self.extract_patron_id(claims, patron_id_claim, patron_id_regex)
-
-        return claims, patron_id
