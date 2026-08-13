@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import pytest
 
 from palace.manager.core.coverage import CoverageFailure
+from palace.manager.integration.license.overdrive.api import OverdriveAPI
 from palace.manager.integration.license.overdrive.coverage import (
     OverdriveBibliographicCoverageProvider,
 )
@@ -14,14 +15,13 @@ from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
 from palace.manager.sqlalchemy.model.resource import Representation
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.overdrive import OverdriveAPIFixture
-from tests.mocks.overdrive import MockOverdriveAPI
 
 
 @dataclass
 class OverdriveBibliographicCoverageProviderFixture:
     overdrive: OverdriveAPIFixture
     provider: OverdriveBibliographicCoverageProvider
-    api: MockOverdriveAPI
+    api: OverdriveAPI
 
 
 @pytest.fixture

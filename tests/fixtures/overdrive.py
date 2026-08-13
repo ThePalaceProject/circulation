@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 import json
-from functools import partial
+from datetime import timedelta
 from typing import Any
 
 import pytest
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
 from palace.manager.api.config import Configuration
-from palace.manager.integration.license.overdrive.api import OverdriveAPI
+from palace.manager.integration.license.overdrive.api import (
+    OverdriveAPI,
+    OverdriveToken,
+)
 from palace.manager.integration.license.overdrive.constants import OverdriveConstants
 from palace.manager.integration.license.overdrive.settings import (
     OverdriveLibrarySettings,
@@ -20,7 +25,6 @@ from palace.manager.sqlalchemy.model.patron import Patron
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import OverdriveFilesFixture
 from tests.fixtures.http import MockAsyncClientFixture, MockHttpClientFixture
-from tests.mocks.overdrive import MockOverdriveAPI
 
 
 class OverdriveAPIFixture:
@@ -46,13 +50,33 @@ class OverdriveAPIFixture:
         )
         self.mock_http = http_client
         self.mock_async_client = async_client
-        self.api = MockOverdriveAPI(db.session, self.collection)
+        self.api = self.create_api(self.collection)
         self.circulation = CirculationApiDispatcher(
             db.session,
             self.library,
             {self.collection.id: self.api},
         )
-        self.create_mock_api = partial(MockOverdriveAPI, db.session)
+
+    @staticmethod
+    def seed_token_caches(api: OverdriveAPI) -> None:
+        """Pre-seed the API's in-memory token caches.
+
+        Almost every test would otherwise trigger a client token request (and
+        a library document fetch for the collection token) as a side effect of
+        its first API call, so seed both caches up front.
+        """
+        api._cached_collection_token = OverdriveToken(
+            "fake collection token", utc_now() + timedelta(hours=1)
+        )
+        api._cached_client_oauth_token = OverdriveToken(
+            "fake client oauth token", utc_now() + timedelta(hours=1)
+        )
+
+    def create_api(self, collection: Collection) -> OverdriveAPI:
+        """Create an OverdriveAPI for the collection with seeded token caches."""
+        api = OverdriveAPI(self.db.session, collection)
+        self.seed_token_caches(api)
+        return api
 
     def error_message(
         self, error_code: str, message: str | None = None, token: str | None = None

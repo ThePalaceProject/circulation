@@ -476,7 +476,7 @@ class TestOverdriveAPI:
         )
 
         # Here's an Overdrive API client for that collection.
-        overdrive_main = overdrive_api_fixture.create_mock_api(main)
+        overdrive_main = overdrive_api_fixture.create_api(main)
 
         # Note the "library" endpoint.
         assert (
@@ -496,7 +496,7 @@ class TestOverdriveAPI:
             settings=db.overdrive_settings(external_account_id="2"),
         )
         child.parent = main
-        overdrive_child = overdrive_api_fixture.create_mock_api(child)
+        overdrive_child = overdrive_api_fixture.create_api(child)
 
         # In URL-space, the "library" endpoint for the Advantage
         # collection is beneath the the parent collection's "library"
