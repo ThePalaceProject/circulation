@@ -33,8 +33,15 @@ from palace.manager.integration.license.overdrive.exception import (
 )
 from palace.manager.integration.license.overdrive.model import (
     BaseOverdriveModel,
+    Checkout,
+    Checkouts,
     ErrorResponse,
+    Format,
+    Hold,
+    Holds,
+    PatronInformation,
     RequestSpec,
+    build_field_request,
 )
 from palace.manager.integration.license.overdrive.settings import OverdriveSettings
 from palace.manager.integration.license.overdrive.util import _make_link_safe
@@ -494,6 +501,7 @@ class OverdrivePatronRequests(BaseOverdriveRequests):
 
     PATRON_INFORMATION_ENDPOINT = "%(patron_host)s/v1/patrons/me"
     CHECKOUTS_ENDPOINT = "%(patron_host)s/v1/patrons/me/checkouts"
+    CHECKOUT_ENDPOINT = "%(patron_host)s/v1/patrons/me/checkouts/%(overdrive_id)s"
     HOLDS_ENDPOINT = "%(patron_host)s/v1/patrons/me/holds"
     HOLD_ENDPOINT = "%(patron_host)s/v1/patrons/me/holds/%(product_id)s"
 
@@ -678,3 +686,78 @@ class OverdrivePatronRequests(BaseOverdriveRequests):
                     response,
                     debug_message=str(e),
                 ) from e
+
+    def get_checkouts(self, token: PatronTokenProvider) -> Checkouts:
+        """All of the patron's current loans."""
+        return self.patron_request(
+            token,
+            RequestSpec.get(self.CHECKOUTS_ENDPOINT),
+            response_type=Checkouts,
+        )
+
+    def get_checkout(self, token: PatronTokenProvider, overdrive_id: str) -> Checkout:
+        """The patron's loan for a single title."""
+        return self.patron_request(
+            token,
+            RequestSpec.get(
+                self.endpoint(self.CHECKOUT_ENDPOINT, overdrive_id=overdrive_id.upper())
+            ),
+            response_type=Checkout,
+        )
+
+    def create_checkout(
+        self, token: PatronTokenProvider, overdrive_id: str
+    ) -> Checkout:
+        """Check a title out to the patron."""
+        return self.patron_request(
+            token,
+            build_field_request(self.CHECKOUTS_ENDPOINT, {"reserveId": overdrive_id}),
+            response_type=Checkout,
+        )
+
+    def get_holds(self, token: PatronTokenProvider) -> Holds:
+        """All of the patron's current holds."""
+        return self.patron_request(
+            token,
+            RequestSpec.get(self.HOLDS_ENDPOINT),
+            response_type=Holds,
+        )
+
+    def create_hold(
+        self,
+        token: PatronTokenProvider,
+        overdrive_id: str,
+        notification_email_address: str | None,
+    ) -> Hold:
+        """Place a hold on a title for the patron.
+
+        :param notification_email_address: Where Overdrive should send the
+            "hold is ready" notice. If None, Overdrive is told to send none.
+        """
+        fields: dict[str, str | bool | int] = {"reserveId": overdrive_id}
+        if notification_email_address:
+            fields["emailAddress"] = notification_email_address
+        else:
+            fields["ignoreHoldEmail"] = True
+        return self.patron_request(
+            token,
+            build_field_request(self.HOLDS_ENDPOINT, fields),
+            response_type=Hold,
+        )
+
+    def delete_hold(self, token: PatronTokenProvider, product_id: str) -> None:
+        """Release the patron's hold on a title."""
+        url = self.endpoint(self.HOLD_ENDPOINT, product_id=product_id)
+        self.patron_request(token, RequestSpec("DELETE", url))
+
+    def get_patron_information(self, token: PatronTokenProvider) -> PatronInformation:
+        """Overdrive's record of the patron, including their notification email."""
+        return self.patron_request(
+            token,
+            RequestSpec.get(self.PATRON_INFORMATION_ENDPOINT),
+            response_type=PatronInformation,
+        )
+
+    def follow_download_link(self, token: PatronTokenProvider, url: str) -> Format:
+        """Follow a format or download link from a loan."""
+        return self.patron_request(token, RequestSpec.get(url), response_type=Format)

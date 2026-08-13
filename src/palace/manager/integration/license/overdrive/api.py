@@ -5,12 +5,11 @@ import json
 from collections.abc import Generator, Iterable
 from functools import partial
 from threading import Lock
-from typing import Any, NamedTuple, Unpack, overload
+from typing import Any, NamedTuple, Unpack
 from urllib.parse import urlsplit
 
 import flask
 from celery.canvas import Signature
-from requests import Response
 from requests.structures import CaseInsensitiveDict
 from sqlalchemy.orm import Session
 
@@ -79,16 +78,11 @@ from palace.manager.integration.license.overdrive.fulfillment import (
 )
 from palace.manager.integration.license.overdrive.model import (
     Availability,
-    BaseOverdriveModel,
     Checkout,
     Checkouts,
     Format,
-    Hold as HoldResponse,
     Holds as HoldsResponse,
     LibraryResponse,
-    PatronInformation,
-    RequestSpec,
-    build_field_request,
 )
 from palace.manager.integration.license.overdrive.representation import (
     OverdriveRepresentationExtractor,
@@ -600,45 +594,6 @@ class OverdriveAPI(
             )
             yield self.run_test(task, self._get_patron_oauth_credential, patron, pin)
 
-    @overload
-    def patron_request(
-        self,
-        patron: Patron,
-        pin: str | None,
-        request: RequestSpec,
-        response_type: None = ...,
-    ) -> Response: ...
-
-    @overload
-    def patron_request[TOverdriveModel: BaseOverdriveModel](
-        self,
-        patron: Patron,
-        pin: str | None,
-        request: RequestSpec,
-        response_type: type[TOverdriveModel] = ...,
-    ) -> TOverdriveModel: ...
-
-    def patron_request[TOverdriveModel: BaseOverdriveModel](
-        self,
-        patron: Patron,
-        pin: str | None,
-        request: RequestSpec,
-        response_type: type[TOverdriveModel] | None = None,
-    ) -> Response | TOverdriveModel:
-        """
-        Make an HTTP request on behalf of a patron to Overdrive's API.
-
-        This request will be made using an OAuth bearer token for the
-        patron that was acquired using the privileged Palace credentials
-        so that the patron can take actions that require extra api
-        permissions.
-        """
-        return self.patron_requests.patron_request(
-            self._patron_token_provider(patron, pin),
-            request,
-            response_type=response_type,
-        )
-
     def _patron_token_provider(
         self, patron: Patron, pin: str | None
     ) -> PatronTokenProvider:
@@ -742,14 +697,8 @@ class OverdriveAPI(
 
         already_checked_out = False
         try:
-            checkout = self.patron_request(
-                patron,
-                pin,
-                build_field_request(
-                    self.patron_requests.CHECKOUTS_ENDPOINT,
-                    {"reserveId": overdrive_id},
-                ),
-                response_type=Checkout,
+            checkout = self.patron_requests.create_checkout(
+                self._patron_token_provider(patron, pin), overdrive_id
             )
         except OverdriveResponseException as e:
             code = e.error_message
@@ -808,8 +757,9 @@ class OverdriveAPI(
                 do_early_return = not already_checked_out and existing_hold is None
 
                 if do_early_return:
-                    self.patron_request(
-                        patron, pin, checkout.build_action_request("early_return")
+                    self.patron_requests.patron_request(
+                        self._patron_token_provider(patron, pin),
+                        checkout.build_action_request("early_return"),
                     )
 
                 # If this was a hold, we remove the hold record from the database before
@@ -855,7 +805,10 @@ class OverdriveAPI(
         # First we get the loan for this patron.
         try:
             loan = self.get_loan(patron, pin, licensepool.identifier.identifier)
-            self.patron_request(patron, pin, loan.build_action_request("early_return"))
+            self.patron_requests.patron_request(
+                self._patron_token_provider(patron, pin),
+                loan.build_action_request("early_return"),
+            )
         except NoActiveLoan:
             # The loan is already gone, no need to return it. This exception gets
             # handled higher up the stack.
@@ -879,9 +832,8 @@ class OverdriveAPI(
         :param overdrive_id: The OverDrive identifier for an item.
         :return: Information about the loan.
         """
-        url = f"{self.patron_requests.CHECKOUTS_ENDPOINT}/{overdrive_id.upper()}"
-        return self.patron_request(
-            patron, pin, RequestSpec.get(url), response_type=Checkout
+        return self.patron_requests.get_checkout(
+            self._patron_token_provider(patron, pin), overdrive_id
         )
 
     def fulfill(
@@ -920,8 +872,8 @@ class OverdriveAPI(
             errorpageurl=self.DEFAULT_ERROR_URL,
             odreadauthurl=fulfill_url,
         )
-        download_response = self.patron_request(
-            patron, pin, RequestSpec.get(download_link), response_type=Format
+        download_response = self.patron_requests.follow_download_link(
+            self._patron_token_provider(patron, pin), download_link
         )
         result = download_response.links["contentlink"]
         url = result.href
@@ -1004,9 +956,8 @@ class OverdriveAPI(
         self, patron: Patron, pin: str | None, format_type: str, loan: Checkout
     ) -> Format:
         try:
-            format_data = self.patron_request(
-                patron,
-                pin,
+            format_data = self.patron_requests.patron_request(
+                self._patron_token_provider(patron, pin),
                 loan.build_action_request("format", format_type=format_type),
                 response_type=Format,
             )
@@ -1028,20 +979,12 @@ class OverdriveAPI(
         :param pin: An optional PIN/password for the patron.
         :return: Information about the patron's loans.
         """
-        return self.patron_request(
-            patron,
-            pin,
-            RequestSpec.get(self.patron_requests.CHECKOUTS_ENDPOINT),
-            response_type=Checkouts,
+        return self.patron_requests.get_checkouts(
+            self._patron_token_provider(patron, pin)
         )
 
     def get_patron_holds(self, patron: Patron, pin: str | None) -> HoldsResponse:
-        return self.patron_request(
-            patron,
-            pin,
-            RequestSpec.get(self.patron_requests.HOLDS_ENDPOINT),
-            response_type=HoldsResponse,
-        )
+        return self.patron_requests.get_holds(self._patron_token_provider(patron, pin))
 
     def patron_activity(
         self, patron: Patron, pin: str | None
@@ -1204,11 +1147,8 @@ class OverdriveAPI(
         # preferred email address for notifications.
         address = None
         try:
-            patron_information = self.patron_request(
-                patron,
-                pin,
-                RequestSpec.get(self.patron_requests.PATRON_INFORMATION_ENDPOINT),
-                response_type=PatronInformation,
+            patron_information = self.patron_requests.get_patron_information(
+                self._patron_token_provider(patron, pin)
             )
             address = patron_information.last_hold_email
 
@@ -1244,18 +1184,12 @@ class OverdriveAPI(
                 patron, pin
             )
         overdrive_id = licensepool.identifier.identifier
-        form_fields: dict[str, Any] = dict(reserveId=overdrive_id)
-        if notification_email_address:
-            form_fields["emailAddress"] = notification_email_address
-        else:
-            form_fields["ignoreHoldEmail"] = True
 
         try:
-            hold = self.patron_request(
-                patron,
-                pin,
-                build_field_request(self.patron_requests.HOLDS_ENDPOINT, form_fields),
-                response_type=HoldResponse,
+            hold = self.patron_requests.create_hold(
+                self._patron_token_provider(patron, pin),
+                overdrive_id,
+                notification_email_address,
             )
         except OverdriveResponseException as e:
             raise CannotHold(e.error_code) from e
@@ -1274,12 +1208,11 @@ class OverdriveAPI(
             with Overdrive, or Overdrive refuses to release the hold for
             any reason.
         """
-        url = self.patron_requests.endpoint(
-            self.patron_requests.HOLD_ENDPOINT,
-            product_id=licensepool.identifier.identifier,
-        )
         try:
-            self.patron_request(patron, pin, RequestSpec("DELETE", url))
+            self.patron_requests.delete_hold(
+                self._patron_token_provider(patron, pin),
+                licensepool.identifier.identifier,
+            )
         except OverdriveResponseException as e:
             response = e.response
             if (

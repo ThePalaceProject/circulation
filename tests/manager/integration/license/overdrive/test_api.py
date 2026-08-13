@@ -1772,7 +1772,10 @@ class TestOverdriveAPI:
         # ...and the retry succeeds.
         http.queue_response(200, content="at last, the content")
 
-        response = api.patron_request(patron, "pin", RequestSpec.get(db.fresh_url()))
+        response = api.patron_requests.patron_request(
+            api._patron_token_provider(patron, "pin"),
+            RequestSpec.get(db.fresh_url()),
+        )
 
         assert response.text == "at last, the content"
         assert (
