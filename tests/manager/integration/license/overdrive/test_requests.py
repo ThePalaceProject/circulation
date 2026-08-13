@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import timedelta
+from unittest.mock import patch
 
 import pytest
 from freezegun import freeze_time
@@ -21,14 +22,17 @@ from palace.manager.integration.license.overdrive.exception import (
 )
 from palace.manager.integration.license.overdrive.model import Checkout
 from palace.manager.integration.license.overdrive.requests import (
+    BookInfoEndpoint,
     OverdriveClientRequests,
     OverdrivePatronRequests,
 )
 from palace.manager.util import base64
 from palace.manager.util.http.exception import BadResponseException
 from tests.fixtures.files import OverdriveFilesFixture
+from tests.fixtures.http import MockAsyncClientFixture
 from tests.fixtures.webserver import MockAPIServer, MockAPIServerResponse
 from tests.manager.integration.license.overdrive.conftest import (
+    OverdriveAsyncRequestsFixture,
     OverdriveClientRequestsFixture,
     OverdrivePatronRequestsFixture,
 )
@@ -650,3 +654,145 @@ class TestOverdrivePatronRequests:
         )
 
         assert client.requests_methods[0].upper() == expected
+
+
+class TestOverdriveAsyncRequests:
+    """The async book-info fetching path used by the import workers."""
+
+    async def test_fetch_book_info_list(
+        self,
+        overdrive_async_requests: OverdriveAsyncRequestsFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
+        async_http_client: MockAsyncClientFixture,
+    ) -> None:
+        async_http_client.queue_response(
+            200,
+            content=overdrive_files_fixture.sample_data(
+                "overdrive_book_list_with_next_link.json"
+            ),
+        )
+        async_http_client.queue_response(
+            200,
+            content=overdrive_files_fixture.sample_data(
+                "overdrive_availability_information.json"
+            ),
+        )
+        async_http_client.queue_response(
+            200,
+            content=overdrive_files_fixture.sample_data(
+                "bibliographic_information_book_list_test.json"
+            ),
+        )
+
+        book_info_list, next_endpoint = (
+            await overdrive_async_requests.requests.fetch_book_info_list(
+                BookInfoEndpoint(url="/books"),
+                fetch_metadata=True,
+                fetch_availability=True,
+            )
+        )
+        assert next_endpoint
+        assert len(book_info_list) == 1
+        assert book_info_list[0]["metadata"]
+        assert book_info_list[0]["availabilityV2"]
+
+    async def test_fetch_book_info_list_retry_and_unrecoverable_error(
+        self,
+        overdrive_async_requests: OverdriveAsyncRequestsFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
+        async_http_client: MockAsyncClientFixture,
+    ) -> None:
+        # test recovery after failure with book list page
+        async_http_client.queue_response(502, content="error")
+        async_http_client.queue_response(
+            200,
+            content=overdrive_files_fixture.sample_data(
+                "overdrive_book_list_with_next_link.json"
+            ),
+        )
+
+        # test retry and failure with metadata and availability
+        for _ in range(8):
+            # error for 4 attempts for availability and metadata
+            async_http_client.queue_response(500, content="500 Internal Server Error")
+
+        # use no backoff since we want the tests to execute quickly
+        with patch(
+            "palace.manager.integration.license.overdrive.requests.WORKER_DEFAULT_BACKOFF",
+            None,
+        ):
+            with pytest.raises(BadResponseException) as e:
+                await overdrive_async_requests.requests.fetch_book_info_list(
+                    BookInfoEndpoint(url="/books"),
+                    fetch_metadata=True,
+                    fetch_availability=True,
+                )
+
+            assert e.value.response.status_code == 500
+
+    async def test_fetch_book_info_list_with_404_error(
+        self,
+        overdrive_async_requests: OverdriveAsyncRequestsFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
+        async_http_client: MockAsyncClientFixture,
+    ) -> None:
+        async_http_client.queue_response(
+            200,
+            content=overdrive_files_fixture.sample_data(
+                "overdrive_book_list_with_next_link.json"
+            ),
+        )
+
+        # A 404 on the metadata or availability link is tolerated: those
+        # relations may not exist for a given identifier.
+        for _ in range(2):
+            async_http_client.queue_response(404, content="Not Found")
+
+        data, next_endpoint = (
+            await overdrive_async_requests.requests.fetch_book_info_list(
+                BookInfoEndpoint(url="/books"),
+                fetch_metadata=True,
+                fetch_availability=True,
+            )
+        )
+        assert next_endpoint
+        assert len(data) == 1
+        assert "metadata" not in data[0]
+        assert "availabilityV2" not in data[0]
+
+    async def test_fetch_book_info_list_missing_products_key(
+        self,
+        overdrive_async_requests: OverdriveAsyncRequestsFixture,
+        async_http_client: MockAsyncClientFixture,
+    ) -> None:
+        """When the Overdrive API returns a response without a 'products' key
+        and a non-empty collection, a BadResponseException is raised so the
+        Celery task can retry."""
+        # totalItems is non-zero, so the missing 'products' key is a genuinely
+        # malformed response rather than an empty collection.
+        async_http_client.queue_response(200, content={"totalItems": 5})
+
+        with pytest.raises(BadResponseException, match="missing 'products' key"):
+            await overdrive_async_requests.requests.fetch_book_info_list(
+                BookInfoEndpoint(url="/books")
+            )
+
+    async def test_fetch_book_info_list_empty_collection(
+        self,
+        overdrive_async_requests: OverdriveAsyncRequestsFixture,
+        async_http_client: MockAsyncClientFixture,
+    ) -> None:
+        """Overdrive omits the 'products' key for an empty collection
+        (totalItems == 0). This is not an error: we return an empty page."""
+        async_http_client.queue_response(
+            200, content={"totalItems": 0, "limit": 100, "offset": 0}
+        )
+
+        book_info_list, next_endpoint = (
+            await overdrive_async_requests.requests.fetch_book_info_list(
+                BookInfoEndpoint(url="/books")
+            )
+        )
+
+        assert book_info_list == []
+        assert next_endpoint is None

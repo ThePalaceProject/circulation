@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import asyncio
 import datetime
 import json
 from collections.abc import Generator, Iterable
-from dataclasses import dataclass
 from functools import partial
 from threading import Lock
 from typing import Any, NamedTuple, Unpack, overload
@@ -96,6 +94,8 @@ from palace.manager.integration.license.overdrive.representation import (
     OverdriveRepresentationExtractor,
 )
 from palace.manager.integration.license.overdrive.requests import (
+    BookInfoEndpoint,
+    OverdriveAsyncRequests,
     OverdriveClientRequests,
     OverdrivePatronRequests,
     PatronTokenProvider,
@@ -122,18 +122,11 @@ from palace.manager.sqlalchemy.model.licensing import (
 from palace.manager.sqlalchemy.model.patron import Hold, Patron
 from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.sqlalchemy.util import get_one
-from palace.manager.util.http.async_http import WORKER_DEFAULT_BACKOFF, AsyncClient
-from palace.manager.util.http.exception import BadResponseException
 
 
 class OverdriveToken(NamedTuple):
     token: str
     expires: datetime.datetime
-
-
-@dataclass
-class BookInfoEndpoint:
-    url: str
 
 
 class OverdriveAPI(
@@ -283,6 +276,9 @@ class OverdriveAPI(
             OverdrivePatronRequests(self._settings)
             if patron_requests is None
             else patron_requests
+        )
+        self.async_requests = OverdriveAsyncRequests(
+            self._settings, self.client_requests
         )
 
         # In-memory cache for the collectionToken extracted from the library
@@ -507,119 +503,6 @@ class OverdriveAPI(
         endpoint: str = _make_link_safe(book_info_initial_endpoint)
 
         return BookInfoEndpoint(endpoint)
-
-    async def fetch_book_info_list(
-        self,
-        endpoint: BookInfoEndpoint,
-        fetch_metadata: bool = False,
-        fetch_availability: bool = False,
-        extractor_class: type[OverdriveRepresentationExtractor] | None = None,
-    ) -> tuple[list[dict[str, Any]], BookInfoEndpoint | None]:
-        """
-        This method is used to fetch a "page" of book data. Users can optionally fetch metadata and availability info
-        by using the fetch_metadata and fetch_availability parameters. Internally, an async http client is used to
-        parallelize the retrieval of the metadata and availability.  A list of book data is returned which can be
-        parsed or converted according to the needs of the client.  Additionally, we return the link to the next page
-        of book data. In this way, "page" retrievals are accelerated while allowing the client to retrieve chunks
-        in a deterministic and therefore retriable manner.
-        """
-        base_url = self.endpoint(self.client_requests.HOST_ENDPOINT_BASE)
-        async with self._create_configured_async_client(base_url=base_url) as client:
-            books: dict[str, Any] = {}
-            extractor_class = extractor_class or OverdriveRepresentationExtractor
-            req = client.get(endpoint.url)
-            response = await req
-            data = response.json()
-            next_url = extractor_class.link(data, self.NEXT_REL)
-            next_endpoint: BookInfoEndpoint | None = (
-                BookInfoEndpoint(next_url) if next_url else None
-            )
-            async_task_list = list()
-            response_products = data.get("products")
-            if response_products is None:
-                # Overdrive omits the 'products' key entirely when a collection
-                # (or page) contains no titles. In that case 'totalItems' is 0
-                # and there is simply nothing to import, so we treat it as an
-                # empty page rather than an error.
-                if data.get("totalItems") == 0:
-                    return [], next_endpoint
-
-                self.log.warning(
-                    f"Overdrive response missing 'products' key for endpoint {endpoint.url}.",
-                    extra={
-                        "palace_response_data": data,
-                        "palace_response_status_code": response.status_code,
-                    },
-                )
-                raise BadResponseException(
-                    endpoint.url,
-                    f"Overdrive response missing 'products' key. Response data: {data}",
-                    response,
-                )
-            for product in response_products:
-                identifier = product["id"].lower()
-                books[identifier] = product
-                if fetch_metadata:
-                    async_task_list.append(
-                        self._get_metadata_async(base_url, product, client)
-                    )
-
-                if fetch_availability:
-                    async_task_list.append(
-                        self._get_availability_async(
-                            base_url,
-                            product,
-                            client,
-                        )
-                    )
-
-            await asyncio.gather(*async_task_list)
-
-            return list(books.values()), next_endpoint
-
-    async def _get_availability_async(
-        self, base_url: str, book_info: dict[str, Any], client: AsyncClient
-    ) -> None:
-        url = book_info["links"]["availabilityV2"]["href"].removeprefix(base_url)
-        data = await self._get_product_relation(client, url)
-        if data:
-            book_info["availabilityV2"] = data
-
-    async def _get_metadata_async(
-        self, base_url: str, book_info: dict[str, Any], client: AsyncClient
-    ) -> None:
-        url = book_info["links"]["metadata"]["href"].removeprefix(base_url)
-        data = await self._get_product_relation(client, url)
-        if data:
-            book_info["metadata"] = data
-
-    async def _get_product_relation(
-        self, client: AsyncClient, url: str
-    ) -> dict[str, Any] | None:
-        req = client.get(url)
-        response = await req
-        # We allow a 404 response code for availability or metadata since those links may not exist for a given
-        # identifier.
-        if response.status_code == 404:
-            self.log.warning(
-                f"The following URL unexpectedly returned a 404: {url}. "
-                f'Response text: "{response.text}" -> Skipping...'
-            )
-            return None
-        else:
-            data: dict[str, Any] = response.json()
-            return data
-
-    def _create_configured_async_client(
-        self,
-        base_url: str,
-    ) -> AsyncClient:
-        return AsyncClient.for_worker(
-            base_url=base_url,
-            headers=self.client_requests.auth_headers(),
-            allowed_response_codes=[200, 404],
-            backoff=WORKER_DEFAULT_BACKOFF,
-        )
 
     def recently_changed_ids(
         self, start: datetime.datetime, cutoff: datetime.datetime | None

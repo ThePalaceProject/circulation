@@ -15,14 +15,12 @@ from palace.manager.celery.tasks.apply import (
 )
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.data_layer.policy.replacement import ReplacementPolicy
-from palace.manager.integration.license.overdrive.api import (
-    BookInfoEndpoint,
-    OverdriveAPI,
-)
+from palace.manager.integration.license.overdrive.api import OverdriveAPI
 from palace.manager.integration.license.overdrive.model import Availability
 from palace.manager.integration.license.overdrive.representation import (
     OverdriveRepresentationExtractor,
 )
+from palace.manager.integration.license.overdrive.requests import BookInfoEndpoint
 from palace.manager.service.integration_registry.license_providers import (
     LicenseProvidersRegistry,
 )
@@ -258,7 +256,7 @@ class OverdriveImporter(LoggerMixin):
         # much by trying to fetch it lazily.
         fetch_metadata = self._parent_identifiers is None
         book_data, next_endpoint = asyncio.run(
-            self._api.fetch_book_info_list(
+            self._api.async_requests.fetch_book_info_list(
                 endpoint,
                 fetch_metadata=fetch_metadata,
                 fetch_availability=True,

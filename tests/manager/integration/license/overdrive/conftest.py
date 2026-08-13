@@ -6,8 +6,10 @@ from functools import partial
 import pytest
 
 from palace.manager.api.config import Configuration
+from palace.manager.api.model.token import OAuthTokenResponse
 from palace.manager.integration.license.overdrive.constants import OverdriveConstants
 from palace.manager.integration.license.overdrive.requests import (
+    OverdriveAsyncRequests,
     OverdriveClientRequests,
     OverdrivePatronRequests,
 )
@@ -41,6 +43,36 @@ def overdrive_client_requests(
     http_client: MockHttpClientFixture,
 ) -> OverdriveClientRequestsFixture:
     return OverdriveClientRequestsFixture(http_client)
+
+
+class OverdriveAsyncRequestsFixture:
+    """An OverdriveAsyncRequests and the client context it takes its token from."""
+
+    def __init__(self, http_client: MockHttpClientFixture) -> None:
+        self.client = http_client
+        self.create_settings = partial(
+            OverdriveSettings,
+            external_account_id="library_id",
+            overdrive_website_id="website_id",
+            overdrive_client_key="client_key",
+            overdrive_client_secret="client_secret",
+            overdrive_server_nickname=OverdriveConstants.TESTING_SERVERS,
+        )
+        self.settings = self.create_settings()
+        self.client_requests = OverdriveClientRequests(self.settings)
+        # The async client builds its Authorization header up front, so seed a
+        # token rather than making every test queue a token response.
+        self.client_requests._cached_token = OAuthTokenResponse(
+            access_token="token", token_type="Bearer", expires_in=3600
+        )
+        self.requests = OverdriveAsyncRequests(self.settings, self.client_requests)
+
+
+@pytest.fixture
+def overdrive_async_requests(
+    http_client: MockHttpClientFixture,
+) -> OverdriveAsyncRequestsFixture:
+    return OverdriveAsyncRequestsFixture(http_client)
 
 
 class OverdrivePatronRequestsFixture:

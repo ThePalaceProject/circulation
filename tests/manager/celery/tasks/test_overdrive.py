@@ -16,14 +16,12 @@ from palace.manager.celery.importer import import_workflow_lock, reap_workflow_l
 from palace.manager.celery.tasks import overdrive
 from palace.manager.celery.tasks.overdrive import import_collection_group
 from palace.manager.data_layer.identifier import IdentifierData
-from palace.manager.integration.license.overdrive.api import (
-    BookInfoEndpoint,
-    OverdriveAPI,
-)
+from palace.manager.integration.license.overdrive.api import OverdriveAPI
 from palace.manager.integration.license.overdrive.importer import (
     FeedImportResult,
     OverdriveImporter,
 )
+from palace.manager.integration.license.overdrive.requests import BookInfoEndpoint
 from palace.manager.service.redis.models.set import IdentifierSet
 from palace.manager.sqlalchemy.constants import IdentifierType
 from palace.manager.sqlalchemy.model.collection import Collection
