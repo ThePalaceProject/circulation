@@ -37,6 +37,12 @@ class OverdriveClientRequestsFixture:
         self.settings = self.create_settings()
         self.requests = OverdriveClientRequests(self.settings)
 
+    def seed_token(self, access_token: str = "token") -> None:
+        """Put a token in the cache, so no request has to fetch one."""
+        self.requests.token_cache.token = OAuthTokenResponse(
+            access_token=access_token, token_type="Bearer", expires_in=3600
+        )
+
     def queue_access_token_response(self, credential: str = "token") -> None:
         token = dict(access_token=credential, token_type="bearer", expires_in=3600)
         self.client.queue_response(200, content=json.dumps(token))

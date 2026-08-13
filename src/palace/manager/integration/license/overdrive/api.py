@@ -9,7 +9,6 @@ from urllib.parse import urlsplit
 
 import flask
 from celery.canvas import Signature
-from requests.structures import CaseInsensitiveDict
 from sqlalchemy.orm import Session
 
 from palace.util.datetime_helpers import utc_now
@@ -99,7 +98,6 @@ from palace.manager.integration.license.overdrive.settings import (
     OverdriveLibrarySettings,
     OverdriveSettings,
 )
-from palace.manager.integration.license.overdrive.util import _make_link_safe
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.credential import Credential
@@ -163,8 +161,6 @@ class OverdriveAPI(
     # TODO: This is a terrible choice but this URL should never be
     # displayed to a patron, so it doesn't matter much.
     DEFAULT_ERROR_URL = "http://thepalaceproject.org/"
-
-    MAX_CREDENTIAL_AGE = 50 * 60
 
     PAGE_SIZE_LIMIT = 300
     EVENT_SOURCE = "Overdrive"
@@ -370,14 +366,6 @@ class OverdriveAPI(
             # documents, we should look for the constant main account id.
             return OVERDRIVE_MAIN_ACCOUNT_ID
         return int(self._library_id)
-
-    def get(
-        self,
-        url: str,
-        extra_headers: dict[str, str] | None = None,
-    ) -> tuple[int, CaseInsensitiveDict[str], bytes]:
-        """Make an HTTP GET request using the active Bearer Token."""
-        return self.client_requests.raw_get(url, extra_headers)
 
     @staticmethod
     def _update_credential(credential: Credential, token: OAuthTokenResponse) -> None:
@@ -1196,23 +1184,21 @@ class OverdriveAPI(
                 return
             raise CannotReleaseHold(e.error_code, debug_info=response.text) from e
 
-    def circulation_lookup(
-        self, book: str | dict[str, str]
-    ) -> tuple[dict[str, Any], tuple[int, CaseInsensitiveDict[str], bytes]]:
+    def _availability_url(self, book: str | dict[str, Any]) -> tuple[str, str]:
+        """Resolve a book to its Overdrive ID and availability URL.
+
+        :param book: Either an Overdrive ID, or an entry from a book list,
+            which carries its own availability link.
+        :return: A 2-tuple of (Overdrive ID, availability URL).
+        """
         if isinstance(book, str):
-            book_id = book
-            circulation_link = self.endpoint(
-                self.client_requests.AVAILABILITY_ENDPOINT,
-                collection_token=self.collection_token,
-                product_id=book_id,
+            return book, self.client_requests.availability_url(
+                self.collection_token, book
             )
-            book = dict(id=book_id)
-        else:
-            circulation_link = book["availability_link"]
-            # Make sure we use v2 of the availability API,
-            # even if Overdrive gave us a link to v1.
-            circulation_link = _make_link_safe(circulation_link)
-        return book, self.get(circulation_link, {})
+
+        book_id = book.get("id")
+        assert book_id is not None, f"Book dict missing required 'id' key: {book}"
+        return book_id, book["availability_link"]
 
     def update_formats(self, licensepool: LicensePool) -> None:
         """Update the format information for a single book.
@@ -1247,36 +1233,20 @@ class OverdriveAPI(
         ensured for the Overdrive Identifier, and a Work will be
         created for the LicensePool and set as presentation-ready.
         """
-        # Retrieve current circulation information about this book
-        try:
-            book, (status_code, headers, content) = self.circulation_lookup(book_id)
-        except Exception as e:
-            status_code = None
-            self.log.error("HTTP exception communicating with Overdrive", exc_info=e)
-
         # TODO: If you ask for a book that you know about, and
         # Overdrive says the book doesn't exist in the collection,
         # then it's appropriate to update an existing
         # LicensePool. However we shouldn't be creating a *brand new*
         # LicensePool for a book Overdrive says isn't in the
         # collection.
-        if status_code not in (200, 404):
+        resolved_book_id, url = self._availability_url(book_id)
+        try:
+            availability = self.client_requests.availability(url)
+        except Exception as e:
             self.log.error(
-                "Could not get availability for %s: status code %s",
-                book_id,
-                status_code,
+                "Could not get availability for %s", resolved_book_id, exc_info=e
             )
             return None, None, False
-
-        availability = Availability.model_validate_json(content)
-
-        # Use the caller-provided ID for LicensePool lookup. This is always
-        # set because circulation_lookup creates dict(id=book_id) when called
-        # with a string, and book-list dicts always include "id".
-        resolved_book_id = book.get("id")
-        assert (
-            resolved_book_id is not None
-        ), f"Book dict missing required 'id' key: {book}"
 
         license_pool, is_new = LicensePool.for_foreign_id(
             self._db,

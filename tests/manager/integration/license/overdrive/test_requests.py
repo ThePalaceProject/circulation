@@ -23,6 +23,8 @@ from palace.manager.integration.license.overdrive.exception import (
     OverdriveValidationError,
 )
 from palace.manager.integration.license.overdrive.model import (
+    Availability,
+    BookListPage,
     Checkout,
     Checkouts,
     Format,
@@ -376,6 +378,105 @@ class TestOverdriveClientRequests:
         assert "lastUpdateTime=2020-01-01T12%3A00%3A00Z" in events
         assert "limit=300" in events
 
+    def test_availability(
+        self,
+        overdrive_client_requests: OverdriveClientRequestsFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
+    ) -> None:
+        overdrive_client_requests.seed_token()
+        client = overdrive_client_requests.client
+        client.queue_response(
+            200,
+            content=overdrive_files_fixture.sample_data(
+                "overdrive_availability_information.json"
+            ),
+        )
+
+        availability = overdrive_client_requests.requests.availability(
+            "https://api.overdrive.com/v2/collections/x/products/y/availability"
+        )
+
+        assert isinstance(availability, Availability)
+        assert availability.copies_owned == 5
+
+    def test_availability_upgrades_v1_link(
+        self,
+        overdrive_client_requests: OverdriveClientRequestsFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
+    ) -> None:
+        overdrive_client_requests.seed_token()
+        # A v1 availability link is rewritten to v2 before the request.
+        client = overdrive_client_requests.client
+        client.queue_response(
+            200,
+            content=overdrive_files_fixture.sample_data(
+                "overdrive_availability_information.json"
+            ),
+        )
+
+        overdrive_client_requests.requests.availability(
+            "https://api.overdrive.com/v1/collections/x/products/y/availability"
+        )
+
+        assert client.requests == [
+            "https://api.overdrive.com/v2/collections/x/products/y/availability"
+        ]
+
+    def test_availability_not_found_is_parsed(
+        self,
+        overdrive_client_requests: OverdriveClientRequestsFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
+    ) -> None:
+        overdrive_client_requests.seed_token()
+        # A title Overdrive no longer has is a 404 whose body is still an
+        # availability document. That is a meaningful answer, not an error.
+        client = overdrive_client_requests.client
+        client.queue_response(
+            404,
+            content=overdrive_files_fixture.sample_data(
+                "overdrive_availability_not_found.json"
+            ),
+        )
+
+        availability = overdrive_client_requests.requests.availability(
+            "https://api.overdrive.com/v2/collections/x/products/y/availability"
+        )
+
+        assert availability.error_code == "NotFound"
+        assert availability.copies_owned is None
+
+    def test_availability_other_error_raises(
+        self, overdrive_client_requests: OverdriveClientRequestsFixture
+    ) -> None:
+        overdrive_client_requests.seed_token()
+        overdrive_client_requests.client.queue_response(500, content="server error")
+
+        with pytest.raises(BadResponseException):
+            overdrive_client_requests.requests.availability(
+                "https://api.overdrive.com/v2/collections/x/products/y/availability"
+            )
+
+    def test_book_list_page(
+        self,
+        overdrive_client_requests: OverdriveClientRequestsFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
+    ) -> None:
+        overdrive_client_requests.seed_token()
+        client = overdrive_client_requests.client
+        client.queue_response(
+            200,
+            content=overdrive_files_fixture.sample_data("overdrive_book_list.json"),
+        )
+
+        page = overdrive_client_requests.requests.book_list_page(
+            "http://example.com/products"
+        )
+
+        assert isinstance(page, BookListPage)
+        assert page.products is not None
+        assert len(page.products) == 3
+        assert client.requests == ["http://example.com/products"]
+
     def test_metadata(
         self,
         overdrive_client_requests: OverdriveClientRequestsFixture,
@@ -393,6 +494,7 @@ class TestOverdriveClientRequests:
 
         assert isinstance(response, MetadataResponse)
         assert response.error_code is None
+        assert response.raw["title"] == "Agile Documentation"
         assert overdrive_client_requests.client.requests[-1].endswith(
             "/v1/collections/a-collection-token/products/an-item-id/metadata"
         )
@@ -462,8 +564,20 @@ class TestOverdriveClientRequests:
 
         assert excinfo.value.problem_detail.debug_message is not None
 
+    def test_availability_url(
+        self, overdrive_client_requests: OverdriveClientRequestsFixture
+    ) -> None:
+        overdrive_client_requests.seed_token()
+        url = overdrive_client_requests.requests.availability_url(
+            "collection-token", "an-identifier"
+        )
+        # Availability always uses v2 of the API.
+        assert "/v2/collections/collection-token/products" in url
+        assert url.endswith("/an-identifier/availability")
+
 
 class TestOverdrivePatronRequests:
+
     def test_refresh_patron_oauth_token(
         self, overdrive_patron_requests: OverdrivePatronRequestsFixture
     ) -> None:

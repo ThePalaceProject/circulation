@@ -35,6 +35,7 @@ from palace.manager.integration.license.overdrive.exception import (
     OverdriveValidationError,
 )
 from palace.manager.integration.license.overdrive.model import (
+    Availability,
     BaseOverdriveModel,
     BookListPage,
     Checkout,
@@ -444,34 +445,31 @@ class OverdriveClientRequests(ClientCredentialsRequests):
             )
             return self._store_token(response)
 
-    def raw_get(
+    def _get_with_token(
         self,
         url: str,
         extra_headers: dict[str, str] | None = None,
+        allowed_response_codes: list[str] | None = None,
         exception_on_401: bool = False,
-    ) -> tuple[int, CaseInsensitiveDict[str], bytes]:
+    ) -> Response:
         """Make an HTTP GET request using the active Bearer Token.
 
-        Returns the raw ``(status code, headers, content)`` tuple. This shape
-        is do_get-compatible, so this method can be passed to
-        ``Representation.get`` as its fetch callable.
-
         A 401 response triggers a single token refresh and retry; a second
-        401 raises :class:`BadResponseException`. A 404 is returned to the
-        caller rather than raised.
+        401 raises :class:`BadResponseException`. Any status outside
+        ``allowed_response_codes`` is raised by the HTTP layer.
         """
         request_headers = self._auth_headers(self._client_oauth_token)
         if extra_headers:
             request_headers.update(extra_headers)
 
+        # 401 is always allowed through so that we can refresh the token
+        # and retry rather than failing the request outright.
+        allowed = list(allowed_response_codes or ["2xx", "3xx", "404"]) + ["401"]
         response: Response = self._do_get(
-            url, request_headers, allowed_response_codes=["2xx", "3xx", "401", "404"]
+            url, request_headers, allowed_response_codes=allowed
         )
-        status_code = response.status_code
-        headers = response.headers
-        content = response.content
 
-        if status_code == 401:
+        if response.status_code == 401:
             if exception_on_401:
                 # This is our second try. Give up.
                 raise BadResponseException(
@@ -479,12 +477,27 @@ class OverdriveClientRequests(ClientCredentialsRequests):
                     "Something's wrong with the Overdrive OAuth Bearer Token!",
                     response,
                 )
-            else:
-                # Force a refresh of the token and try again.
-                self.refresh_client_oauth_token()
-                return self.raw_get(url, extra_headers, True)
-        else:
-            return status_code, headers, content
+            # Force a refresh of the token and try again.
+            self.refresh_client_oauth_token()
+            return self._get_with_token(
+                url, extra_headers, allowed_response_codes, exception_on_401=True
+            )
+
+        return response
+
+    def raw_get(
+        self,
+        url: str,
+        extra_headers: dict[str, str] | None = None,
+    ) -> tuple[int, CaseInsensitiveDict[str], bytes]:
+        """Make an HTTP GET request, returning the raw response parts.
+
+        This ``(status code, headers, content)`` shape is do_get-compatible,
+        so this method can be passed to ``Representation.get`` as its fetch
+        callable.
+        """
+        response = self._get_with_token(url, extra_headers)
+        return response.status_code, response.headers, response.content
 
     def all_products_url(self, collection_token: str) -> str:
         """The URL of the collection's product feed, newest titles first."""
@@ -513,6 +526,32 @@ class OverdriveClientRequests(ClientCredentialsRequests):
             )
         )
 
+    def availability_url(self, collection_token: str, product_id: str) -> str:
+        """The URL of a title's availability document."""
+        return self.endpoint(
+            self.AVAILABILITY_ENDPOINT,
+            collection_token=collection_token,
+            product_id=product_id,
+        )
+
+    def availability(self, url: str) -> Availability:
+        """Fetch a title's availability document.
+
+        A title Overdrive no longer has is reported as a 404 whose body is
+        still an availability document, describing zero copies. That is a
+        meaningful answer rather than an error, so it is parsed and returned
+        like any other.
+
+        :raises BadResponseException: If Overdrive returns any other
+            non-success status.
+        """
+        # Make sure we use v2 of the availability API, even if we were
+        # given a link to v1.
+        response = self._get_with_token(
+            _make_link_safe(url), allowed_response_codes=["2xx", "404"]
+        )
+        return Availability.model_validate_json(response.content)
+
     def metadata(self, collection_token: str, item_id: str) -> MetadataResponse:
         """Look up a title's metadata.
 
@@ -528,9 +567,14 @@ class OverdriveClientRequests(ClientCredentialsRequests):
             collection_token=collection_token,
             item_id=item_id,
         )
-        status_code, headers, content = self.raw_get(url)
+        response = self._get_with_token(url)
         return self._validate_body(
-            MetadataResponse, "metadata", status_code, url, headers, content
+            MetadataResponse,
+            "metadata",
+            response.status_code,
+            url,
+            response.headers,
+            response.content,
         )
 
     def book_list_page(self, url: str) -> BookListPage:
@@ -541,8 +585,10 @@ class OverdriveClientRequests(ClientCredentialsRequests):
         :raises BadResponseException: If Overdrive refused the request.
         :raises OverdriveValidationError: If the page is not a shape we know.
         """
-        status_code, headers, content = self.raw_get(url, {})
-        return self._parse_book_list_page(status_code, url, headers, content)
+        response = self._get_with_token(url, {})
+        return self._parse_book_list_page(
+            response.status_code, url, response.headers, response.content
+        )
 
 
 class OverdriveClientAuth(httpx.Auth):
