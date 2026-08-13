@@ -303,7 +303,16 @@ def beat_schedule() -> dict[str, Any]:
         },
         "overdrive_reap_all_collections": {
             "task": overdrive.reap_all_collections.name,
-            "schedule": crontab(minute="0", hour="23"),  # Once a day at 11:00 PM
+            # TODO: Reap more often than this once PP-4983 is addressed.
+            # The reaper makes one blocking single-title availability request
+            # per title, so a daily run consumes 90+% of the available cycles on
+            # the workers processing the default queue for managers with many
+            # Overdrive collections, delaying every other task. As a temporary
+            # fix we reap twice a month so the queue is only monopolized two
+            # days a month instead of every day.
+            "schedule": crontab(
+                minute="0", hour="23", day_of_month="5,20"
+            ),  # On the 5th and 20th of the month at 11:00 PM
         },
         "bibliotheca_import_all_collections": {
             "task": bibliotheca.import_all_collections.name,
