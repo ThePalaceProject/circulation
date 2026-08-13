@@ -20,7 +20,7 @@ from palace.manager.integration.license.overdrive.exception import (
     OverdriveResponseException,
     OverdriveValidationError,
 )
-from palace.manager.integration.license.overdrive.model import Checkout
+from palace.manager.integration.license.overdrive.model import Checkout, RequestSpec
 from palace.manager.integration.license.overdrive.requests import (
     BookInfoEndpoint,
     OverdriveClientRequests,
@@ -514,7 +514,9 @@ class TestOverdrivePatronRequests:
         client.queue_response(401)
         client.queue_response(200, content="at last, the content")
         assert (
-            requests.patron_request(provider, "http://example.com/").text
+            requests.patron_request(
+                provider, RequestSpec.get("http://example.com/")
+            ).text
             == "at last, the content"
         )
 
@@ -528,7 +530,7 @@ class TestOverdrivePatronRequests:
         client.queue_response(401)
         client.queue_response(401)
         with pytest.raises(IntegrationException, match="patron OAuth Bearer Token"):
-            requests.patron_request(provider, "http://example.com/")
+            requests.patron_request(provider, RequestSpec.get("http://example.com/"))
 
     def test_patron_request_401_retry_returns_parsed_model(
         self,
@@ -614,7 +616,7 @@ class TestOverdrivePatronRequests:
         with pytest.raises(OverdriveValidationError) as excinfo:
             overdrive_patron_requests.requests.patron_request(
                 overdrive_patron_requests.token_provider,
-                "http://example.com/",
+                RequestSpec.get("http://example.com/"),
                 response_type=Checkout,
             )
 
@@ -626,33 +628,34 @@ class TestOverdrivePatronRequests:
         assert "Invalid JSON" in excinfo.value.problem_detail.debug_message
         assert "1 validation error for Checkout" in caplog.text
 
-    @pytest.mark.parametrize(
-        "data,method,expected",
-        [
-            pytest.param(None, None, "GET", id="no_data_defaults_to_get"),
-            pytest.param("body", None, "POST", id="data_defaults_to_post"),
-            pytest.param(None, "DELETE", "DELETE", id="explicit_method_wins"),
-            pytest.param("body", "PUT", "PUT", id="explicit_method_with_data"),
-        ],
-    )
-    def test_patron_request_method_inference(
+    @pytest.mark.parametrize("method", ["GET", "POST", "PUT", "DELETE"], ids=str.lower)
+    def test_patron_request_uses_spec(
         self,
         overdrive_patron_requests: OverdrivePatronRequestsFixture,
-        data: str | None,
-        method: str | None,
-        expected: str,
+        method: str,
     ) -> None:
+        """The spec supplies the verb, body and headers verbatim."""
         client = overdrive_patron_requests.client
         client.queue_response(200, content="content")
 
         overdrive_patron_requests.requests.patron_request(
             overdrive_patron_requests.token_provider,
-            "http://example.com/",
-            data=data,
-            method=method,
+            RequestSpec(
+                method=method,
+                url="http://example.com/",
+                data="body",
+                headers={"Content-Type": "application/json"},
+            ),
         )
 
-        assert client.requests_methods[0].upper() == expected
+        assert client.requests_methods[0].upper() == method
+        args = client.requests_args[0]
+        assert args["data"] == "body"
+        headers = args["headers"]
+        assert headers is not None
+        assert headers["Content-Type"] == "application/json"
+        # The Authorization header is added on top of the spec's headers.
+        assert headers["Authorization"] == "Bearer patron token"
 
 
 class TestOverdriveAsyncRequests:

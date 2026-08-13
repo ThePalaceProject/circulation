@@ -1,7 +1,6 @@
 import json
 from datetime import datetime
 from functools import partial
-from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
@@ -42,6 +41,7 @@ from palace.manager.integration.license.overdrive.model import (
     LibraryResponse,
     LinkTemplate,
     PatronInformation,
+    RequestSpec,
 )
 from palace.manager.util.http.exception import ResponseData
 from tests.fixtures.files import OverdriveFilesFixture
@@ -259,7 +259,7 @@ class TestAction:
         ):
             action.get_field("not_found", raising=True)
 
-    def test_request(self) -> None:
+    def test_build_request(self) -> None:
         action = Action(
             href="http://example.com/action",
             method="put",
@@ -271,11 +271,8 @@ class TestAction:
             ],
         )
 
-        make_request = MagicMock()
-        result: MagicMock = action.request(
-            make_request, testField1="value1", testField3="option1"
-        )
-        make_request.assert_called_once_with(
+        request = action.build_request(testField1="value1", testField3="option1")
+        assert request == RequestSpec(
             method="PUT",
             url="http://example.com/action",
             data=json.dumps(
@@ -287,20 +284,17 @@ class TestAction:
                     ]
                 }
             ),
-            extra_headers={"Content-Type": "application/json"},
+            headers={"Content-Type": "application/json"},
         )
-        assert result == make_request.return_value
 
         # You can provide values in snake_case, and override default values
-        make_request.reset_mock()
-        result = action.request(
-            make_request,
+        request = action.build_request(
             test_field1="value2",
             test_field2="value3",
             test_field3="option2",
             test_field4="value4",
         )
-        make_request.assert_called_once_with(
+        assert request == RequestSpec(
             method="PUT",
             url="http://example.com/action",
             data=json.dumps(
@@ -313,9 +307,8 @@ class TestAction:
                     ]
                 }
             ),
-            extra_headers={"Content-Type": "application/json"},
+            headers={"Content-Type": "application/json"},
         )
-        assert result == make_request.return_value
 
         # Test error handling
 
@@ -323,14 +316,14 @@ class TestAction:
         with pytest.raises(
             MissingRequiredFieldError, match="Action missing required field: testField1"
         ):
-            action.request(make_request)
+            action.build_request()
 
         # Invalid field option
         with pytest.raises(
             InvalidFieldOptionError,
             match="Invalid value for action field testField3: invalid. Valid options: option1, option2",
         ):
-            action.request(make_request, test_field1="value1", test_field3="invalid")
+            action.build_request(test_field1="value1", test_field3="invalid")
 
         # Extra fields
         action = Action(
@@ -342,7 +335,7 @@ class TestAction:
             ExtraFieldsError,
             match="Extra fields for action: extraField, otherUnexpected",
         ):
-            action.request(make_request, extra_field="value1", other_unexpected="extra")
+            action.build_request(extra_field="value1", other_unexpected="extra")
 
 
 class TestFormat:
@@ -494,21 +487,18 @@ class TestCheckout:
                 "checkout_response_no_format_locked_in.json"
             )
         )
-        make_request = MagicMock()
-        action: MagicMock = checkout.action("early_return", make_request)
-        assert action == make_request.return_value
-        make_request.assert_called_once_with(
+        assert checkout.action("early_return") == RequestSpec(
             method="DELETE",
             url="http://patron.api.overdrive.com/v1/patrons/me/checkouts/8B0F1552-4677-4FEC-8CE4-8466CFD47E17",
             data=None,
-            extra_headers={"Content-Type": "application/json"},
+            headers={"Content-Type": "application/json"},
         )
 
         with pytest.raises(
             NotFoundError,
             match="Action not found: unknownAction. Available actions: earlyReturn, format",
         ):
-            checkout.action("unknown_action", make_request)
+            checkout.action("unknown_action")
 
 
 class TestCheckouts:

@@ -704,13 +704,13 @@ class TestOverdriveAPI:
         [checkout_request_method, loan_info_request_method] = http.requests_methods[1:]
         [checkout_request_url, loan_info_request_url] = http.requests[1:]
 
-        assert checkout_request_method == "post"
+        assert checkout_request_method == "POST"
         assert (
             checkout_request_url
             == "https://integration-patron.api.overdrive.com/v1/patrons/me/checkouts"
         )
 
-        assert loan_info_request_method == "delete"
+        assert loan_info_request_method == "DELETE"
         assert (
             "patron.api.overdrive.com/v1/patrons/me/checkouts/" in loan_info_request_url
         )
@@ -748,13 +748,13 @@ class TestOverdriveAPI:
         [checkout_request_method, loan_info_request_method] = http.requests_methods
         [checkout_request_url, loan_info_request_url] = http.requests
 
-        assert checkout_request_method == "post"
+        assert checkout_request_method == "POST"
         assert (
             checkout_request_url
             == "https://integration-patron.api.overdrive.com/v1/patrons/me/checkouts"
         )
 
-        assert loan_info_request_method == "get"
+        assert loan_info_request_method == "GET"
         assert (
             "patron.api.overdrive.com/v1/patrons/me/checkouts/" in loan_info_request_url
         )
@@ -827,7 +827,7 @@ class TestOverdriveAPI:
         [hold_request_url] = http.requests[1:]
         [hold_request_args] = http.requests_args[1:]
 
-        assert hold_request_method == "post"
+        assert hold_request_method == "POST"
         assert hold_request_url.endswith("/me/holds")
         assert hold_request_args["data"] == json.dumps(
             {
@@ -857,7 +857,7 @@ class TestOverdriveAPI:
         [hold_request_url] = http.requests
         [hold_request_args] = http.requests_args
 
-        assert hold_request_method == "post"
+        assert hold_request_method == "POST"
         assert hold_request_url.endswith("/me/holds")
         assert hold_request_args["data"] == json.dumps(
             {
@@ -884,7 +884,7 @@ class TestOverdriveAPI:
         [hold_request_url] = http.requests
         [hold_request_args] = http.requests_args
 
-        assert hold_request_method == "post"
+        assert hold_request_method == "POST"
         assert hold_request_url.endswith("/me/holds")
         assert hold_request_args["data"] == json.dumps(
             {
@@ -933,7 +933,7 @@ class TestOverdriveAPI:
         )
 
         # Correct request methods
-        assert http.requests_methods == ["POST", "get", "delete"]
+        assert http.requests_methods == ["POST", "GET", "DELETE"]
 
         # Test error cases
 

@@ -1,9 +1,13 @@
+from __future__ import annotations
+
 import json
 import re
 import typing
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from enum import StrEnum
 from functools import cached_property
-from typing import Protocol, Self, overload
+from typing import Self, overload
 from urllib.parse import quote_plus
 
 from pydantic import (
@@ -190,26 +194,34 @@ class ActionField(BaseOverdriveModel):
     optional: bool = False
 
 
-class PatronRequestCallable[T](
-    Protocol,
-):
-    def __call__(
-        self,
-        *,
-        url: str,
-        extra_headers: dict[str, str] | None = None,
-        data: str | None = None,
-        method: str | None = None,
-    ) -> T: ...
+@dataclass(frozen=True)
+class RequestSpec:
+    """A prepared Overdrive API request.
+
+    Models describe the request to make -- the hypermedia action or link
+    tells us the URL, method and payload -- and the request layer executes
+    it. This keeps response models free of transport concerns while leaving
+    the navigation knowledge where the API document puts it.
+    """
+
+    method: str
+    url: str
+    data: str | None = None
+    headers: Mapping[str, str] = field(default_factory=dict)
+
+    @classmethod
+    def get(cls, url: str) -> RequestSpec:
+        """A plain GET of the given URL."""
+        return cls("GET", url)
 
 
-def _overdrive_field_request[T](
-    make_request: PatronRequestCallable[T],
+def build_field_request(
     url: str,
     fields: typing.Mapping[str, str | bool | int],
     *,
-    method: str | None = None,
-) -> T:
+    method: str = "POST",
+) -> RequestSpec:
+    """Describe a request whose body is an Overdrive "fields" document."""
     if fields:
         data = json.dumps(
             {
@@ -221,13 +233,11 @@ def _overdrive_field_request[T](
     else:
         data = None
 
-    headers = {"Content-Type": "application/json"}
-
-    return make_request(
+    return RequestSpec(
         method=method,
         url=url,
         data=data,
-        extra_headers=headers,
+        headers={"Content-Type": "application/json"},
     )
 
 
@@ -262,14 +272,13 @@ class Action(BaseOverdriveModel):
             raise NotFoundError(camel_name, "field", {f.name for f in self.fields})
         return None
 
-    def request[T](self, make_request: PatronRequestCallable[T], **kwargs: str) -> T:
+    def build_request(self, **kwargs: str) -> RequestSpec:
         """
-        Make a HTTP request with the parameters and method specified in the action.
+        Describe the HTTP request with the parameters and method specified in the action.
 
         The request data is constructed from the fields in the action, in the format
-        that Overdrive expects.
+        that Overdrive expects. The returned spec is executed by the request layer.
 
-        :param make_request: The callable used to make the HTTP request.
         :param kwargs: The values to provide in the request for fields in the action.
                        These can be either in camelCase or snake_case. snake_case is
                        converted to camelCase before being used.
@@ -277,7 +286,7 @@ class Action(BaseOverdriveModel):
         :raises MissingRequiredFieldError: If a required field is missing.
         :raises InvalidFieldOptionError: If a field has a value that is not in its options.
 
-        :return: The response from the HTTP request.
+        :return: The request to make.
         """
 
         camel_kwargs = {to_camel(k): v for k, v in kwargs.items()}
@@ -299,8 +308,7 @@ class Action(BaseOverdriveModel):
         if camel_kwargs:
             raise ExtraFieldsError(camel_kwargs.keys())
 
-        return _overdrive_field_request(
-            make_request,
+        return build_field_request(
             method=self.method.upper(),
             url=self.href,
             fields=field_data,
@@ -410,23 +418,22 @@ class Checkout(BaseOverdriveModel):
 
         return formats
 
-    def action[T](
-        self, name: str, make_request: PatronRequestCallable[T], **kwargs: str
-    ) -> T:
+    def action(self, name: str, **kwargs: str) -> RequestSpec:
         """
-        Make a HTTP request to the action with the specified name.
+        Describe the request to the action with the specified name.
 
         :param name: The name of the action to request, in snake_case or camelCase.
-        :param make_request: The callable used to make the HTTP request.
         :param kwargs: The values to provide in the request for fields in the action.
 
-        :return: The response from the HTTP request as returned by make_request.
+        :raises NotFoundError: If the checkout has no action with that name.
+
+        :return: The request to make.
         """
 
         camel_name = to_camel(name)
         if camel_name not in self.actions:
             raise NotFoundError(camel_name, "action", self.actions.keys())
-        return self.actions[camel_name].request(make_request, **kwargs)
+        return self.actions[camel_name].build_request(**kwargs)
 
 
 class Checkouts(BaseOverdriveModel):
