@@ -4,6 +4,7 @@ from functools import partial
 from uuid import uuid4
 
 import pytest
+from freezegun import freeze_time
 from frozendict import frozendict
 from httpx import Headers
 from pydantic import ValidationError
@@ -44,9 +45,13 @@ from palace.manager.integration.license.overdrive.model import (
     LibraryResponse,
     Link,
     LinkTemplate,
+    MetadataResponse,
     PatronInformation,
     RequestSpec,
     build_field_request,
+)
+from palace.manager.integration.license.overdrive.representation import (
+    OverdriveRepresentationExtractor,
 )
 from palace.manager.util.http.exception import ResponseData
 from tests.fixtures.files import OverdriveFilesFixture
@@ -884,3 +889,54 @@ class TestBookListPage:
         assert page.products is None
         assert page.total_items == 0
         assert page.link_safe("next") is None
+
+
+class TestMetadataResponse:
+    def test_raw_is_verbatim(
+        self, overdrive_files_fixture: OverdriveFilesFixture
+    ) -> None:
+        # The extractor reads the raw document, so it must survive parsing
+        # byte for byte.
+        data = overdrive_files_fixture.sample_data("overdrive_metadata.json")
+        response = MetadataResponse.model_validate_json(data)
+        assert response.raw == json.loads(data)
+
+    def test_raw_feeds_the_extractor(
+        self, overdrive_files_fixture: OverdriveFilesFixture
+    ) -> None:
+        # A round trip through the model produces the same bibliographic
+        # data as passing Overdrive's document straight to the extractor.
+        data = overdrive_files_fixture.sample_data("overdrive_metadata.json")
+        response = MetadataResponse.model_validate_json(data)
+
+        # BibliographicData stamps itself with the current time, so freeze
+        # the clock to compare the extracted data itself.
+        with freeze_time():
+            from_model = OverdriveRepresentationExtractor.book_info_to_bibliographic(
+                response.raw
+            )
+            from_raw = OverdriveRepresentationExtractor.book_info_to_bibliographic(
+                json.loads(data)
+            )
+        assert from_model == from_raw
+        assert from_model is not None
+        assert from_model.title == "Agile Documentation"
+
+    def test_error_response(self) -> None:
+        response = MetadataResponse.model_validate(
+            {
+                "errorCode": "NotFound",
+                "message": "Not found in Overdrive collection.",
+                "token": "7aebce0e-2e88-41b3-b6d3-82bf15f8e1a2",
+            }
+        )
+        assert response.error_code == "NotFound"
+        assert response.message == "Not found in Overdrive collection."
+        assert response.token == "7aebce0e-2e88-41b3-b6d3-82bf15f8e1a2"
+
+    def test_no_error(self, overdrive_files_fixture: OverdriveFilesFixture) -> None:
+        response = MetadataResponse.model_validate_json(
+            overdrive_files_fixture.sample_data("overdrive_metadata.json")
+        )
+        assert response.error_code is None
+        assert response.id == "3896665d-9d81-4cac-bd43-ffc5066de1f5"

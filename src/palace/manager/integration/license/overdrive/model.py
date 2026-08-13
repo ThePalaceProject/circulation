@@ -16,6 +16,7 @@ from pydantic import (
     ConfigDict,
     Field,
     NonNegativeInt,
+    model_validator,
 )
 from pydantic.alias_generators import to_camel
 
@@ -564,6 +565,32 @@ class BookListPage(BaseOverdriveModel):
         """The href of the given link relation, made safe to request."""
         link = self.links.get(rel)
         return _make_link_safe(link.href) if link else None
+
+
+class MetadataResponse(BaseOverdriveModel):
+    """A title's metadata document, or the error Overdrive returned instead.
+
+    Only the envelope is typed. The document itself is kept verbatim in
+    :attr:`raw` and handed to OverdriveRepresentationExtractor, which reads
+    far more of the Overdrive schema than we model here.
+
+    See: https://developer.overdrive.com/apis/metadata
+    """
+
+    id: str | None = None
+    error_code: str | None = Field(None, alias="errorCode")
+    message: str | None = None
+    token: str | None = None
+
+    raw: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _capture_raw(cls, data: Any) -> Any:
+        """Keep the whole document, so the extractor sees exactly what Overdrive sent."""
+        if isinstance(data, dict) and "raw" not in data:
+            return {**data, "raw": data}
+        return data
 
 
 class LibraryResponse(BaseOverdriveModel):

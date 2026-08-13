@@ -43,6 +43,7 @@ from palace.manager.integration.license.overdrive.model import (
     Format,
     Hold,
     Holds,
+    MetadataResponse,
     PatronInformation,
     RequestSpec,
     build_field_request,
@@ -483,6 +484,21 @@ class OverdriveClientRequests(ClientCredentialsRequests):
                 collection_token=collection_token,
             )
         )
+
+    def metadata(self, collection_token: str, item_id: str) -> MetadataResponse:
+        """Look up a title's metadata.
+
+        An unrecognized identifier is reported by Overdrive in the response
+        body rather than as an HTTP error, so the caller inspects
+        :attr:`MetadataResponse.error_code`.
+        """
+        url = self.endpoint(
+            self.METADATA_ENDPOINT,
+            collection_token=collection_token,
+            item_id=item_id,
+        )
+        status_code, headers, content = self.raw_get(url)
+        return MetadataResponse.model_validate_json(content)
 
     def book_list_page(self, url: str) -> BookListPage:
         """Fetch one page of a product or events feed.

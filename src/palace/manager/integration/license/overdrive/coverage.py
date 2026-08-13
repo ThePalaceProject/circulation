@@ -57,20 +57,23 @@ class OverdriveBibliographicCoverageProvider(BibliographicCoverageProvider):
     def process_item(self, identifier: Identifier) -> Identifier | CoverageFailure:
         info = self.api.metadata_lookup(identifier)
         error = None
-        if info.get("errorCode") == "NotFound":
+        if info.error_code == "NotFound":
             error = "ID not recognized by Overdrive: %s" % identifier.identifier
-        elif info.get("errorCode") == "InvalidGuid":
+        elif info.error_code == "InvalidGuid":
             error = "Invalid Overdrive ID: %s" % identifier.identifier
 
         if error:
             return self.failure(identifier, error, transient=False)  # type: ignore[no-any-return]
 
         bibliographic = OverdriveRepresentationExtractor.book_info_to_bibliographic(
-            info
+            info.raw
         )
 
         if not bibliographic:
-            e = "Could not extract bibliographic data from Overdrive data: %r" % info
+            e = (
+                "Could not extract bibliographic data from Overdrive data: %r"
+                % info.raw
+            )
             return self.failure(identifier, e)  # type: ignore[no-any-return]
 
         self.bibliographic_data_pre_hook(bibliographic)
