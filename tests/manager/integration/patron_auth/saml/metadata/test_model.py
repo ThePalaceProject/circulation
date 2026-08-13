@@ -578,6 +578,133 @@ class TestSAMLSubjectPatronIDExtractor:
                 "eduPersonUniqueId",
                 id="transient-name-id-with-matching-attribute",
             ),
+            pytest.param(
+                SAMLSubject(
+                    "http://idp.example.com",
+                    SAMLNameID(SAMLNameIDFormat.UNSPECIFIED.value, "", "", "1"),
+                    SAMLAttributeStatement(
+                        [
+                            SAMLAttribute(
+                                name=SAMLAttributeType.eduPersonUniqueId.name,
+                                values=[],
+                            ),
+                            SAMLAttribute(
+                                name=SAMLAttributeType.uid.name, values=["4"]
+                            ),
+                        ]
+                    ),
+                ),
+                "4",
+                True,
+                None,
+                None,
+                "uid",
+                id="empty-values-falls-back-to-next-attribute",
+            ),
+            pytest.param(
+                SAMLSubject(
+                    "http://idp.example.com",
+                    SAMLNameID(SAMLNameIDFormat.UNSPECIFIED.value, "", "", "1"),
+                    SAMLAttributeStatement(
+                        [
+                            SAMLAttribute(
+                                name=SAMLAttributeType.eduPersonUniqueId.name,
+                                values=[],
+                            )
+                        ]
+                    ),
+                ),
+                "1",
+                True,
+                None,
+                None,
+                "NameID",
+                id="empty-values-falls-back-to-name-id",
+            ),
+            pytest.param(
+                SAMLSubject(
+                    "http://idp.example.com",
+                    SAMLNameID(
+                        SAMLNameIDFormat.TRANSIENT.value, "", "", "transient-value"
+                    ),
+                    SAMLAttributeStatement(
+                        [
+                            SAMLAttribute(
+                                name=SAMLAttributeType.eduPersonUniqueId.name,
+                                values=[],
+                            )
+                        ]
+                    ),
+                ),
+                None,
+                True,
+                None,
+                None,
+                None,
+                id="empty-values-no-usable-candidate",
+            ),
+            pytest.param(
+                SAMLSubject(
+                    "http://idp.example.com",
+                    SAMLNameID(
+                        SAMLNameIDFormat.TRANSIENT.value, "", "", "transient-value"
+                    ),
+                    SAMLAttributeStatement(
+                        [
+                            SAMLAttribute(
+                                name=SAMLAttributeType.eduPersonUniqueId.name,
+                                values=[None],
+                            )
+                        ]
+                    ),
+                ),
+                None,
+                True,
+                None,
+                saml_strings.PATRON_ID_REGULAR_EXPRESSION_ORG,
+                None,
+                id="none-value-skipped-with-regex",
+            ),
+            pytest.param(
+                SAMLSubject(
+                    "http://idp.example.com",
+                    SAMLNameID(SAMLNameIDFormat.UNSPECIFIED.value, "", "", "1"),
+                    SAMLAttributeStatement(
+                        [
+                            SAMLAttribute(
+                                name=SAMLAttributeType.eduPersonUniqueId.name,
+                                values=[""],
+                            )
+                        ]
+                    ),
+                ),
+                "1",
+                True,
+                None,
+                None,
+                "NameID",
+                id="empty-string-value-falls-back-to-name-id",
+            ),
+            pytest.param(
+                SAMLSubject(
+                    "http://idp.example.com",
+                    SAMLNameID(SAMLNameIDFormat.UNSPECIFIED.value, "", "", "1"),
+                    SAMLAttributeStatement(
+                        [
+                            SAMLAttribute(
+                                name=SAMLAttributeType.eduPersonUniqueId.name,
+                                values=[None, "12345"],
+                            )
+                        ]
+                    ),
+                ),
+                "1",
+                True,
+                None,
+                None,
+                "NameID",
+                id="falsy-first-value-skips-whole-attribute",
+            ),
         ],
     )
     def test(

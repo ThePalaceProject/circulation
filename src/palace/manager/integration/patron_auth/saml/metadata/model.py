@@ -1384,7 +1384,17 @@ class SAMLSubjectPatronIDExtractor:
 
                     # NOTE: It takes the first value.
                     # TODO: Any reason not to handle multiple values here?
-                    patron_id_candidate = patron_id_attribute_obj.values[0]
+
+                    # An attribute can be present without a usable value. The SAML
+                    # library drops empty AttributeValue elements, so an attribute
+                    # with only empty values arrives with an empty values list, and
+                    # a nested NameID element with no text arrives as a None value.
+                    # Skip such attributes and move on to the next candidate.
+                    values = patron_id_attribute_obj.values
+                    if not values or not values[0]:
+                        continue
+
+                    patron_id_candidate = values[0]
                     patron_id = self._extract_patron_id(patron_id_candidate)
 
                     if patron_id is not None:
