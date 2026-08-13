@@ -5,9 +5,11 @@ from functools import partial
 
 import pytest
 
+from palace.manager.api.config import Configuration
 from palace.manager.integration.license.overdrive.constants import OverdriveConstants
 from palace.manager.integration.license.overdrive.requests import (
     OverdriveClientRequests,
+    OverdrivePatronRequests,
 )
 from palace.manager.integration.license.overdrive.settings import OverdriveSettings
 from tests.fixtures.http import MockHttpClientFixture
@@ -39,3 +41,45 @@ def overdrive_client_requests(
     http_client: MockHttpClientFixture,
 ) -> OverdriveClientRequestsFixture:
     return OverdriveClientRequestsFixture(http_client)
+
+
+class OverdrivePatronRequestsFixture:
+    """A OverdrivePatronRequests built from settings alone, with no database."""
+
+    def __init__(
+        self, http_client: MockHttpClientFixture, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self.client = http_client
+        monkeypatch.setenv(
+            f"{Configuration.OD_PREFIX_TESTING_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_KEY_SUFFIX}",
+            "TestingKey",
+        )
+        monkeypatch.setenv(
+            f"{Configuration.OD_PREFIX_TESTING_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_SECRET_SUFFIX}",
+            "TestingSecret",
+        )
+        self.create_settings = partial(
+            OverdriveSettings,
+            external_account_id="library_id",
+            overdrive_website_id="website_id",
+            overdrive_client_key="client_key",
+            overdrive_client_secret="client_secret",
+            overdrive_server_nickname=OverdriveConstants.TESTING_SERVERS,
+        )
+        self.settings = self.create_settings()
+        self.requests = OverdrivePatronRequests(self.settings)
+        self.token = "patron token"
+
+    def token_provider(self, *, force_refresh: bool = False) -> str:
+        """A PatronTokenProvider that hands out (and rotates) an in-memory token."""
+        if force_refresh:
+            self.token = "new patron token"
+        return self.token
+
+
+@pytest.fixture
+def overdrive_patron_requests(
+    http_client: MockHttpClientFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> OverdrivePatronRequestsFixture:
+    return OverdrivePatronRequestsFixture(http_client, monkeypatch)

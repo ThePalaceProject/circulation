@@ -6,19 +6,26 @@ from datetime import timedelta
 import pytest
 from freezegun import freeze_time
 
+from palace.manager.api.circulation.exceptions import (
+    PatronAuthorizationFailedException,
+)
 from palace.manager.core.config import CannotLoadConfiguration
+from palace.manager.core.exceptions import IntegrationException
 from palace.manager.integration.license.overdrive.constants import OverdriveConstants
 from palace.manager.integration.license.overdrive.exception import (
     OverdriveValidationError,
 )
+from palace.manager.integration.license.overdrive.model import Checkout
 from palace.manager.integration.license.overdrive.requests import (
     OverdriveClientRequests,
 )
 from palace.manager.util import base64
 from palace.manager.util.http.exception import BadResponseException
+from tests.fixtures.files import OverdriveFilesFixture
 from tests.fixtures.webserver import MockAPIServer, MockAPIServerResponse
 from tests.manager.integration.license.overdrive.conftest import (
     OverdriveClientRequestsFixture,
+    OverdrivePatronRequestsFixture,
 )
 
 
@@ -323,3 +330,162 @@ class TestOverdriveClientRequests:
 
         # Exactly one request was made for each error code, plus one for a token
         assert len(mock_web_server.requests()) == 8
+
+
+class TestOverdrivePatronRequests:
+    def test_refresh_patron_oauth_token(
+        self,
+        overdrive_patron_requests: OverdrivePatronRequestsFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
+    ) -> None:
+        """Verify that patron information is included in the request
+        when refreshing a patron access token.
+        """
+        requests = overdrive_patron_requests.requests
+        client = overdrive_patron_requests.client
+
+        token = dict(access_token="token", token_type="bearer", expires_in=3600)
+        client.queue_response(200, content=json.dumps(token))
+        client.queue_response(200, content=json.dumps(token))
+
+        # Try to refresh the patron access token with a PIN, and
+        # then without a PIN.
+        requests.refresh_patron_oauth_token(
+            username="barcode", password="a pin", scope="scope"
+        )
+        requests.refresh_patron_oauth_token(
+            username="barcode", password=None, scope="scope"
+        )
+
+        # Both requests went to the same patrontoken url
+        assert client.requests == [
+            "https://oauth-patron.overdrive.com/patrontoken",
+            "https://oauth-patron.overdrive.com/patrontoken",
+        ]
+
+        with_pin, without_pin = client.requests_args
+
+        payload = with_pin["data"]
+        assert isinstance(payload, dict)
+        assert payload["username"] == "barcode"
+        assert payload["scope"] == "scope"
+        assert payload["password"] == "a pin"
+        assert "password_required" not in payload
+
+        payload = without_pin["data"]
+        assert isinstance(payload, dict)
+        assert payload["username"] == "barcode"
+        assert payload["scope"] == "scope"
+        assert payload["password_required"] == "false"
+        assert payload["password"] == "[ignore]"
+
+    def test_refresh_patron_oauth_token_failure(
+        self,
+        overdrive_patron_requests: OverdrivePatronRequestsFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
+    ) -> None:
+        requests = overdrive_patron_requests.requests
+        client = overdrive_patron_requests.client
+
+        # Test with a real 400 response we've seen from overdrive
+        client.queue_response(
+            400, content=overdrive_files_fixture.sample_data("patron_token_failed.json")
+        )
+        with pytest.raises(
+            PatronAuthorizationFailedException, match="Invalid Library Card"
+        ):
+            requests.refresh_patron_oauth_token(
+                username="barcode", password="a pin", scope="scope"
+            )
+
+        # Test with a fictional 403 response that doesn't contain valid json - we've never
+        # seen this come back from overdrive, this test is just to make sure we can handle
+        # unexpected responses back from OD API.
+        client.queue_response(403, content="garbage { json")
+        with pytest.raises(
+            PatronAuthorizationFailedException,
+            match="Failed to authenticate with Overdrive",
+        ):
+            requests.refresh_patron_oauth_token(
+                username="barcode", password="a pin", scope="scope"
+            )
+
+    def test_patron_request_401_refreshes_bearer_token(
+        self, overdrive_patron_requests: OverdrivePatronRequestsFixture
+    ) -> None:
+        requests = overdrive_patron_requests.requests
+        client = overdrive_patron_requests.client
+        provider = overdrive_patron_requests.token_provider
+
+        # If we get a 401, we refresh the bearer token and try again.
+        client.queue_response(401)
+        client.queue_response(200, content="at last, the content")
+        assert (
+            requests.patron_request(provider, "http://example.com/").text
+            == "at last, the content"
+        )
+
+        # The token provider was asked for a fresh token.
+        assert overdrive_patron_requests.token == "new patron token"
+        retry_headers = client.requests_args[-1]["headers"]
+        assert retry_headers is not None
+        assert retry_headers["Authorization"] == "Bearer new patron token"
+
+        # If we get two 401 in a row, we raise an error.
+        client.queue_response(401)
+        client.queue_response(401)
+        with pytest.raises(IntegrationException, match="patron OAuth Bearer Token"):
+            requests.patron_request(provider, "http://example.com/")
+
+    def test_patron_request_raises_validation_error(
+        self,
+        overdrive_patron_requests: OverdrivePatronRequestsFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """
+        If patron request can't validate the response, it raises a OverdriveValidationError.
+        """
+        overdrive_patron_requests.client.queue_response(200, content="not json")
+
+        with pytest.raises(OverdriveValidationError) as excinfo:
+            overdrive_patron_requests.requests.patron_request(
+                overdrive_patron_requests.token_provider,
+                "http://example.com/",
+                response_type=Checkout,
+            )
+
+        assert (
+            excinfo.value.problem_detail.detail
+            == "The server made a request to url, and got an unexpected or invalid response."
+        )
+        assert excinfo.value.problem_detail.debug_message is not None
+        assert "Invalid JSON" in excinfo.value.problem_detail.debug_message
+        assert "1 validation error for Checkout" in caplog.text
+
+    @pytest.mark.parametrize(
+        "data,method,expected",
+        [
+            pytest.param(None, None, "GET", id="no_data_defaults_to_get"),
+            pytest.param("body", None, "POST", id="data_defaults_to_post"),
+            pytest.param(None, "DELETE", "DELETE", id="explicit_method_wins"),
+            pytest.param("body", "PUT", "PUT", id="explicit_method_with_data"),
+        ],
+    )
+    def test_patron_request_method_inference(
+        self,
+        overdrive_patron_requests: OverdrivePatronRequestsFixture,
+        data: str | None,
+        method: str | None,
+        expected: str,
+    ) -> None:
+        client = overdrive_patron_requests.client
+        client.queue_response(200, content="content")
+
+        overdrive_patron_requests.requests.patron_request(
+            overdrive_patron_requests.token_provider,
+            "http://example.com/",
+            data=data,
+            method=method,
+        )
+
+        assert client.requests_methods[0].upper() == expected
