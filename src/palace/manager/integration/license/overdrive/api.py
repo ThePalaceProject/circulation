@@ -89,6 +89,7 @@ from palace.manager.integration.license.overdrive.representation import (
 )
 from palace.manager.integration.license.overdrive.requests import (
     BookInfoEndpoint,
+    ClientTokenCache,
     OverdriveAsyncRequests,
     OverdriveClientRequests,
     OverdrivePatronRequests,
@@ -260,9 +261,15 @@ class OverdriveAPI(
         if not self._settings.overdrive_website_id:
             raise CannotLoadConfiguration("Overdrive website ID is not configured")
 
+        # The synchronous and asynchronous client-context layers share one
+        # token, so a collection never holds two at once.
+        token_cache = ClientTokenCache()
+
         self.client_requests = (
             OverdriveClientRequests(
-                self._settings, parent_library_id=self.parent_library_id
+                self._settings,
+                parent_library_id=self.parent_library_id,
+                token_cache=token_cache,
             )
             if client_requests is None
             else client_requests
@@ -273,7 +280,7 @@ class OverdriveAPI(
             else patron_requests
         )
         self.async_requests = (
-            OverdriveAsyncRequests(self._settings, self.client_requests)
+            OverdriveAsyncRequests(self._settings, token_cache=token_cache)
             if async_requests is None
             else async_requests
         )
