@@ -444,18 +444,12 @@ class OverdriveAPI(
 
     @property
     def _all_products_link(self) -> str:
-        url = self.endpoint(
-            self.client_requests.ALL_PRODUCTS_ENDPOINT,
-            collection_token=self.collection_token,
-            sort="dateAdded:desc",
-        )
-        return _make_link_safe(url)
+        return self.client_requests.all_products_url(self.collection_token)
 
     def _get_book_list_page(
         self,
         link: str,
         rel_to_follow: str = NEXT_REL,
-        extractor_class: type[OverdriveRepresentationExtractor] | None = None,
     ) -> tuple[list[dict[str, str]], str | None]:
         """Process a page of inventory whose circulation we need to check.
 
@@ -465,18 +459,14 @@ class OverdriveAPI(
            one book.
         `next_link` is a link to the next page of results.
         """
-        extractor_class = extractor_class or OverdriveRepresentationExtractor
-        # We don't cache this because it changes constantly.
-        status_code, headers, content = self.get(link, {})
-        content_dict = json.loads(content)
-
-        # Find the link to the next page of results, if any.
-        next_link = extractor_class.link(content_dict, rel_to_follow)
+        page = self.client_requests.book_list_page(link)
 
         # Prepare to get availability information for all the books on
         # this page.
-        availability_queue = extractor_class.availability_link_list(content_dict)
-        return availability_queue, next_link
+        availability_queue = OverdriveRepresentationExtractor.availability_link_list(
+            {"products": page.products or []}
+        )
+        return availability_queue, page.link_safe(rel_to_follow)
 
     def book_info_initial_endpoint(
         self,
@@ -492,19 +482,13 @@ class OverdriveAPI(
         self.log.info("Creating url for circulation changes since %s", last_update_time)
         last_update = last_update_time.strftime(self.TIME_FORMAT)
 
-        book_info_initial_endpoint = self.endpoint(
-            self.client_requests.EVENTS_ENDPOINT,
-            # From https://developer.overdrive.com/apis/search:
-            # "**Note: When you search using the lastTitleUpdateTime or
-            # lastUpdateTime parameters, your results will be automatically
-            # sorted in ascending order (and all other sort options will be ignored)."
-            lastupdatetime=last_update,
-            limit=str(min(page_size, self.PAGE_SIZE_LIMIT)),
-            collection_token=self.collection_token,
+        return BookInfoEndpoint(
+            self.client_requests.events_url(
+                self.collection_token,
+                last_update,
+                min(page_size, self.PAGE_SIZE_LIMIT),
+            )
         )
-        endpoint: str = _make_link_safe(book_info_initial_endpoint)
-
-        return BookInfoEndpoint(endpoint)
 
     def recently_changed_ids(
         self, start: datetime.datetime, cutoff: datetime.datetime | None
@@ -519,17 +503,9 @@ class OverdriveAPI(
         self.log.info("Asking for circulation changes since %s", last_update_time)
         last_update = last_update_time.strftime(self.TIME_FORMAT)
 
-        initial_next_link = self.endpoint(
-            self.client_requests.EVENTS_ENDPOINT,
-            # From https://developer.overdrive.com/apis/search:
-            # "**Note: When you search using the lastTitleUpdateTime or
-            # lastUpdateTime parameters, your results will be automatically
-            # sorted in ascending order (and all other sort options will be ignored)."
-            lastupdatetime=last_update,
-            limit=str(self.PAGE_SIZE_LIMIT),
-            collection_token=self.collection_token,
+        next_link: str | None = self.client_requests.events_url(
+            self.collection_token, last_update, self.PAGE_SIZE_LIMIT
         )
-        next_link: str | None = _make_link_safe(initial_next_link)
         while next_link:
             page_inventory, next_link = self._get_book_list_page(next_link)
             # We won't be sending out any events for these books yet,
@@ -580,10 +556,10 @@ class OverdriveAPI(
 
         def _count_books() -> str:
             """Count the titles in the collection."""
-            url = self._all_products_link
-            status, headers, body = self.get(url, {})
-            json_data = json.loads(body)
-            return "%d item(s) in collection" % json_data["totalItems"]
+            page = self.client_requests.book_list_page(self._all_products_link)
+            if page.total_items is None:
+                return "Overdrive did not report a collection size"
+            return "%d item(s) in collection" % page.total_items
 
         yield self.run_test("Counting size of collection", _count_books)
 

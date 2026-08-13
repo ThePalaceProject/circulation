@@ -38,6 +38,7 @@ from palace.manager.integration.license.overdrive.fulfillment import (
 )
 from palace.manager.integration.license.overdrive.model import (
     Availability,
+    BookListPage,
     Checkout,
     Format,
     LibraryResponse,
@@ -66,6 +67,7 @@ from palace.manager.sqlalchemy.model.patron import Hold
 from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.util.http.exception import BadResponseException
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.files import OverdriveFilesFixture
 from tests.fixtures.library import LibraryFixture
 from tests.fixtures.overdrive import OverdriveAPIFixture
 from tests.fixtures.services import ServicesFixture
@@ -303,52 +305,59 @@ class TestOverdriveAPI:
         assert overdrive_child.library_id() == "2"
         assert overdrive_child.advantage_library_id == 2
 
-    def test__get_book_list_page(self, overdrive_api_fixture: OverdriveAPIFixture):
+    def test__get_book_list_page(
+        self,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
+    ):
         # Test the internal method that retrieves a list of books and
         # preprocesses it.
 
         http = overdrive_api_fixture.mock_http
+        http.queue_response(
+            200,
+            content=overdrive_files_fixture.sample_data(
+                "overdrive_book_list_with_next_link.json"
+            ),
+        )
 
-        class MockExtractor:
-            def link(self, content, rel_to_follow):
-                self.link_called_with = (content, rel_to_follow)
-                return "http://next-page/"
+        availability_queue, next_link = overdrive_api_fixture.api._get_book_list_page(
+            "http://first-page/"
+        )
 
-            def availability_link_list(self, content):
-                self.availability_link_list_called_with = content
-                return ["an availability queue"]
+        # A single request was made to the requested page.
+        assert http.requests == ["http://first-page/"]
 
-        original_data = {"key": "value"}
-        for content in (
-            original_data,
-            json.dumps(original_data),
-            json.dumps(original_data).encode("utf8"),
-        ):
-            extractor = MockExtractor()
-            http.queue_response(200, content=content)
-            result = overdrive_api_fixture.api._get_book_list_page(
-                "http://first-page/", "some-rel", extractor  # type: ignore[arg-type]
-            )
+        # Each product on the page becomes an entry in the availability
+        # queue, carrying the link we need to check its circulation.
+        [book] = availability_queue
+        assert book["id"] == "2a005d55-a417-4053-b90d-7a38ca6d2065"
+        assert "availability" in book["availability_link"]
 
-            # A single request was made to the requested page.
-            assert len(http.requests) == 1
-            assert http.requests.pop() == "http://first-page/"
+        # The "next" link is followed to get the rest of the collection,
+        # rewritten to the v2 availability API where applicable.
+        assert next_link is not None
+        assert "offset=1" in next_link
 
-            # The extractor was used to extract a link to the page
-            # with rel="some-rel".
-            #
-            # Note that the Python data structure (`original_data`) is passed in,
-            # regardless of whether the mock response body is a Python
-            # data structure, a bytestring, or a Unicode string.
-            assert extractor.link_called_with == (original_data, "some-rel")
+    def test__get_book_list_page_follows_named_relation(
+        self,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
+    ):
+        # A relation other than "next" can be followed.
+        http = overdrive_api_fixture.mock_http
+        http.queue_response(
+            200,
+            content=overdrive_files_fixture.sample_data(
+                "overdrive_book_list_with_next_link.json"
+            ),
+        )
 
-            # The data structure was also passed into the extractor's
-            # availability_link_list() method.
-            assert extractor.availability_link_list_called_with == original_data
-
-            # The final result is a queue of availability data (from
-            # this page) and a link to the next page.
-            assert result == (["an availability queue"], "http://next-page/")
+        _, link = overdrive_api_fixture.api._get_book_list_page(
+            "http://first-page/", "first"
+        )
+        assert link is not None
+        assert "offset=0" in link
 
     def test__run_self_tests(
         self,
@@ -373,11 +382,12 @@ class TestOverdriveAPI:
         )
         api.get_advantage_accounts = mock_get_advantage_accounts
 
-        # Then we will call get() on the _all_products_link.
-        mock_get = create_autospec(
-            api.get, return_value=(200, {}, json.dumps(dict(totalItems=2010)))
+        # Then we will fetch the first page of the _all_products_link.
+        mock_book_list_page = create_autospec(
+            api.client_requests.book_list_page,
+            return_value=BookListPage(totalItems=2010),
         )
-        api.get = mock_get
+        api.client_requests.book_list_page = mock_book_list_page
 
         # Finally, for every library associated with this
         # collection, we'll call get_patron_credential() using
@@ -420,7 +430,7 @@ class TestOverdriveAPI:
         assert collection_size.name == "Counting size of collection"
         assert collection_size.success is True
         assert collection_size.result == "2010 item(s) in collection"
-        mock_get.assert_called_once_with(api._all_products_link, {})
+        mock_book_list_page.assert_called_once_with(api._all_products_link)
 
         assert (
             no_patron_credential.name

@@ -36,6 +36,7 @@ from palace.manager.integration.license.overdrive.exception import (
 )
 from palace.manager.integration.license.overdrive.model import (
     BaseOverdriveModel,
+    BookListPage,
     Checkout,
     Checkouts,
     ErrorResponse,
@@ -413,6 +414,40 @@ class OverdriveClientRequests(ClientCredentialsRequests):
         else:
             return status_code, headers, content
 
+    def all_products_url(self, collection_token: str) -> str:
+        """The URL of the collection's product feed, newest titles first."""
+        return _make_link_safe(
+            self.endpoint(
+                self.ALL_PRODUCTS_ENDPOINT,
+                collection_token=collection_token,
+                sort="dateAdded:desc",
+            )
+        )
+
+    def events_url(
+        self, collection_token: str, last_update_time: str, limit: int
+    ) -> str:
+        """The URL of the collection's feed of titles changed since a time."""
+        return _make_link_safe(
+            self.endpoint(
+                self.EVENTS_ENDPOINT,
+                # From https://developer.overdrive.com/apis/search:
+                # "**Note: When you search using the lastTitleUpdateTime or
+                # lastUpdateTime parameters, your results will be automatically
+                # sorted in ascending order (and all other sort options will be ignored)."
+                lastupdatetime=last_update_time,
+                limit=str(limit),
+                collection_token=collection_token,
+            )
+        )
+
+    def book_list_page(self, url: str) -> BookListPage:
+        """Fetch one page of a product or events feed.
+
+        These pages are not cached, because they change constantly.
+        """
+        status_code, headers, content = self.raw_get(url, {})
+        return BookListPage.model_validate_json(content)
 
 class OverdriveClientAuth(httpx.Auth):
     """Attaches the client credentials token, refreshing it on a 401.
