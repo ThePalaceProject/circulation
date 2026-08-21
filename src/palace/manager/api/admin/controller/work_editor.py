@@ -19,7 +19,6 @@ from palace.manager.api.admin.problem_details import (
     INVALID_EDIT,
     INVALID_RATING,
     INVALID_SERIES_POSITION,
-    METADATA_REFRESH_FAILURE,
     MISSING_CUSTOM_LIST,
     UNKNOWN_LANGUAGE,
     UNKNOWN_MEDIUM,
@@ -444,25 +443,6 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
         return Response(
             json.dumps({"message": message}), 200, mimetype="application/json"
         )
-
-    def refresh_metadata(
-        self, identifier_type: str, identifier: str
-    ) -> Response | ProblemDetail:
-        """Refresh the metadata for a book from the content server.
-
-        Metadata refresh used to run through the per-source CoverageProvider
-        machinery, which has been retired. No provider is wired up, so this
-        endpoint is retained for API compatibility but no longer performs a
-        refresh; it always reports failure.
-        """
-        library = get_request_library()
-        self.require_librarian(library)
-
-        work = self.load_work(library, identifier_type, identifier)
-        if isinstance(work, ProblemDetail):
-            return work
-
-        return METADATA_REFRESH_FAILURE
 
     def classifications(
         self, identifier_type: str, identifier: str

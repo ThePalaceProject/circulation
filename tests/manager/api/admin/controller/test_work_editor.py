@@ -15,7 +15,6 @@ from palace.manager.api.admin.problem_details import (
     INVALID_EDIT,
     INVALID_RATING,
     INVALID_SERIES_POSITION,
-    METADATA_REFRESH_FAILURE,
     MISSING_CUSTOM_LIST,
     UNKNOWN_LANGUAGE,
     UNKNOWN_MEDIUM,
@@ -817,29 +816,6 @@ class TestWorkController:
                     lp.identifier.type, lp.identifier.identifier
                 )
             assert exc.value.problem_detail == LIBRARY_NOT_FOUND
-
-    def test_refresh_metadata(self, work_fixture: WorkFixture):
-        # Metadata refresh used to run through the per-source CoverageProvider
-        # machinery, which has been retired. The endpoint remains for API
-        # compatibility but now always reports failure.
-        with work_fixture.request_context_with_library_and_admin("/"):
-            [lp] = work_fixture.english_1.license_pools
-            response = work_fixture.manager.admin_work_controller.refresh_metadata(
-                lp.identifier.type, lp.identifier.identifier
-            )
-            assert METADATA_REFRESH_FAILURE.status_code == response.status_code
-            assert METADATA_REFRESH_FAILURE.detail == response.detail
-
-        work_fixture.admin.remove_role(
-            AdminRole.LIBRARIAN, work_fixture.ctrl.db.default_library()
-        )
-        with work_fixture.request_context_with_library_and_admin("/"):
-            pytest.raises(
-                AdminNotAuthorized,
-                work_fixture.manager.admin_work_controller.refresh_metadata,
-                lp.identifier.type,
-                lp.identifier.identifier,
-            )
 
     def test_classifications(self, work_fixture: WorkFixture):
         e, pool = work_fixture.ctrl.db.edition(with_license_pool=True)
