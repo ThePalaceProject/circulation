@@ -53,20 +53,6 @@ INVALID_REPORT_KEY = pd(
     _("No currently defined report is associated with the specified key."),
 )
 
-METADATA_REFRESH_PENDING = pd(
-    "http://librarysimplified.org/terms/problem/metadata-refresh-pending",
-    201,
-    _("Metadata refresh pending."),
-    _("The Metadata Wrangler is looking for new data. Check back later."),
-)
-
-METADATA_REFRESH_FAILURE = pd(
-    "http://librarysimplified.org/terms/problem/metadata-refresh-failure",
-    400,
-    _("Metadata could not be refreshed."),
-    _("Metadata could not be refreshed."),
-)
-
 GENRE_NOT_FOUND = pd(
     "http://librarysimplified.org/terms/problem/genre-not-found",
     status_code=404,

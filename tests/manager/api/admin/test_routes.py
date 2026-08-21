@@ -547,16 +547,6 @@ class TestAdminWork:
             http_method="POST",
         )
 
-    def test_refresh_metadata(self, fixture: AdminRouteFixture):
-        url = "/admin/works/<identifier_type>/an/identifier/refresh"
-        fixture.assert_authenticated_request_calls(
-            url,
-            fixture.controller.refresh_metadata,
-            "<identifier_type>",
-            "an/identifier",
-            http_method="POST",
-        )
-
     def test_edit_classifications(self, fixture: AdminRouteFixture):
         url = "/admin/works/<identifier_type>/an/identifier/edit_classifications"
         fixture.assert_authenticated_request_calls(
