@@ -136,10 +136,10 @@ class Script:
     ) -> None:
         """By default scripts have no timestamp of their own.
 
-        Most scripts either work through Monitors or CoverageProviders,
-        which have their own logic for creating timestamps, or they
-        are designed to be run interactively from the command-line, so
-        facts about when they last ran are not relevant.
+        Most scripts either work through Monitors, which have their own
+        logic for creating timestamps, or they are designed to be run
+        interactively from the command-line, so facts about when they last
+        ran are not relevant.
 
         :param timestamp_data: The timestamp data returned by do_run().
         :param start_time: The time the script started running.
