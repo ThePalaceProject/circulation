@@ -1804,9 +1804,18 @@ class OverdriveAPI(
         """Fetch Overdrive bibliographic metadata, apply it to the Edition, and
         make the LicensePool's Work presentation-ready.
 
-        A bad or unrecognized Overdrive ID leaves the pool without a Work
-        rather than raising, so a single unknown title does not abort the
-        wider availability update.
+        Callers work through batches of identifiers, so a title Overdrive has
+        no usable data for is logged and skipped rather than raised: an
+        unrecognized ID, an unparseable metadata document, or a
+        :class:`BasePalaceException` from :meth:`BibliographicData.apply`
+        leaves the pool without a Work and the batch continues.
+
+        Everything else propagates. A failed metadata fetch usually means
+        Overdrive is unreachable or the credentials are wrong, which would
+        affect every title in the batch, and a non-Palace exception from
+        ``apply`` (a ``KeyError``, a SQLAlchemy error) means a bug or a
+        broken database session. Both should stop the run loudly instead of
+        quietly leaving thousands of pools without Works.
         """
         identifier = license_pool.identifier
         info = self.metadata_lookup(identifier)
@@ -1837,9 +1846,10 @@ class OverdriveAPI(
                 replace=ReplacementPolicy.from_license_source(),
             )
         except BasePalaceException as e:
-            # A failure while applying the bibliographic data must not abort the
-            # surrounding availability update, so log it and leave the pool's
-            # presentation edition unchanged.
+            # Bad or incomplete data for this one title: log it, leave the
+            # pool's presentation edition unchanged, and let the caller move
+            # on to the next identifier. See the docstring for what is
+            # deliberately left to propagate.
             self.log.warning(
                 "Error applying Overdrive bibliographic data to edition %s: %s",
                 edition.id,
@@ -1862,10 +1872,9 @@ class OverdriveAPI(
     ) -> tuple[LicensePool, bool, bool]:
         """Update a book's LicensePool with information from an availability document.
 
-        Then, create an Edition and make sure it has bibliographic
-        coverage. If the new Edition is the only candidate for the
-        pool's presentation_edition, promote it to presentation
-        status.
+        Then find or create the Edition that holds Overdrive's metadata for
+        the pool. Bibliographic data is applied by the caller, via
+        :meth:`_ensure_bibliographic_coverage`.
 
         :param availability: The parsed Overdrive availability document.
         :param book_id: The Overdrive product ID for this book.
