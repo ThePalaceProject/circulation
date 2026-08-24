@@ -68,7 +68,7 @@ dependencies = [
     "jsonschema>=4.22.0,<5",
     "jwcrypto>=1.5.8,<2",
     "levenshtein>=0.27.4,<0.28",
-    "lxml[html-clean]==6.1.1",
+    "lxml[html-clean]==6.1.2",
     "nameparser>=2.1.0,<3",  # nameparser is for author name manipulations
     "openpyxl>=3.1,<4",
     "opensearch-py>=3.2.0,<4",
