@@ -15,7 +15,6 @@ from palace.manager.api.admin.problem_details import (
     INVALID_EDIT,
     INVALID_RATING,
     INVALID_SERIES_POSITION,
-    METADATA_REFRESH_FAILURE,
     MISSING_CUSTOM_LIST,
     UNKNOWN_LANGUAGE,
     UNKNOWN_MEDIUM,
@@ -32,7 +31,6 @@ from palace.manager.sqlalchemy.model.classification import (
     Subject,
 )
 from palace.manager.sqlalchemy.model.contributor import Contributor
-from palace.manager.sqlalchemy.model.coverage import CoverageRecord
 from palace.manager.sqlalchemy.model.customlist import CustomList
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
@@ -43,10 +41,6 @@ from tests.fixtures.api_admin import AdminControllerFixture
 from tests.fixtures.api_controller import ControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.problem_detail import raises_problem_detail
-from tests.mocks.mock import (
-    AlwaysSuccessfulCoverageProvider,
-    NeverSuccessfulCoverageProvider,
-)
 
 
 class WorkFixture(AdminControllerFixture):
@@ -822,58 +816,6 @@ class TestWorkController:
                     lp.identifier.type, lp.identifier.identifier
                 )
             assert exc.value.problem_detail == LIBRARY_NOT_FOUND
-
-    def test_refresh_metadata(self, work_fixture: WorkFixture):
-        wrangler = DataSource.lookup(
-            work_fixture.ctrl.db.session, DataSource.METADATA_WRANGLER
-        )
-
-        class AlwaysSuccessfulMetadataProvider(AlwaysSuccessfulCoverageProvider):
-            DATA_SOURCE_NAME = wrangler.name
-
-        success_provider = AlwaysSuccessfulMetadataProvider(
-            work_fixture.ctrl.db.session
-        )
-
-        class NeverSuccessfulMetadataProvider(NeverSuccessfulCoverageProvider):
-            DATA_SOURCE_NAME = wrangler.name
-
-        failure_provider = NeverSuccessfulMetadataProvider(work_fixture.ctrl.db.session)
-
-        with work_fixture.request_context_with_library_and_admin("/"):
-            [lp] = work_fixture.english_1.license_pools
-            response = work_fixture.manager.admin_work_controller.refresh_metadata(
-                lp.identifier.type, lp.identifier.identifier, provider=success_provider
-            )
-            assert 200 == response.status_code
-            # Also, the work has a coverage record now for the wrangler.
-            assert CoverageRecord.lookup(lp.identifier, wrangler)
-
-            response = work_fixture.manager.admin_work_controller.refresh_metadata(
-                lp.identifier.type, lp.identifier.identifier, provider=failure_provider
-            )
-            assert METADATA_REFRESH_FAILURE.status_code == response.status_code
-            assert METADATA_REFRESH_FAILURE.detail == response.detail
-
-            # If we don't pass in a provider, it will also fail because there
-            # isn't one connfigured.
-            response = work_fixture.manager.admin_work_controller.refresh_metadata(
-                lp.identifier.type, lp.identifier.identifier
-            )
-            assert METADATA_REFRESH_FAILURE.status_code == response.status_code
-            assert METADATA_REFRESH_FAILURE.detail == response.detail
-
-        work_fixture.admin.remove_role(
-            AdminRole.LIBRARIAN, work_fixture.ctrl.db.default_library()
-        )
-        with work_fixture.request_context_with_library_and_admin("/"):
-            pytest.raises(
-                AdminNotAuthorized,
-                work_fixture.manager.admin_work_controller.refresh_metadata,
-                lp.identifier.type,
-                lp.identifier.identifier,
-                provider=success_provider,
-            )
 
     def test_classifications(self, work_fixture: WorkFixture):
         e, pool = work_fixture.ctrl.db.edition(with_license_pool=True)

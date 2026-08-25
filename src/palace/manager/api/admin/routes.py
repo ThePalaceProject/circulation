@@ -255,17 +255,6 @@ def unsuppress_deprecated(identifier_type, identifier):
     return app.manager.admin_work_controller.unsuppress(identifier_type, identifier)
 
 
-@library_route("/works/<identifier_type>/<path:identifier>/refresh", methods=["POST"])
-@has_library
-@returns_problem_detail
-@requires_admin
-@requires_csrf_token
-def refresh(identifier_type, identifier):
-    return app.manager.admin_work_controller.refresh_metadata(
-        identifier_type, identifier
-    )
-
-
 @library_route(
     "/admin/works/<identifier_type>/<path:identifier>/edit_classifications",
     methods=["POST"],

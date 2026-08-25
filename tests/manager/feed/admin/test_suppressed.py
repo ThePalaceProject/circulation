@@ -97,32 +97,6 @@ class TestAdminSuppressedFeed:
         assert 3 == float(entry.computed.ratings[1].rating_value)
         assert Measurement.RATING == entry.computed.ratings[1].additional_type
 
-    def test_feed_includes_refresh_link(
-        self,
-        db: DatabaseTransactionFixture,
-        patch_url_for: PatchedUrlFor,
-        external_search_fake_fixture: ExternalSearchFixtureFake,
-    ):
-        work = db.work(with_open_access_download=True)
-        lp = work.license_pools[0]
-        lp.suppressed = False
-        db.session.commit()
-
-        # If the metadata wrangler isn't configured, the link is left out.
-        feed = OPDSAcquisitionFeed(
-            "test",
-            "url",
-            [work],
-            AdminSuppressedAnnotator(None, db.default_library()),
-        )
-        [entry] = feed._feed.entries
-        assert entry.computed is not None
-        assert [] == [
-            x
-            for x in entry.computed.other_links
-            if x.rel == "http://librarysimplified.org/terms/rel/refresh"
-        ]
-
     def test_feed_includes_suppress_link(
         self,
         db: DatabaseTransactionFixture,

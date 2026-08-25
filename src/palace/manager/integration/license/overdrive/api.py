@@ -18,6 +18,7 @@ from requests.structures import CaseInsensitiveDict
 from sqlalchemy.orm import Session
 
 from palace.util.datetime_helpers import utc_now
+from palace.util.exceptions import BasePalaceException
 
 from palace.manager.api.circulation.base import (
     BaseCirculationAPI,
@@ -68,9 +69,6 @@ from palace.manager.integration.license.overdrive.constants import (
     OVERDRIVE_PALACE_MANIFEST_FORMATS,
     OVERDRIVE_STREAMING_FORMATS,
     OverdriveConstants,
-)
-from palace.manager.integration.license.overdrive.coverage import (
-    OverdriveBibliographicCoverageProvider,
 )
 from palace.manager.integration.license.overdrive.exception import (
     InvalidFieldOptionError,
@@ -341,9 +339,6 @@ class OverdriveAPI(
         # instances (e.g. Flask workers) transparently re-fetch a rotated token
         # without a process restart. See the collection_token property.
         self._cached_collection_token: OverdriveToken | None = None
-        self.overdrive_bibliographic_coverage_provider = (
-            OverdriveBibliographicCoverageProvider(collection, api=self)
-        )
 
     @property
     def settings(self) -> OverdriveSettings:
@@ -1782,10 +1777,9 @@ class OverdriveAPI(
         )
         if is_new or not license_pool.work:
             # Either this is the first time we've seen this book or it doesn't
-            # have an associated work. Make sure its identifier has bibliographic coverage.
-            self.overdrive_bibliographic_coverage_provider.ensure_coverage(
-                license_pool.identifier, force=True
-            )
+            # have an associated work. Make sure its identifier has bibliographic
+            # coverage and a presentation-ready work.
+            self._ensure_bibliographic_coverage(license_pool)
 
         return self.update_licensepool_with_book_info(
             availability, resolved_book_id, license_pool, is_new
@@ -1806,6 +1800,69 @@ class OverdriveAPI(
             licensepool.identifier.identifier,
         )
 
+    def _ensure_bibliographic_coverage(self, license_pool: LicensePool) -> None:
+        """Fetch Overdrive bibliographic metadata, apply it to the Edition, and
+        make the LicensePool's Work presentation-ready.
+
+        Callers work through batches of identifiers, so a title Overdrive has
+        no usable data for is logged and skipped rather than raised: an
+        unrecognized ID, an unparseable metadata document, or a
+        :class:`BasePalaceException` from :meth:`BibliographicData.apply`
+        leaves the pool without a Work and the batch continues.
+
+        Everything else propagates. A failed metadata fetch usually means
+        Overdrive is unreachable or the credentials are wrong, which would
+        affect every title in the batch, and a non-Palace exception from
+        ``apply`` (a ``KeyError``, a SQLAlchemy error) means a bug or a
+        broken database session. Both should stop the run loudly instead of
+        quietly leaving thousands of pools without Works.
+        """
+        identifier = license_pool.identifier
+        info = self.metadata_lookup(identifier)
+        if info.get("errorCode") in ("NotFound", "InvalidGuid"):
+            self.log.warning(
+                "Could not get Overdrive metadata for %s: %s",
+                identifier.identifier,
+                info.get("errorCode"),
+            )
+            return
+
+        bibliographic = OverdriveRepresentationExtractor.book_info_to_bibliographic(
+            info
+        )
+        if not bibliographic:
+            self.log.warning(
+                "Could not extract bibliographic data from Overdrive metadata for %s.",
+                identifier.identifier,
+            )
+            return
+
+        edition, _ = self._edition(license_pool)
+        try:
+            bibliographic.apply(
+                self._db,
+                edition,
+                self.collection,
+                replace=ReplacementPolicy.from_license_source(),
+            )
+        except BasePalaceException as e:
+            # Bad or incomplete data for this one title: log it, leave the
+            # pool's presentation edition unchanged, and let the caller move
+            # on to the next identifier. See the docstring for what is
+            # deliberately left to propagate.
+            self.log.warning(
+                "Error applying Overdrive bibliographic data to edition %s: %s",
+                edition.id,
+                e,
+                exc_info=e,
+            )
+            return
+
+        if not license_pool.work or not license_pool.work.presentation_ready:
+            work, _ = license_pool.calculate_work()
+            if work:
+                work.set_presentation_ready()
+
     def update_licensepool_with_book_info(
         self,
         availability: Availability,
@@ -1815,10 +1872,9 @@ class OverdriveAPI(
     ) -> tuple[LicensePool, bool, bool]:
         """Update a book's LicensePool with information from an availability document.
 
-        Then, create an Edition and make sure it has bibliographic
-        coverage. If the new Edition is the only candidate for the
-        pool's presentation_edition, promote it to presentation
-        status.
+        Then find or create the Edition that holds Overdrive's metadata for
+        the pool. Bibliographic data is applied by the caller, via
+        :meth:`_ensure_bibliographic_coverage`.
 
         :param availability: The parsed Overdrive availability document.
         :param book_id: The Overdrive product ID for this book.
