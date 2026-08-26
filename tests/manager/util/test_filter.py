@@ -2,12 +2,12 @@ from contextlib import nullcontext
 from dataclasses import dataclass, field
 
 import pytest
-
-from palace.util.datetime_helpers import utc_now
+from freezegun import freeze_time
 
 from palace.manager.util.filter import (
     FilterExpression,
     FilterExpressionError,
+    today_utc,
 )
 
 
@@ -416,20 +416,18 @@ class TestFilterExpression:
 
     # ------------------------------------------------------------------ today_utc
 
+    @freeze_time("2026-08-25")
+    def test_today_utc(self):
+        """today_utc() returns the current UTC date as integer parts."""
+        assert today_utc() == {"year": 2026, "month": 8, "day": 25}
+
+    @freeze_time("2026-08-25")
     def test_evaluate_today_utc_available(self):
         """evaluate() always provides `today_utc` with the current UTC date."""
         fe = FilterExpression(
-            "today_utc.year == y and today_utc.month == m and today_utc.day == d"
+            "today_utc.year == 2026 and today_utc.month == 8 and today_utc.day == 25"
         )
-        # Retry if UTC midnight passes mid-evaluation so the assertion stays strict.
-        while True:
-            before = utc_now()
-            matched = fe.evaluate(
-                {"y": before.year, "m": before.month, "d": before.day}
-            )
-            if before.date() == utc_now().date():
-                break
-        assert matched is True
+        assert fe.evaluate({}) is True
 
     def test_evaluate_today_utc_override(self):
         """A caller-supplied `today_utc` takes precedence over the engine's date."""

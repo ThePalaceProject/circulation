@@ -59,7 +59,7 @@ class FilterExpressionError(BasePalaceException):
     """Raised when a filter expression fails to parse or evaluate."""
 
 
-def utc_today() -> dict[str, int]:
+def today_utc() -> dict[str, int]:
     """Return the current UTC date in the shape of the ``today_utc`` context value.
 
     Callers that evaluate several expressions against one logical event (for
@@ -210,7 +210,7 @@ class FilterExpression:
             if the result is not a :class:`bool`.
         :return: Boolean result of the expression.
         """
-        names = {"today_utc": utc_today(), **context}
+        names = {"today_utc": today_utc(), **context}
         # A new evaluator is constructed per call rather than mutating a shared
         # instance, so FilterExpression is safe to call from multiple threads.
         # Note: `functions` parameter requires a mutable mapping.

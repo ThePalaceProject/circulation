@@ -734,20 +734,22 @@ class TestOIDCAuthenticationProvider:
         create_oidc_provider: Callable[..., OIDCAuthenticationProvider],
     ) -> None:
         """One date sample per authentication is shared by both expression levels."""
+        # The sentinel date cannot come from the real clock, so both
+        # expressions pass only if each saw the provider's single sample.
         provider = create_oidc_provider(
-            settings=create_oidc_settings(filter_expression="today_utc.year > 0"),
+            settings=create_oidc_settings(filter_expression="today_utc.year == 1999"),
             library_settings=OIDCAuthLibrarySettings(
-                filter_expression="today_utc.year > 0"
+                filter_expression="today_utc.year == 1999"
             ),
         )
 
         with patch(
-            "palace.manager.integration.patron_auth.oidc.provider.utc_today",
-            return_value={"year": 2026, "month": 1, "day": 1},
-        ) as utc_today_mock:
+            "palace.manager.integration.patron_auth.oidc.provider.today_utc",
+            return_value={"year": 1999, "month": 12, "day": 31},
+        ) as today_utc_mock:
             provider._filter_claims(db.session, self._FILTER_CLAIMS)
 
-        assert utc_today_mock.call_count == 1
+        assert today_utc_mock.call_count == 1
 
     def test_oidc_callback_filter_rejects(
         self,

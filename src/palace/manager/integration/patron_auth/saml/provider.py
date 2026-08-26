@@ -40,7 +40,7 @@ from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.filter import (
     FilterExpression,
     FilterExpressionError,
-    utc_today,
+    today_utc,
 )
 from palace.manager.util.problem_detail import (
     ProblemDetail as pd,
@@ -481,7 +481,7 @@ class SAMLWebSSOAuthenticationProvider(
                 "name": library.name,
                 "id": library.id,
             },
-            "today_utc": utc_today(),
+            "today_utc": today_utc(),
         }
 
         failing: list[str] = []
