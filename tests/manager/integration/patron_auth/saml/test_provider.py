@@ -1358,6 +1358,13 @@ class TestSAMLWebSSOAuthenticationProvider:
                 False,
                 id="extra-data-none",
             ),
+            pytest.param(
+                None,
+                None,
+                "today_utc.year > 2000 and today_utc.month > 0 and today_utc.day > 0",
+                False,
+                id="today-utc-available",
+            ),
         ],
     )
     def test_filter_subject_context_variables(
@@ -1386,6 +1393,138 @@ class TestSAMLWebSSOAuthenticationProvider:
                 controller_fixture.db.session,
                 SAMLSubject("http://idp.example.com", None, None),
             )
+
+        if expect_no_access:
+            assert exc_info.value.problem_detail.uri == SAML_NO_ACCESS_ERROR.uri
+
+    @pytest.mark.parametrize(
+        "frozen_date, ou, expect_no_access",
+        [
+            pytest.param(
+                "2026-08-25", "/Students/Class of 2027", False, id="senior-in-window"
+            ),
+            pytest.param(
+                "2026-08-25",
+                "/students/class of 2030/Room 9",
+                False,
+                id="freshman-subtree-case-insensitive",
+            ),
+            pytest.param(
+                "2026-08-25", "/Students/Class of 2026", True, id="already-graduated"
+            ),
+            pytest.param(
+                "2026-08-25",
+                "/Students/Class of 2031",
+                True,
+                id="still-in-middle-school",
+            ),
+            pytest.param(
+                "2027-06-30",
+                "/Students/Class of 2031",
+                True,
+                id="day-before-summer-rollover",
+            ),
+            pytest.param(
+                "2027-07-01",
+                "/Students/Class of 2031",
+                False,
+                id="summer-rollover-promotes-class",
+            ),
+            pytest.param(
+                "2027-07-01",
+                "/Students/Class of 2027",
+                True,
+                id="summer-rollover-graduates-class",
+            ),
+        ],
+    )
+    def test_filter_subject_class_year_window(
+        self,
+        controller_fixture: ControllerFixture,
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
+        create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
+        frozen_date: str,
+        ou: str,
+        expect_no_access: bool,
+    ):
+        """A date-dependent expression can gate "Class of YYYY" OUs via today_utc.
+
+        Models the real scenario: eduPersonOrgUnitDN carries "/Students/Class of
+        YYYY" values, extra_data configures a per-library grade band (K=0 through
+        senior=12, so grades 9-12 here) plus a shared OU prefix and school-year
+        rollover date, and the expression derives the current senior class year
+        from today_utc.
+        """
+        expression = """any(
+            # exact OU match (staff or this library)
+            ou in [
+                value.lower()
+                for value in integration.extra_data.get("staff", {}).get("ous", [])
+                    + integration.extra_data.get("libraries", {}).get(library.short_name, {}).get("ous", [])
+            ] or
+            # OU prefix match (staff or this library)
+            any(
+                ou.startswith(prefix.lower())
+                for prefix in integration.extra_data.get("staff", {}).get("ou_prefixes", [])
+                    + integration.extra_data.get("libraries", {}).get(library.short_name, {}).get("ou_prefixes", [])
+            ) or
+            # "Class of YYYY" match: the year after the shared prefix must fall in
+            # one of this library's grade bands (K=0 .. senior=12; >12 = graduated)
+            any(
+                rest[0:4].isdigit()
+                and (len(rest) == 4 or rest[4:5] == "/")
+                and int(rest[0:4]) >= senior_class_year + 12 - band.get("max_grade", -1)
+                and int(rest[0:4]) <= senior_class_year + 12 - band.get("min_grade", 13)
+                for band in integration.extra_data.get("libraries", {}).get(library.short_name, {}).get("grade_bands", [])
+            )
+            # bind once: current senior class year, shared prefix, each incoming OU
+            for senior_class_year in [
+                today_utc.year + (
+                    1
+                    if (today_utc.month, today_utc.day) >= (
+                        integration.extra_data.get("rollover", {}).get("month", 7),
+                        integration.extra_data.get("rollover", {}).get("day", 1),
+                    )
+                    else 0
+                )
+            ]
+            for pfx in [integration.extra_data.get("class_of_prefix", "").lower()]
+            for ou in (
+                [value.lower() for value in subject.attribute_statement.attributes["eduPersonOrgUnitDN"].values]
+                if "eduPersonOrgUnitDN" in subject.attribute_statement.attributes
+                else []
+            )
+            for rest in [ou[len(pfx):] if pfx != "" and ou.startswith(pfx) else ""]
+        )"""
+        short_name = controller_fixture.db.default_library().short_name
+        configuration = create_saml_configuration(
+            filter_expression=expression,
+            extra_data={
+                "class_of_prefix": "/Students/Class of ",
+                "rollover": {"month": 7, "day": 1},
+                "libraries": {
+                    short_name: {"grade_bands": [{"min_grade": 9, "max_grade": 12}]}
+                },
+            },
+        )
+        provider = create_saml_provider(settings=configuration)
+        subject = SAMLSubject(
+            "http://idp.example.com",
+            None,
+            SAMLAttributeStatement(
+                [
+                    SAMLAttribute(
+                        name=SAMLAttributeType.eduPersonOrgUnitDN.name, values=[ou]
+                    )
+                ]
+            ),
+        )
+
+        context_manager = (
+            pytest.raises(ProblemDetailException) if expect_no_access else nullcontext()
+        )
+        with freeze_time(frozen_date), context_manager as exc_info:
+            provider._filter_subject(controller_fixture.db.session, subject)
 
         if expect_no_access:
             assert exc_info.value.problem_detail.uri == SAML_NO_ACCESS_ERROR.uri

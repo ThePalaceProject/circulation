@@ -950,6 +950,13 @@ class TestOIDCAuthenticationProvider:
                 False,
                 id="extra-data-none",
             ),
+            pytest.param(
+                None,
+                None,
+                "today_utc.year > 2000 and today_utc.month > 0 and today_utc.day > 0",
+                False,
+                id="today-utc-available",
+            ),
         ],
     )
     def test_filter_claims_context_variables(

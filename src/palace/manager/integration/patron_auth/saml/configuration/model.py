@@ -307,6 +307,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
                 " SAML Subject and other settings."
                 " When present, it must evaluate to True in order for the patron to gain access."
                 " If a per-library Filter Expression is also configured, both must evaluate to True."
+                " The current UTC date is available as 'today_utc' (year, month, day)."
                 "<br>"
                 "<br>"
                 "For example, if you want to limit access to only those patrons for whom the"

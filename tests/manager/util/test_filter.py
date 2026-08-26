@@ -3,6 +3,8 @@ from dataclasses import dataclass, field
 
 import pytest
 
+from palace.util.datetime_helpers import utc_now
+
 from palace.manager.util.filter import (
     FilterExpression,
     FilterExpressionError,
@@ -411,6 +413,32 @@ class TestFilterExpression:
         fe = FilterExpression(expression)
         with pytest.raises(FilterExpressionError):
             fe.evaluate(context)
+
+    # ------------------------------------------------------------------ today_utc
+
+    def test_evaluate_today_utc_available(self):
+        """evaluate() always provides `today_utc` with the current UTC date."""
+        fe = FilterExpression(
+            "today_utc.year == y and today_utc.month == m and today_utc.day == d"
+        )
+        # Retry if UTC midnight passes mid-evaluation so the assertion stays strict.
+        while True:
+            before = utc_now()
+            matched = fe.evaluate(
+                {"y": before.year, "m": before.month, "d": before.day}
+            )
+            if before.date() == utc_now().date():
+                break
+        assert matched is True
+
+    def test_evaluate_today_utc_override(self):
+        """A caller-supplied `today_utc` takes precedence over the engine's date."""
+        fe = FilterExpression(
+            "today_utc.year == 1999 and today_utc.month == 12 and today_utc.day == 31"
+        )
+        assert (
+            fe.evaluate({"today_utc": {"year": 1999, "month": 12, "day": 31}}) is True
+        )
 
     @pytest.mark.parametrize(
         "expression,context,missing_attribute_returns_false,expected,raises",

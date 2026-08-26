@@ -41,7 +41,11 @@ from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.patron import Patron
-from palace.manager.util.filter import FilterExpression, FilterExpressionError
+from palace.manager.util.filter import (
+    FilterExpression,
+    FilterExpressionError,
+    utc_today,
+)
 from palace.manager.util.problem_detail import (
     ProblemDetail as pd,
     ProblemDetailException,
@@ -520,7 +524,10 @@ class OIDCAuthenticationProvider(
         evaluation context exposes ``claims`` (ID token claims dict),
         ``integration`` (fields from the integration settings marked with
         ``patron_auth_filter_context=True``, including ``extra_data``),
-        and ``library`` (``id``, ``name``, ``short_name``).
+        ``library`` (``id``, ``name``, ``short_name``), and ``today_utc``
+        (current UTC date: ``year``, ``month``, ``day``). The context is built
+        once per authentication and shared by both expressions, so they always
+        evaluate against identical data, including the date.
 
         All configured expressions are always evaluated so that a single log entry
         can report every failing level at once.
@@ -550,6 +557,7 @@ class OIDCAuthenticationProvider(
             library.short_name,
             id_token_claim_names,
         )
+        # One shared context for both integration and library expressions.
         context = {
             "claims": id_token_claims,
             "integration": self._settings.filter_context_dump(),
@@ -558,6 +566,7 @@ class OIDCAuthenticationProvider(
                 "name": library.name,
                 "id": library.id,
             },
+            "today_utc": utc_today(),
         }
 
         evaluate_patron_filters(
