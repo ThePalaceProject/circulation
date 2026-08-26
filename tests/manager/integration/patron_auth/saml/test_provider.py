@@ -1471,7 +1471,7 @@ class TestSAMLWebSSOAuthenticationProvider:
             # "Class of YYYY" match: the year after the shared prefix must fall in
             # one of this library's grade bands (K=0 .. senior=12; >12 = graduated)
             any(
-                rest[0:4].isdigit()
+                rest[0:4].isdecimal()
                 and (len(rest) == 4 or rest[4:5] == "/")
                 and int(rest[0:4]) >= senior_class_year + 12 - band.get("max_grade", -1)
                 and int(rest[0:4]) <= senior_class_year + 12 - band.get("min_grade", 13)
@@ -1528,6 +1528,32 @@ class TestSAMLWebSSOAuthenticationProvider:
 
         if expect_no_access:
             assert exc_info.value.problem_detail.uri == SAML_NO_ACCESS_ERROR.uri
+
+    def test_filter_subject_single_date_sample(
+        self,
+        controller_fixture: ControllerFixture,
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
+        create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
+    ):
+        """One date sample per authentication is shared by both expression levels."""
+        provider = create_saml_provider(
+            settings=create_saml_configuration(filter_expression="today_utc.year > 0"),
+            library_settings=SAMLWebSSOAuthLibrarySettings(
+                filter_expression="today_utc.year > 0"
+            ),
+        )
+
+        with patch.object(
+            saml_provider,
+            "utc_today",
+            return_value={"year": 2026, "month": 1, "day": 1},
+        ) as utc_today_mock:
+            provider._filter_subject(
+                controller_fixture.db.session,
+                SAMLSubject("http://idp.example.com", None, None),
+            )
+
+        assert utc_today_mock.call_count == 1
 
     @pytest.mark.parametrize(
         "integration_expression, library_expression, extra_data, expect_no_access",
