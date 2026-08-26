@@ -1436,6 +1436,20 @@ class TestSAMLWebSSOAuthenticationProvider:
                 True,
                 id="summer-rollover-graduates-class",
             ),
+            pytest.param("2026-08-25", "/Staff", False, id="staff-exact-ou"),
+            pytest.param(
+                "2026-08-25",
+                "/staff/Technology",
+                False,
+                id="staff-prefix-ou-case-insensitive",
+            ),
+            pytest.param(
+                "2026-08-25", "/StaffLounge", True, id="staff-lookalike-denied"
+            ),
+            pytest.param("2026-08-25", "/Students/PreK", False, id="library-exact-ou"),
+            pytest.param(
+                "2026-08-25", "/Students/PreK/Room 2", False, id="library-prefix-ou"
+            ),
         ],
     )
     def test_filter_subject_class_year_window(
@@ -1446,14 +1460,16 @@ class TestSAMLWebSSOAuthenticationProvider:
         frozen_date: str,
         ou: str,
         expect_no_access: bool,
-    ):
+    ) -> None:
         """A date-dependent expression can gate "Class of YYYY" OUs via today_utc.
 
         Models the real scenario: eduPersonOrgUnitDN carries "/Students/Class of
         YYYY" values, extra_data configures a per-library grade band (K=0 through
         senior=12, so grades 9-12 here) plus a shared OU prefix and school-year
         rollover date, and the expression derives the current senior class year
-        from today_utc.
+        from today_utc. Exact-match (staff and library ous), prefix
+        (ou_prefixes), and class-year branches are all exercised together, as in
+        a real configuration.
         """
         expression = """any(
             # exact OU match (staff or this library)
@@ -1503,8 +1519,13 @@ class TestSAMLWebSSOAuthenticationProvider:
                 "class_of_prefix": "/Students/Class of ",
                 "rollover": {"month": 7, "day": 1},
                 "libraries": {
-                    short_name: {"grade_bands": [{"min_grade": 9, "max_grade": 12}]}
+                    short_name: {
+                        "ous": ["/Students/PreK"],
+                        "ou_prefixes": ["/Students/PreK/"],
+                        "grade_bands": [{"min_grade": 9, "max_grade": 12}],
+                    }
                 },
+                "staff": {"ous": ["/Staff"], "ou_prefixes": ["/Staff/"]},
             },
         )
         provider = create_saml_provider(settings=configuration)
@@ -1534,7 +1555,7 @@ class TestSAMLWebSSOAuthenticationProvider:
         controller_fixture: ControllerFixture,
         create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
         create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
-    ):
+    ) -> None:
         """One date sample per authentication is shared by both expression levels."""
         # The sentinel date cannot come from the real clock, so both
         # expressions pass only if each saw the provider's single sample.

@@ -417,19 +417,19 @@ class TestFilterExpression:
     # ------------------------------------------------------------------ today_utc
 
     @freeze_time("2026-08-25")
-    def test_today_utc(self):
+    def test_today_utc(self) -> None:
         """today_utc() returns the current UTC date as integer parts."""
         assert today_utc() == {"year": 2026, "month": 8, "day": 25}
 
     @freeze_time("2026-08-25")
-    def test_evaluate_today_utc_available(self):
+    def test_evaluate_today_utc_available(self) -> None:
         """evaluate() always provides `today_utc` with the current UTC date."""
         fe = FilterExpression(
             "today_utc.year == 2026 and today_utc.month == 8 and today_utc.day == 25"
         )
         assert fe.evaluate({}) is True
 
-    def test_evaluate_today_utc_override(self):
+    def test_evaluate_today_utc_override(self) -> None:
         """A caller-supplied `today_utc` takes precedence over the engine's date."""
         fe = FilterExpression(
             "today_utc.year == 1999 and today_utc.month == 12 and today_utc.day == 31"
