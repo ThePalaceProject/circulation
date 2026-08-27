@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, Self, cast
 
 import opensearchpy
 from dependency_injector.wiring import Provide, inject
+from redis.exceptions import AuthenticationError as RedisAuthenticationError
 from sqlalchemy import (
     Boolean,
     Column,
@@ -1261,10 +1262,10 @@ class Work(Base, LoggerMixin):
         """Mark this work as needing to have its search document reindexed."""
         return self.queue_indexing(self.id)
 
-    @staticmethod
+    @classmethod
     @inject
     def queue_indexing(
-        work_id: int | None, *, redis_client: Redis = Provide["redis.client"]
+        cls, work_id: int | None, *, redis_client: Redis = Provide["redis.client"]
     ):
         """
         Add a work to the set of works in redis waiting to be indexed.
@@ -1282,14 +1283,14 @@ class Work(Base, LoggerMixin):
         if work_id is not None:
             try:
                 waiting.add(work_id)
-            except TRANSIENT_REDIS_ERRORS:
-                # Reached both from the ORM event listeners (mid-request, where an
-                # unreachable Redis must not fail the request) and from direct
-                # callers such as calculate_presentation, set_presentation_ready and
-                # CustomList.add_entry/remove_entry, which run in Celery workers.
-                # Swallowing here means those tasks no longer retry on a Redis blip;
-                # the nightly full search reindex is what repairs the miss.
-                Work.logger().warning(
+            except TRANSIENT_REDIS_ERRORS as exc:
+                if isinstance(exc, RedisAuthenticationError):
+                    # In the tuple only because it subclasses ConnectionError, but it
+                    # means a persistent credential/ACL problem rather than a blip, so
+                    # let it surface instead of burying it in a per-work warning. Same
+                    # carve-out core.app_server.ErrorHandler makes.
+                    raise
+                cls.logger().warning(
                     "Could not queue work %s for indexing; Redis appears to be "
                     "temporarily unavailable.",
                     work_id,

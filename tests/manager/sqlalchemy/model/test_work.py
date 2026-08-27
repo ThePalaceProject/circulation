@@ -7,6 +7,7 @@ import opensearchpy
 import pytest
 from psycopg2.extras import NumericRange
 from pytest import LogCaptureFixture
+from redis.exceptions import AuthenticationError as RedisAuthenticationError
 from sqlalchemy import select
 
 from palace.util.datetime_helpers import datetime_utc, from_timestamp, utc_now
@@ -2118,6 +2119,21 @@ class TestWork:
         # The failure is logged with exc_info, so which Redis failure it was is
         # recoverable from the log alone.
         assert "redis unavailable" in caplog.text
+
+    def test_queue_indexing_authentication_error_is_not_swallowed(
+        self, caplog: LogCaptureFixture
+    ):
+        # AuthenticationError is a ConnectionError subclass, so it is a member of
+        # TRANSIENT_REDIS_ERRORS, but it means a persistent credential/ACL problem
+        # rather than a blip. It must surface rather than be logged and dropped.
+        caplog.set_level(LogLevel.warning)
+        redis_client = MagicMock()
+        redis_client.sadd.side_effect = RedisAuthenticationError("bad password")
+
+        with pytest.raises(RedisAuthenticationError):
+            Work.queue_indexing(555, redis_client=redis_client)
+
+        assert "Could not queue work 555 for indexing" not in caplog.text
 
 
 class TestAddWorkToCustomlistsForCollection:
