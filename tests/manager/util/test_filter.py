@@ -2,10 +2,12 @@ from contextlib import nullcontext
 from dataclasses import dataclass, field
 
 import pytest
+from freezegun import freeze_time
 
 from palace.manager.util.filter import (
     FilterExpression,
     FilterExpressionError,
+    today_utc,
 )
 
 
@@ -411,6 +413,30 @@ class TestFilterExpression:
         fe = FilterExpression(expression)
         with pytest.raises(FilterExpressionError):
             fe.evaluate(context)
+
+    # ------------------------------------------------------------------ today_utc
+
+    @freeze_time("2026-08-25")
+    def test_today_utc(self) -> None:
+        """today_utc() returns the current UTC date as integer parts."""
+        assert today_utc() == {"year": 2026, "month": 8, "day": 25}
+
+    @freeze_time("2026-08-25")
+    def test_evaluate_today_utc_available(self) -> None:
+        """evaluate() always provides `today_utc` with the current UTC date."""
+        fe = FilterExpression(
+            "today_utc.year == 2026 and today_utc.month == 8 and today_utc.day == 25"
+        )
+        assert fe.evaluate({}) is True
+
+    def test_evaluate_today_utc_override(self) -> None:
+        """A caller-supplied `today_utc` takes precedence over the engine's date."""
+        fe = FilterExpression(
+            "today_utc.year == 1999 and today_utc.month == 12 and today_utc.day == 31"
+        )
+        assert (
+            fe.evaluate({"today_utc": {"year": 1999, "month": 12, "day": 31}}) is True
+        )
 
     @pytest.mark.parametrize(
         "expression,context,missing_attribute_returns_false,expected,raises",

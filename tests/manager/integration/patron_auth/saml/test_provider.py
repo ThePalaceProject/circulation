@@ -1358,6 +1358,13 @@ class TestSAMLWebSSOAuthenticationProvider:
                 False,
                 id="extra-data-none",
             ),
+            pytest.param(
+                None,
+                None,
+                "today_utc.year > 2000 and today_utc.month > 0 and today_utc.day > 0",
+                False,
+                id="today-utc-available",
+            ),
         ],
     )
     def test_filter_subject_context_variables(
@@ -1389,6 +1396,189 @@ class TestSAMLWebSSOAuthenticationProvider:
 
         if expect_no_access:
             assert exc_info.value.problem_detail.uri == SAML_NO_ACCESS_ERROR.uri
+
+    @pytest.mark.parametrize(
+        "frozen_date, ou, expect_no_access",
+        [
+            pytest.param(
+                "2026-08-25", "/Students/Class of 2027", False, id="senior-in-window"
+            ),
+            pytest.param(
+                "2026-08-25",
+                "/students/class of 2030/Room 9",
+                False,
+                id="freshman-subtree-case-insensitive",
+            ),
+            pytest.param(
+                "2026-08-25", "/Students/Class of 2026", True, id="already-graduated"
+            ),
+            pytest.param(
+                "2026-08-25",
+                "/Students/Class of 2031",
+                True,
+                id="still-in-middle-school",
+            ),
+            pytest.param(
+                "2027-06-30",
+                "/Students/Class of 2031",
+                True,
+                id="day-before-summer-rollover",
+            ),
+            pytest.param(
+                "2027-07-01",
+                "/Students/Class of 2031",
+                False,
+                id="summer-rollover-promotes-class",
+            ),
+            pytest.param(
+                "2027-07-01",
+                "/Students/Class of 2027",
+                True,
+                id="summer-rollover-graduates-class",
+            ),
+            pytest.param("2026-08-25", "/Staff", False, id="staff-exact-ou"),
+            pytest.param(
+                "2026-08-25",
+                "/staff/Technology",
+                False,
+                id="staff-prefix-ou-case-insensitive",
+            ),
+            pytest.param(
+                "2026-08-25", "/StaffLounge", True, id="staff-lookalike-denied"
+            ),
+            pytest.param("2026-08-25", "/Students/PreK", False, id="library-exact-ou"),
+            pytest.param(
+                "2026-08-25", "/Students/PreK/Room 2", False, id="library-prefix-ou"
+            ),
+        ],
+    )
+    def test_filter_subject_class_year_window(
+        self,
+        controller_fixture: ControllerFixture,
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
+        create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
+        frozen_date: str,
+        ou: str,
+        expect_no_access: bool,
+    ) -> None:
+        """A date-dependent expression can gate "Class of YYYY" OUs via today_utc.
+
+        Models the real scenario: eduPersonOrgUnitDN carries "/Students/Class of
+        YYYY" values, extra_data configures a per-library grade band (K=0 through
+        senior=12, so grades 9-12 here) plus a shared OU prefix and school-year
+        rollover date, and the expression derives the current senior class year
+        from today_utc. Exact-match (staff and library ous), prefix
+        (ou_prefixes), and class-year branches are all exercised together, as in
+        a real configuration.
+        """
+        expression = """any(
+            # exact OU match (staff or this library)
+            ou in [
+                value.lower()
+                for value in integration.extra_data.get("staff", {}).get("ous", [])
+                    + integration.extra_data.get("libraries", {}).get(library.short_name, {}).get("ous", [])
+            ] or
+            # OU prefix match (staff or this library)
+            any(
+                ou.startswith(prefix.lower())
+                for prefix in integration.extra_data.get("staff", {}).get("ou_prefixes", [])
+                    + integration.extra_data.get("libraries", {}).get(library.short_name, {}).get("ou_prefixes", [])
+            ) or
+            # "Class of YYYY" match: the year after the shared prefix must fall in
+            # one of this library's grade bands (K=0 .. senior=12; >12 = graduated)
+            any(
+                rest[0:4].isdecimal()
+                and (len(rest) == 4 or rest[4:5] == "/")
+                and int(rest[0:4]) >= senior_class_year + 12 - band.get("max_grade", -1)
+                and int(rest[0:4]) <= senior_class_year + 12 - band.get("min_grade", 13)
+                for band in integration.extra_data.get("libraries", {}).get(library.short_name, {}).get("grade_bands", [])
+            )
+            # bind once: current senior class year, shared prefix, each incoming OU
+            for senior_class_year in [
+                today_utc.year + (
+                    1
+                    if (today_utc.month, today_utc.day) >= (
+                        integration.extra_data.get("rollover", {}).get("month", 7),
+                        integration.extra_data.get("rollover", {}).get("day", 1),
+                    )
+                    else 0
+                )
+            ]
+            for pfx in [integration.extra_data.get("class_of_prefix", "").lower()]
+            for ou in (
+                [value.lower() for value in subject.attribute_statement.attributes["eduPersonOrgUnitDN"].values]
+                if "eduPersonOrgUnitDN" in subject.attribute_statement.attributes
+                else []
+            )
+            for rest in [ou[len(pfx):] if pfx != "" and ou.startswith(pfx) else ""]
+        )"""
+        short_name = controller_fixture.db.default_library().short_name
+        configuration = create_saml_configuration(
+            filter_expression=expression,
+            extra_data={
+                "class_of_prefix": "/Students/Class of ",
+                "rollover": {"month": 7, "day": 1},
+                "libraries": {
+                    short_name: {
+                        "ous": ["/Students/PreK"],
+                        "ou_prefixes": ["/Students/PreK/"],
+                        "grade_bands": [{"min_grade": 9, "max_grade": 12}],
+                    }
+                },
+                "staff": {"ous": ["/Staff"], "ou_prefixes": ["/Staff/"]},
+            },
+        )
+        provider = create_saml_provider(settings=configuration)
+        subject = SAMLSubject(
+            "http://idp.example.com",
+            None,
+            SAMLAttributeStatement(
+                [
+                    SAMLAttribute(
+                        name=SAMLAttributeType.eduPersonOrgUnitDN.name, values=[ou]
+                    )
+                ]
+            ),
+        )
+
+        context_manager = (
+            pytest.raises(ProblemDetailException) if expect_no_access else nullcontext()
+        )
+        with freeze_time(frozen_date), context_manager as exc_info:
+            provider._filter_subject(controller_fixture.db.session, subject)
+
+        if expect_no_access:
+            assert exc_info.value.problem_detail.uri == SAML_NO_ACCESS_ERROR.uri
+
+    def test_filter_subject_single_date_sample(
+        self,
+        controller_fixture: ControllerFixture,
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
+        create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
+    ) -> None:
+        """One date sample per authentication is shared by both expression levels."""
+        # The sentinel date cannot come from the real clock, so both
+        # expressions pass only if each saw the provider's single sample.
+        provider = create_saml_provider(
+            settings=create_saml_configuration(
+                filter_expression="today_utc.year == 1999"
+            ),
+            library_settings=SAMLWebSSOAuthLibrarySettings(
+                filter_expression="today_utc.year == 1999"
+            ),
+        )
+
+        with patch.object(
+            saml_provider,
+            "today_utc",
+            return_value={"year": 1999, "month": 12, "day": 31},
+        ) as today_utc_mock:
+            provider._filter_subject(
+                controller_fixture.db.session,
+                SAMLSubject("http://idp.example.com", None, None),
+            )
+
+        assert today_utc_mock.call_count == 1
 
     @pytest.mark.parametrize(
         "integration_expression, library_expression, extra_data, expect_no_access",

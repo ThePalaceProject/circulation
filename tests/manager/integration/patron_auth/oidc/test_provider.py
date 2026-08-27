@@ -727,6 +727,30 @@ class TestOIDCAuthenticationProvider:
         if expect_raises:
             assert exc_info.value.problem_detail.uri == expected_uri
 
+    def test_filter_claims_single_date_sample(
+        self,
+        db: DatabaseTransactionFixture,
+        create_oidc_settings: Callable[..., OIDCAuthSettings],
+        create_oidc_provider: Callable[..., OIDCAuthenticationProvider],
+    ) -> None:
+        """One date sample per authentication is shared by both expression levels."""
+        # The sentinel date cannot come from the real clock, so both
+        # expressions pass only if each saw the provider's single sample.
+        provider = create_oidc_provider(
+            settings=create_oidc_settings(filter_expression="today_utc.year == 1999"),
+            library_settings=OIDCAuthLibrarySettings(
+                filter_expression="today_utc.year == 1999"
+            ),
+        )
+
+        with patch(
+            "palace.manager.integration.patron_auth.oidc.provider.today_utc",
+            return_value={"year": 1999, "month": 12, "day": 31},
+        ) as today_utc_mock:
+            provider._filter_claims(db.session, self._FILTER_CLAIMS)
+
+        assert today_utc_mock.call_count == 1
+
     def test_oidc_callback_filter_rejects(
         self,
         db: DatabaseTransactionFixture,
@@ -949,6 +973,13 @@ class TestOIDCAuthenticationProvider:
                 "integration.extra_data is None",
                 False,
                 id="extra-data-none",
+            ),
+            pytest.param(
+                None,
+                None,
+                "today_utc.year > 2000 and today_utc.month > 0 and today_utc.day > 0",
+                False,
+                id="today-utc-available",
             ),
         ],
     )

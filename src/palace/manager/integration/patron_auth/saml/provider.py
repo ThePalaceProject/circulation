@@ -37,7 +37,11 @@ from palace.manager.integration.patron_auth.saml.metadata.model import (
 from palace.manager.service.analytics.analytics import Analytics
 from palace.manager.sqlalchemy.model.credential import Credential
 from palace.manager.sqlalchemy.model.patron import Patron
-from palace.manager.util.filter import FilterExpression, FilterExpressionError
+from palace.manager.util.filter import (
+    FilterExpression,
+    FilterExpressionError,
+    today_utc,
+)
 from palace.manager.util.problem_detail import (
     ProblemDetail as pd,
     ProblemDetailException,
@@ -434,7 +438,10 @@ class SAMLWebSSOAuthenticationProvider(
         expression. Both must evaluate to True for access to be granted. The
         evaluation context exposes ``subject``, ``integration`` (fields from the
         integration settings marked with ``patron_auth_filter_context=True``, including
-        ``extra_data``), and ``library`` (``id``, ``name``, ``short_name``).
+        ``extra_data``), ``library`` (``id``, ``name``, ``short_name``), and
+        ``today_utc`` (current UTC date: ``year``, ``month``, ``day``). The context is
+        built once per authentication and shared by both expressions, so they always
+        evaluate against identical data, including the date.
 
         All configured expressions are always evaluated so that a single log entry
         can report every failing level at once.
@@ -465,6 +472,7 @@ class SAMLWebSSOAuthenticationProvider(
             library.short_name,
             subject,
         )
+        # One shared context for both integration and library expressions.
         context = {
             "subject": subject,
             "integration": self._settings.filter_context_dump(),
@@ -473,6 +481,7 @@ class SAMLWebSSOAuthenticationProvider(
                 "name": library.name,
                 "id": library.id,
             },
+            "today_utc": today_utc(),
         }
 
         failing: list[str] = []

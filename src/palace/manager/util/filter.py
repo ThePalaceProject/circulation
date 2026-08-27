@@ -12,6 +12,7 @@ from simpleeval import (
     NameNotDefined,
 )
 
+from palace.util.datetime_helpers import utc_now
 from palace.util.exceptions import BasePalaceException
 
 _SAFE_BUILTINS: frozendict[str, Callable[..., Any]] = frozendict(
@@ -56,6 +57,20 @@ _MUTATION_METHODS: frozenset[str] = frozenset(
 
 class FilterExpressionError(BasePalaceException):
     """Raised when a filter expression fails to parse or evaluate."""
+
+
+def today_utc() -> dict[str, int]:
+    """Return the current UTC date in the shape of the ``today_utc`` context value.
+
+    Callers that evaluate several expressions against one logical event (for
+    example, integration-level and library-level patron auth filters) should
+    call this once and place the result in the shared context under
+    ``today_utc``, so every expression sees the same date.
+
+    :return: Dict with integer ``year``, ``month``, and ``day`` keys.
+    """
+    now = utc_now()
+    return {"year": now.year, "month": now.month, "day": now.day}
 
 
 # Note: `simpleeval` has no type annotations or stubs, thus the type ignore is needed here.
@@ -131,6 +146,13 @@ class FilterExpression:
     Dot-access on a dict value resolves to key lookup first, so callers can
     pass plain dicts and write `prop.subprop` instead of `prop["subprop"]`.
 
+    Every evaluation context automatically includes ``today_utc``, a dict
+    with integer ``year``, ``month``, and ``day`` keys holding the current
+    UTC date. Expressions can use it for date-dependent rules (for example,
+    school-year windows). A caller-supplied ``today_utc`` key in the context
+    takes precedence, which lets callers pin one date across several
+    evaluations and lets tests pin the date.
+
     :param expression: The expression string to evaluate.
     :param extra_safe_types: Additional types whose non-mutating methods may be
         called in the expression. ``str``, ``int``, ``float``, ``dict``,
@@ -178,20 +200,24 @@ class FilterExpression:
     def evaluate(self, context: dict[str, Any]) -> bool:
         """Evaluate the expression against a context dictionary.
 
-        Context keys become top-level identifiers in the expression.
+        Context keys become top-level identifiers in the expression. In
+        addition to the caller's keys, ``today_utc`` (a dict of integer
+        ``year``, ``month``, and ``day`` for the current UTC date) is always
+        available; a ``today_utc`` key present in ``context`` overrides it.
 
         :param context: Named values available to the expression.
         :raises FilterExpressionError: on any parse or evaluation error, or
             if the result is not a :class:`bool`.
         :return: Boolean result of the expression.
         """
+        names = {"today_utc": today_utc(), **context}
         # A new evaluator is constructed per call rather than mutating a shared
         # instance, so FilterExpression is safe to call from multiple threads.
         # Note: `functions` parameter requires a mutable mapping.
         evaluator = _FilterEval(
             extra_safe_types=self._extra_safe_types,
             missing_attribute_returns_false=self._missing_attribute_returns_false,
-            names=context,
+            names=names,
             functions=dict(_SAFE_BUILTINS),
         )
         try:
