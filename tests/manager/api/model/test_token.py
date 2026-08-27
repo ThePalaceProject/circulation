@@ -1,6 +1,9 @@
 import datetime
+from typing import Any
 
+import pytest
 from freezegun import freeze_time
+from pydantic import ValidationError
 
 from palace.manager.api.model.token import OAuthTokenResponse
 from tests.fixtures.files import BoundlessFilesFixture
@@ -35,3 +38,33 @@ class TestOAuthTokenResponse:
 
             frozen_time.tick(delta=datetime.timedelta(seconds=400))
             assert token.expired
+
+    @pytest.mark.parametrize("token_type", ["Bearer", "bearer", "BEARER", "bEaReR"])
+    def test_token_type_case_insensitive(self, token_type: str) -> None:
+        token = OAuthTokenResponse.model_validate(
+            {"access_token": "token", "token_type": token_type, "expires_in": 600}
+        )
+        assert token.token_type == "Bearer"
+
+    @pytest.mark.parametrize("token_type", ["mac", 123, None])
+    def test_token_type_invalid(self, token_type: Any) -> None:
+        with pytest.raises(ValidationError, match="token_type"):
+            OAuthTokenResponse.model_validate(
+                {"access_token": "token", "token_type": token_type, "expires_in": 600}
+            )
+
+    def test_scope(self) -> None:
+        token = OAuthTokenResponse(
+            access_token="token", token_type="Bearer", expires_in=600
+        )
+        assert token.scope is None
+
+        token = OAuthTokenResponse.model_validate(
+            {
+                "access_token": "token",
+                "token_type": "bearer",
+                "expires_in": 600,
+                "scope": "websiteid:12345 authorizationname:default",
+            }
+        )
+        assert token.scope == "websiteid:12345 authorizationname:default"
