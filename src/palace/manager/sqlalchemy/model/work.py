@@ -42,6 +42,7 @@ from palace.manager.data_layer.policy.presentation import (
     PresentationCalculationPolicy,
 )
 from palace.manager.search.service import SearchDocument
+from palace.manager.service.redis.exception import TRANSIENT_REDIS_ERRORS
 from palace.manager.service.redis.redis import Redis
 from palace.manager.sqlalchemy.constants import (
     DataSourceConstants,
@@ -1272,7 +1273,18 @@ class Work(Base, LoggerMixin):
 
         waiting = WaitingForIndexing(redis_client)
         if work_id is not None:
-            waiting.add(work_id)
+            try:
+                waiting.add(work_id)
+            except TRANSIENT_REDIS_ERRORS:
+                # Best-effort: this runs from ORM event listeners, which fire
+                # mid-request on any flush that touches the Work, so an
+                # unreachable Redis must not fail the request. A work missed
+                # here is picked up by the nightly full search reindex.
+                Work.logger().warning(
+                    "Could not queue work %s for indexing; Redis appears to be "
+                    "temporarily unavailable.",
+                    work_id,
+                )
 
     def set_presentation_ready(self, as_of=None, exclude_search=False):
         """Set this work as presentation-ready, no matter what.

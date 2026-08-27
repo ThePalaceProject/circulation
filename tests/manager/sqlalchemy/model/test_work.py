@@ -7,6 +7,7 @@ import opensearchpy
 import pytest
 from psycopg2.extras import NumericRange
 from pytest import LogCaptureFixture
+from redis.exceptions import OutOfMemoryError
 from sqlalchemy import select
 
 from palace.util.datetime_helpers import datetime_utc, from_timestamp, utc_now
@@ -2099,6 +2100,20 @@ class TestWork:
 
         Work.queue_indexing(None)
         assert waiting.pop(1) == []
+
+    def test_queue_indexing_transient_redis_error(self, caplog: LogCaptureFixture):
+        # This is called from ORM event listeners that fire mid-request, so a
+        # Redis that is unreachable -- or, here, full and refusing writes --
+        # must not propagate out and fail the surrounding request.
+        caplog.set_level(LogLevel.warning)
+        redis_client = MagicMock()
+        redis_client.sadd.side_effect = OutOfMemoryError(
+            "command not allowed when used memory > 'maxmemory'."
+        )
+
+        Work.queue_indexing(555, redis_client=redis_client)
+
+        assert "Could not queue work 555 for indexing" in caplog.text
 
 
 class TestAddWorkToCustomlistsForCollection:
