@@ -29,11 +29,6 @@ RedisOutOfMemoryError: type[Exception] = redis_exceptions.OutOfMemoryError  # ty
 # OperationalError, so we catch that here too. Best-effort callers swallow
 # these; the web error handler (see core.app_server.ErrorHandler) maps them to a
 # 503 "try again later".
-#
-# Note that redis's AuthenticationError is a ConnectionError subclass and so is a
-# member of this tuple, but it signals a persistent credential/ACL problem rather
-# than a blip. Callers that swallow these errors should re-raise it; see
-# core.app_server.ErrorHandler and Work.queue_indexing.
 TRANSIENT_REDIS_ERRORS: tuple[type[Exception], ...] = (
     BrokerOperationalError,
     RedisConnectionError,
