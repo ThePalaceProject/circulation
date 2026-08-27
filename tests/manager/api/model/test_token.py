@@ -1,4 +1,5 @@
 import datetime
+from typing import Any
 
 import pytest
 from freezegun import freeze_time
@@ -45,10 +46,11 @@ class TestOAuthTokenResponse:
         )
         assert token.token_type == "Bearer"
 
-    def test_token_type_invalid(self) -> None:
+    @pytest.mark.parametrize("token_type", ["mac", 123, None])
+    def test_token_type_invalid(self, token_type: Any) -> None:
         with pytest.raises(ValidationError, match="token_type"):
             OAuthTokenResponse.model_validate(
-                {"access_token": "token", "token_type": "mac", "expires_in": 600}
+                {"access_token": "token", "token_type": token_type, "expires_in": 600}
             )
 
     def test_scope(self) -> None:
