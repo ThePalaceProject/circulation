@@ -850,7 +850,6 @@ class OverdriveAPI(
         return json.loads(content)  # type: ignore[no-any-return]
 
     def _do_get(self, url: str, headers: dict[str, str], **kwargs: Any) -> Response:
-        """This method is overridden in MockOverdriveAPI."""
         url = self.endpoint(url)
         kwargs["max_retry_count"] = self.settings.max_retry_count
         kwargs["timeout"] = 120
@@ -859,7 +858,6 @@ class OverdriveAPI(
     def _do_post(
         self, url: str, payload: dict[str, str], headers: dict[str, str], **kwargs: Any
     ) -> Response:
-        """This method is overridden in MockOverdriveAPI."""
         url = self.endpoint(url)
         kwargs["max_retry_count"] = self.settings.max_retry_count
         kwargs["timeout"] = 120
@@ -1028,7 +1026,6 @@ class OverdriveAPI(
     def _do_patron_request(
         self, http_method: str, url: str, **kwargs: Unpack[RequestKwargs]
     ) -> Response:
-        """This method is overridden in MockOverdriveAPI."""
         url = self.endpoint(url)
         return HTTP.request_with_timeout(
             http_method,
