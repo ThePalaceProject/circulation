@@ -42,6 +42,7 @@ from palace.manager.data_layer.policy.presentation import (
     PresentationCalculationPolicy,
 )
 from palace.manager.search.service import SearchDocument
+from palace.manager.service.redis.exception import TRANSIENT_REDIS_ERRORS
 from palace.manager.service.redis.redis import Redis
 from palace.manager.sqlalchemy.constants import (
     DataSourceConstants,
@@ -1260,19 +1261,34 @@ class Work(Base, LoggerMixin):
         """Mark this work as needing to have its search document reindexed."""
         return self.queue_indexing(self.id)
 
-    @staticmethod
+    @classmethod
     @inject
     def queue_indexing(
-        work_id: int | None, *, redis_client: Redis = Provide["redis.client"]
-    ):
+        cls, work_id: int | None, *, redis_client: Redis = Provide["redis.client"]
+    ) -> None:
         """
         Add a work to the set of works in redis waiting to be indexed.
+
+        This is **best effort**: if Redis is transiently unavailable the work is
+        dropped rather than raising, and its search document stays stale until the
+        nightly ``full_search_reindex`` rebuilds it. Callers that need the work to
+        be reliably queued should use
+        :class:`~palace.manager.service.redis.models.search.WaitingForIndexing`
+        directly, which still raises.
         """
         from palace.manager.service.redis.models.search import WaitingForIndexing
 
         waiting = WaitingForIndexing(redis_client)
         if work_id is not None:
-            waiting.add(work_id)
+            try:
+                waiting.add(work_id)
+            except TRANSIENT_REDIS_ERRORS:
+                cls.logger().warning(
+                    "Could not queue work %s for indexing; Redis appears to be "
+                    "temporarily unavailable.",
+                    work_id,
+                    exc_info=True,
+                )
 
     def set_presentation_ready(self, as_of=None, exclude_search=False):
         """Set this work as presentation-ready, no matter what.

@@ -18,6 +18,7 @@ from palace.manager.core.exceptions import InconsistentLicensePoolState
 from palace.manager.data_layer.policy.presentation import (
     PresentationCalculationPolicy,
 )
+from palace.manager.service.redis.exception import TRANSIENT_REDIS_ERRORS
 from palace.manager.service.redis.models.search import WaitingForIndexing
 from palace.manager.sqlalchemy.model.classification import Genre, Subject
 from palace.manager.sqlalchemy.model.contributor import Contributor
@@ -2099,6 +2100,24 @@ class TestWork:
 
         Work.queue_indexing(None)
         assert waiting.pop(1) == []
+
+    @pytest.mark.parametrize("exception", TRANSIENT_REDIS_ERRORS)
+    def test_queue_indexing_transient_redis_error(
+        self, caplog: LogCaptureFixture, exception: type[Exception]
+    ):
+        # Queuing a work for indexing is best effort. It is reached mid-request
+        # from the ORM event listeners, so a Redis that is unreachable -- or full
+        # and refusing writes -- must not propagate out and fail the request.
+        caplog.set_level(LogLevel.warning)
+        redis_client = MagicMock()
+        redis_client.sadd.side_effect = exception("redis unavailable")
+
+        Work.queue_indexing(555, redis_client=redis_client)
+
+        assert "Could not queue work 555 for indexing" in caplog.text
+        # The failure is logged with exc_info, so which Redis failure it was is
+        # recoverable from the log alone.
+        assert "redis unavailable" in caplog.text
 
 
 class TestAddWorkToCustomlistsForCollection:
