@@ -1268,6 +1268,13 @@ class Work(Base, LoggerMixin):
     ):
         """
         Add a work to the set of works in redis waiting to be indexed.
+
+        This is **best effort**: if Redis is transiently unavailable the work is
+        dropped rather than raising, and its search document stays stale until the
+        nightly ``full_search_reindex`` rebuilds it. Callers that need the work to
+        be reliably queued should use
+        :class:`~palace.manager.service.redis.models.search.WaitingForIndexing`
+        directly, which still raises.
         """
         from palace.manager.service.redis.models.search import WaitingForIndexing
 
@@ -1276,14 +1283,17 @@ class Work(Base, LoggerMixin):
             try:
                 waiting.add(work_id)
             except TRANSIENT_REDIS_ERRORS:
-                # Best-effort: this runs from ORM event listeners, which fire
-                # mid-request on any flush that touches the Work, so an
-                # unreachable Redis must not fail the request. A work missed
-                # here is picked up by the nightly full search reindex.
+                # Reached both from the ORM event listeners (mid-request, where an
+                # unreachable Redis must not fail the request) and from direct
+                # callers such as calculate_presentation, set_presentation_ready and
+                # CustomList.add_entry/remove_entry, which run in Celery workers.
+                # Swallowing here means those tasks no longer retry on a Redis blip;
+                # the nightly full search reindex is what repairs the miss.
                 Work.logger().warning(
                     "Could not queue work %s for indexing; Redis appears to be "
                     "temporarily unavailable.",
                     work_id,
+                    exc_info=True,
                 )
 
     def set_presentation_ready(self, as_of=None, exclude_search=False):
