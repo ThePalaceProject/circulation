@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import flask
 import pytest
+from flask.testing import FlaskClient
 from werkzeug.datastructures import ImmutableMultiDict
 
 from palace.manager.api import routes
@@ -17,6 +18,52 @@ class TestAppConfiguration:
     # Test the configuration of the real Flask app.
     def test_configuration(self):
         assert False == routes.app.url_map.merge_slashes
+
+
+class TestAllowsPublicCors:
+    @pytest.fixture
+    def client(self) -> FlaskClient:
+        # Use a minimal Flask app so the decorator is tested in isolation.
+        app = flask.Flask(__name__)
+
+        @app.route("/public")
+        @routes.allows_public_cors
+        def public_route() -> str:
+            return "public"
+
+        return app.test_client()
+
+    @pytest.mark.parametrize(
+        "headers",
+        [
+            pytest.param({}, id="no-origin"),
+            pytest.param({"Origin": "http://any.web.client"}, id="with-origin"),
+        ],
+    )
+    def test_get_allows_any_origin(
+        self, client: FlaskClient, headers: dict[str, str]
+    ) -> None:
+        response = client.get("/public", headers=headers)
+        assert response.status_code == 200
+        assert response.headers["Access-Control-Allow-Origin"] == "*"
+        assert "Access-Control-Allow-Credentials" not in response.headers
+
+    def test_preflight(self, client: FlaskClient) -> None:
+        response = client.options(
+            "/public",
+            headers={
+                "Origin": "http://any.web.client",
+                "Access-Control-Request-Method": "GET",
+                "Access-Control-Request-Headers": "Authorization",
+            },
+        )
+        assert response.status_code == 200
+        assert response.headers["Access-Control-Allow-Origin"] == "*"
+        assert "GET" in response.headers["Access-Control-Allow-Methods"]
+        assert (
+            "authorization" in response.headers["Access-Control-Allow-Headers"].lower()
+        )
+        assert "Access-Control-Allow-Credentials" not in response.headers
 
 
 class TestAdminRequestLifecycle:

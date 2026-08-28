@@ -3,6 +3,7 @@ from functools import update_wrapper, wraps
 
 import flask
 from flask import Response, make_response, request
+from flask_cors import cross_origin
 from flask_cors.core import get_cors_options, set_cors_headers
 from werkzeug.exceptions import MethodNotAllowed
 
@@ -107,6 +108,14 @@ def allows_patron_web(f):
         return resp
 
     return update_wrapper(wrapped_function, f)
+
+
+# The allows_public_cors decorator adds permissive CORS headers to routes that
+# serve public data and require no credentials. Anyone can already read these
+# routes without authenticating, so every web origin is allowed and no
+# configuration is needed. Credentials are never allowed on these routes,
+# which is what makes the wildcard origin safe.
+allows_public_cors = cross_origin(send_wildcard=True, supports_credentials=False)
 
 
 def has_library(f):
