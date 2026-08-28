@@ -110,12 +110,23 @@ def allows_patron_web(f):
     return update_wrapper(wrapped_function, f)
 
 
-# The allows_public_cors decorator adds permissive CORS headers to routes that
-# serve public data and require no credentials. Anyone can already read these
-# routes without authenticating, so every web origin is allowed and no
-# configuration is needed. Credentials are never allowed on these routes,
-# which is what makes the wildcard origin safe.
-allows_public_cors = cross_origin(send_wildcard=True, supports_credentials=False)
+# The allows_public_cors decorator adds permissive CORS headers to read-only
+# routes that serve public data. Anyone can already read these routes without
+# authenticating, so every web origin is allowed and no configuration is
+# needed. The Access-Control-Allow-Credentials header is never sent, so
+# browsers refuse to share these responses with cross-origin scripts that make
+# cookie-authenticated requests, which is what keeps the wildcard origin safe.
+# Patron-specific behavior on these routes works only through the
+# Authorization header, which a cross-origin script must set explicitly.
+# Use either this decorator or allows_patron_web on a route, never both;
+# stacking them produces broken CORS responses. The methods list below only
+# limits what a preflight advertises; it does not block other methods on the
+# actual response, so apply this decorator only to GET/HEAD routes.
+allows_public_cors = cross_origin(
+    methods=["GET", "HEAD", "OPTIONS"],
+    send_wildcard=True,
+    supports_credentials=False,
+)
 
 
 def has_library(f):

@@ -1,4 +1,6 @@
 import logging
+from collections.abc import Callable
+from functools import wraps
 from unittest.mock import MagicMock, patch
 
 import flask
@@ -45,8 +47,12 @@ class TestAllowsPublicCors:
     ) -> None:
         response = client.get("/public", headers=headers)
         assert response.status_code == 200
+        assert response.get_data(as_text=True) == "public"
         assert response.headers["Access-Control-Allow-Origin"] == "*"
         assert "Access-Control-Allow-Credentials" not in response.headers
+        # The wildcard origin is constant, so responses must stay cacheable
+        # without a Vary: Origin header.
+        assert "Origin" not in response.headers.get("Vary", "")
 
     def test_preflight(self, client: FlaskClient) -> None:
         response = client.options(
@@ -59,11 +65,50 @@ class TestAllowsPublicCors:
         )
         assert response.status_code == 200
         assert response.headers["Access-Control-Allow-Origin"] == "*"
-        assert "GET" in response.headers["Access-Control-Allow-Methods"]
+        # Only the read-only methods are advertised.
+        assert set(response.headers["Access-Control-Allow-Methods"].split(", ")) == {
+            "GET",
+            "HEAD",
+            "OPTIONS",
+        }
         assert (
             "authorization" in response.headers["Access-Control-Allow-Headers"].lower()
         )
         assert "Access-Control-Allow-Credentials" not in response.headers
+
+    def test_stacked_with_wrapping_decorator(self) -> None:
+        # routes.py applies other decorators (has_library, allows_auth) on top
+        # of allows_public_cors. The OPTIONS interception attributes must
+        # survive that wrapping so Flask still routes preflights to the view.
+        app = flask.Flask(__name__)
+
+        def passthrough(f: Callable[..., str]) -> Callable[..., str]:
+            @wraps(f)
+            def decorated(*args: object, **kwargs: object) -> str:
+                return f(*args, **kwargs)
+
+            return decorated
+
+        @app.route("/stacked")
+        @passthrough
+        @routes.allows_public_cors
+        def stacked_route() -> str:
+            return "stacked"
+
+        client = app.test_client()
+        response = client.options(
+            "/stacked",
+            headers={
+                "Origin": "http://any.web.client",
+                "Access-Control-Request-Method": "GET",
+            },
+        )
+        assert response.status_code == 200
+        assert response.headers["Access-Control-Allow-Origin"] == "*"
+
+        response = client.get("/stacked", headers={"Origin": "http://any.web.client"})
+        assert response.get_data(as_text=True) == "stacked"
+        assert response.headers["Access-Control-Allow-Origin"] == "*"
 
 
 class TestAdminRequestLifecycle:
