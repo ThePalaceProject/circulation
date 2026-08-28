@@ -266,7 +266,11 @@ Celery and caching, we recommend that you use a separate database for each purpo
 #### General
 
 - `PALACE_BASE_URL`: The base URL of the application. Used to create absolute links. (optional)
-- `PALACE_PATRON_WEB_HOSTNAMES`: Only web applications from these hosts can access this Circulation Manager. This can
+- `PALACE_PATRON_WEB_HOSTNAMES`: Only web applications from these hosts can call the endpoints that manage patron
+   data, such as loans, holds, and the patron profile. Endpoints that serve public data (catalog feeds, search, work
+   details, the authentication document, and operational endpoints like `/version.json`) allow all web origins and do
+   not use this setting; on those endpoints, patron-specific results are available only by sending the `Authorization`
+   header. This can
    be a single hostname (`http://catalog.library.org`) or a pipe-separated list of hostnames
    (`http://catalog.library.org|https://beta.library.org`). You can also set this to `*` to allow access from any host,
    but you must not do this in a production environment—only during development (optional).
