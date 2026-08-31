@@ -7,6 +7,7 @@ from uuid import uuid4
 
 import pytest
 from celery.result import AsyncResult
+from sqlalchemy.orm import Session
 
 from palace.util.datetime_helpers import datetime_utc
 from palace.util.log import LogLevel
@@ -34,7 +35,19 @@ from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.overdrive import OverdriveAPIFixture
 from tests.fixtures.redis import RedisFixture
 from tests.mocks.mock import MockRequestsResponse
-from tests.mocks.overdrive import MockOverdriveAPI
+
+
+class SeededOverdriveAPI(OverdriveAPI):
+    """OverdriveAPI with pre-seeded token caches.
+
+    Stands in for OverdriveAPI where a test patches the class itself, so every
+    instance the code under test creates skips the token and library document
+    requests.
+    """
+
+    def __init__(self, _db: Session, collection: Collection) -> None:
+        super().__init__(_db, collection)
+        OverdriveAPIFixture.seed_token_caches(self)
 
 
 class OverdriveImportFixture:
@@ -1134,7 +1147,7 @@ class TestIntegration:
 
     @patch(
         target="palace.manager.integration.license.overdrive.importer.OverdriveAPI",
-        new=MockOverdriveAPI,
+        new=SeededOverdriveAPI,
     )
     def test_full_import_flow_with_parent_identifiers_and_overdrive_data(
         self,

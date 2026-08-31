@@ -59,7 +59,7 @@ class TestGenerateOverdriveAdvantageAccountList:
             library_id=child1_advantage_library_id,
         )
         child1.parent = parent
-        overdrive_api = overdrive_api_fixture.create_mock_api(parent)
+        overdrive_api = overdrive_api_fixture.create_api(parent)
         mock_get_advantage_accounts = MagicMock()
         mock_get_advantage_accounts.return_value = [
             OverdriveAdvantageAccount(
