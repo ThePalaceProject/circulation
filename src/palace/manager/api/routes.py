@@ -131,7 +131,7 @@ _public_cors = cross_origin(
 )
 
 
-def allows_public_cors[**P, T](f: Callable[P, T]) -> Callable[P, T]:
+def allows_public_cors[**P](f: Callable[P, object]) -> Callable[P, Response]:
     """Decorator that adds permissive CORS headers to a public route.
 
     Anyone can already read these routes without authenticating, so every
@@ -152,7 +152,7 @@ def allows_public_cors[**P, T](f: Callable[P, T]) -> Callable[P, T]:
     can answer a request without calling the view. That way this wrapper
     answers OPTIONS preflights itself, with the full CORS header set a
     preflight needs, and adds headers to short-circuit responses. The
-    add_public_cors_to_error_responses hook then only has to cover
+    add_public_cors_to_error_responses hook covers what remains, mainly
     responses built by the app-level error handler.
     """
     if getattr(f, "allows_patron_web", False):
@@ -160,12 +160,15 @@ def allows_public_cors[**P, T](f: Callable[P, T]) -> Callable[P, T]:
             "allows_public_cors and allows_patron_web must not be stacked "
             "on one route."
         )
+    if getattr(f, "allows_public_cors", False):
+        raise PalaceValueError("allows_public_cors is already applied to this route.")
 
+    wrapper = _public_cors(f)
     # The marker attribute is read by add_public_cors_to_error_responses
     # and by allows_patron_web's stacking check. It survives outer
     # decorators because functools.wraps copies __dict__.
-    setattr(f, "allows_public_cors", True)
-    return _public_cors(f)
+    setattr(wrapper, "allows_public_cors", True)
+    return wrapper
 
 
 @app.after_request
@@ -174,9 +177,14 @@ def add_public_cors_to_error_responses(response: Response) -> Response:
 
     The allows_public_cors decorator cannot add headers to a response it
     never sees. A view that raises gets its response built by the app-level
-    error handler, and an outer decorator such as has_library can return a
-    problem detail without calling the view. Cross-origin clients need the
-    header on those responses to read the error body.
+    error handler, and cross-origin clients need the header on that
+    response to read the error body. As a safety net, the hook also covers
+    stacks that ignore the placement rule in allows_public_cors, where an
+    outer decorator returns a problem detail without calling the view.
+
+    Responses produced before routing resolves an endpoint, such as a 405
+    for a method the route does not allow, cannot be attributed to a view
+    and are not back-filled.
     """
     if "Access-Control-Allow-Origin" not in response.headers and request.endpoint:
         view = current_app.view_functions.get(request.endpoint)

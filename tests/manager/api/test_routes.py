@@ -73,11 +73,10 @@ class TestAllowsPublicCors:
         assert response.status_code == 200
         assert response.headers["Access-Control-Allow-Origin"] == "*"
         # Only the read-only methods are advertised.
-        assert set(response.headers["Access-Control-Allow-Methods"].split(", ")) == {
-            "GET",
-            "HEAD",
-            "OPTIONS",
-        }
+        assert {
+            method.strip()
+            for method in response.headers["Access-Control-Allow-Methods"].split(",")
+        } == {"GET", "HEAD", "OPTIONS"}
         assert (
             "authorization" in response.headers["Access-Control-Allow-Headers"].lower()
         )
@@ -119,8 +118,11 @@ class TestAllowsPublicCors:
             flask.abort(404)
 
         # An outer decorator that returns a response without calling the
-        # view, the way has_library does for an unknown library.
-        def short_circuit(f: Callable[..., str]) -> Callable[..., flask.Response]:
+        # view. Such decorators belong inside allows_public_cors, but the
+        # hook still back-fills the header when a stack gets that wrong.
+        def short_circuit(
+            f: Callable[..., flask.Response],
+        ) -> Callable[..., flask.Response]:
             @wraps(f)
             def decorated(*args: object, **kwargs: object) -> flask.Response:
                 return flask.Response("no library", status=404)
@@ -170,36 +172,52 @@ class TestAllowsPublicCors:
         assert "Access-Control-Allow-Origin" not in response.headers
 
     @pytest.mark.parametrize(
-        "outer",
+        "outer,inner",
         [
-            pytest.param("allows_public_cors", id="public-cors-outer"),
-            pytest.param("allows_patron_web", id="patron-web-outer"),
+            pytest.param(
+                routes.allows_public_cors,
+                routes.allows_patron_web,
+                id="public-cors-outer",
+            ),
+            pytest.param(
+                routes.allows_patron_web,
+                routes.allows_public_cors,
+                id="patron-web-outer",
+            ),
         ],
     )
-    def test_stacking_with_allows_patron_web_raises(self, outer: str) -> None:
+    def test_stacking_with_allows_patron_web_raises(
+        self, outer: Callable[..., object], inner: Callable[..., object]
+    ) -> None:
         # The two CORS decorators are mutually exclusive on a route, and
         # misuse must fail at decoration time in either stacking order.
-        inner = (
-            routes.allows_patron_web
-            if outer == "allows_public_cors"
-            else routes.allows_public_cors
-        )
-
         def view() -> str:
             return "view"
 
         with pytest.raises(PalaceValueError, match="must not be stacked"):
-            getattr(routes, outer)(inner(view))
+            outer(inner(view))
+
+    def test_double_application_raises(self) -> None:
+        # Applying the decorator twice is a route table mistake, and it
+        # fails at decoration time like the patron web stacking check.
+        def view() -> str:
+            return "view"
+
+        decorated = routes.allows_public_cors(view)
+        with pytest.raises(PalaceValueError, match="already applied"):
+            routes.allows_public_cors(decorated)
 
     def test_stacked_with_wrapping_decorator(self) -> None:
-        # routes.py applies other decorators (has_library, allows_auth) on top
-        # of allows_public_cors. The OPTIONS interception attributes must
-        # survive that wrapping so Flask still routes preflights to the view.
+        # The decorator's OPTIONS interception attributes and marker must
+        # survive an outer wraps-based decorator, whatever the stack looks
+        # like, so Flask still routes preflights to the view.
         app = flask.Flask(__name__)
 
-        def passthrough(f: Callable[..., str]) -> Callable[..., str]:
+        def passthrough(
+            f: Callable[..., flask.Response],
+        ) -> Callable[..., flask.Response]:
             @wraps(f)
-            def decorated(*args: object, **kwargs: object) -> str:
+            def decorated(*args: object, **kwargs: object) -> flask.Response:
                 return f(*args, **kwargs)
 
             return decorated
