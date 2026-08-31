@@ -8,6 +8,8 @@ import pytest
 from flask.testing import FlaskClient
 from werkzeug.datastructures import ImmutableMultiDict
 
+from palace.util.exceptions import PalaceValueError
+
 from palace.manager.api import routes
 from palace.manager.api.problem_details import LIBRARY_NOT_FOUND
 from palace.manager.sqlalchemy.listeners import site_configuration_has_changed
@@ -20,6 +22,11 @@ class TestAppConfiguration:
     # Test the configuration of the real Flask app.
     def test_configuration(self):
         assert False == routes.app.url_map.merge_slashes
+        # The CORS back-fill hook must be registered on the real app.
+        assert (
+            routes.add_public_cors_to_error_responses
+            in routes.app.after_request_funcs[None]
+        )
 
 
 class TestAllowsPublicCors:
@@ -111,6 +118,21 @@ class TestAllowsPublicCors:
         def private_error() -> str:
             flask.abort(404)
 
+        # An outer decorator that returns a response without calling the
+        # view, the way has_library does for an unknown library.
+        def short_circuit(f: Callable[..., str]) -> Callable[..., flask.Response]:
+            @wraps(f)
+            def decorated(*args: object, **kwargs: object) -> flask.Response:
+                return flask.Response("no library", status=404)
+
+            return decorated
+
+        @app.route("/short-circuit")
+        @short_circuit
+        @routes.allows_public_cors
+        def short_circuit_route() -> str:
+            return "unreachable"
+
         client = app.test_client()
         response = client.get(
             "/public-error", headers={"Origin": "http://any.web.client"}
@@ -123,6 +145,15 @@ class TestAllowsPublicCors:
         )
         assert response.status_code == 404
         assert "Access-Control-Allow-Origin" not in response.headers
+
+        # The view never runs, but the marker propagated through the outer
+        # decorator's functools.wraps, so the hook still adds the header.
+        response = client.get(
+            "/short-circuit", headers={"Origin": "http://any.web.client"}
+        )
+        assert response.status_code == 404
+        assert response.get_data(as_text=True) == "no library"
+        assert response.headers["Access-Control-Allow-Origin"] == "*"
 
         # A successful decorated response already carries the header, so
         # the hook leaves it alone.
@@ -137,6 +168,28 @@ class TestAllowsPublicCors:
         )
         assert response.status_code == 404
         assert "Access-Control-Allow-Origin" not in response.headers
+
+    @pytest.mark.parametrize(
+        "outer",
+        [
+            pytest.param("allows_public_cors", id="public-cors-outer"),
+            pytest.param("allows_patron_web", id="patron-web-outer"),
+        ],
+    )
+    def test_stacking_with_allows_patron_web_raises(self, outer: str) -> None:
+        # The two CORS decorators are mutually exclusive on a route, and
+        # misuse must fail at decoration time in either stacking order.
+        inner = (
+            routes.allows_patron_web
+            if outer == "allows_public_cors"
+            else routes.allows_public_cors
+        )
+
+        def view() -> str:
+            return "view"
+
+        with pytest.raises(PalaceValueError, match="must not be stacked"):
+            getattr(routes, outer)(inner(view))
 
     def test_stacked_with_wrapping_decorator(self) -> None:
         # routes.py applies other decorators (has_library, allows_auth) on top

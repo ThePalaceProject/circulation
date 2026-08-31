@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Callable
 from functools import update_wrapper, wraps
 
 import flask
@@ -6,6 +7,8 @@ from flask import Response, current_app, make_response, request
 from flask_cors import cross_origin
 from flask_cors.core import get_cors_options, set_cors_headers
 from werkzeug.exceptions import MethodNotAllowed
+
+from palace.util.exceptions import PalaceValueError
 
 from palace.manager.api.app import app
 from palace.manager.core.app_server import (
@@ -86,6 +89,12 @@ def allows_auth(f):
 # can't use that decorator because we aren't able to look up the patron web
 # client url configuration setting at the time we create the decorator.
 def allows_patron_web(f):
+    if getattr(f, "allows_public_cors", False):
+        raise PalaceValueError(
+            "allows_patron_web and allows_public_cors must not be stacked "
+            "on one route."
+        )
+
     # Override Flask's default behavior and intercept the OPTIONS method for
     # every request so CORS headers can be added.
     f.required_methods = getattr(f, "required_methods", set())
@@ -107,21 +116,13 @@ def allows_patron_web(f):
 
         return resp
 
-    return update_wrapper(wrapped_function, f)
+    wrapper = update_wrapper(wrapped_function, f)
+    # Marker checked by allows_public_cors to reject stacking both CORS
+    # decorators on one route.
+    wrapper.allows_patron_web = True
+    return wrapper
 
 
-# The allows_public_cors decorator adds permissive CORS headers to read-only
-# routes that serve public data. Anyone can already read these routes without
-# authenticating, so every web origin is allowed and no configuration is
-# needed. The Access-Control-Allow-Credentials header is never sent, so
-# browsers refuse to share these responses with cross-origin scripts that make
-# cookie-authenticated requests, which is what keeps the wildcard origin safe.
-# Patron-specific behavior on these routes works only through the
-# Authorization header, which a cross-origin script must set explicitly.
-# Use either this decorator or allows_patron_web on a route, never both;
-# stacking them produces broken CORS responses. The methods list below only
-# limits what a preflight advertises; it does not block other methods on the
-# actual response, so apply this decorator only to GET/HEAD routes.
 _public_cors = cross_origin(
     methods=["GET", "HEAD", "OPTIONS"],
     max_age=3600,
@@ -130,15 +131,45 @@ _public_cors = cross_origin(
 )
 
 
-def allows_public_cors(f):
-    # The marker attribute is read by add_public_cors_to_error_responses.
-    # It survives outer decorators because functools.wraps copies __dict__.
-    f.allows_public_cors = True
+def allows_public_cors[**P, T](f: Callable[P, T]) -> Callable[P, T]:
+    """Decorator that adds permissive CORS headers to a public route.
+
+    Anyone can already read these routes without authenticating, so every
+    web origin is allowed and no configuration is needed. The
+    Access-Control-Allow-Credentials header is never sent, so browsers
+    refuse to share these responses with cross-origin scripts that make
+    cookie-authenticated requests, which is what keeps the wildcard origin
+    safe. Patron-specific behavior on these routes works only through the
+    Authorization header, which a cross-origin script must set explicitly.
+
+    Use either this decorator or allows_patron_web on a route, never both;
+    stacking them raises PalaceValueError at decoration time. The
+    advertised methods list only limits what a preflight advertises; it
+    does not block other methods on the actual response, so apply this
+    decorator only to GET/HEAD routes.
+
+    Place this decorator outside has_library and any other decorator that
+    can answer a request without calling the view. That way this wrapper
+    answers OPTIONS preflights itself, with the full CORS header set a
+    preflight needs, and adds headers to short-circuit responses. The
+    add_public_cors_to_error_responses hook then only has to cover
+    responses built by the app-level error handler.
+    """
+    if getattr(f, "allows_patron_web", False):
+        raise PalaceValueError(
+            "allows_public_cors and allows_patron_web must not be stacked "
+            "on one route."
+        )
+
+    # The marker attribute is read by add_public_cors_to_error_responses
+    # and by allows_patron_web's stacking check. It survives outer
+    # decorators because functools.wraps copies __dict__.
+    setattr(f, "allows_public_cors", True)
     return _public_cors(f)
 
 
 @app.after_request
-def add_public_cors_to_error_responses(response):
+def add_public_cors_to_error_responses(response: Response) -> Response:
     """Back-fill the wildcard CORS header on public routes.
 
     The allows_public_cors decorator cannot add headers to a response it
