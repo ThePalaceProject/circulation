@@ -157,11 +157,11 @@ class TestAllowsPublicCors:
         assert response.get_data(as_text=True) == "no library"
         assert response.headers["Access-Control-Allow-Origin"] == "*"
 
-        # A successful decorated response already carries the header, so
-        # the hook leaves it alone.
+        # A successful decorated response already carries the header, and
+        # the hook leaves it alone: exactly one header, not a duplicate.
         response = client.get("/public-ok", headers={"Origin": "http://any.web.client"})
         assert response.status_code == 200
-        assert response.headers["Access-Control-Allow-Origin"] == "*"
+        assert response.headers.getlist("Access-Control-Allow-Origin") == ["*"]
 
         # A URL that matches no route has no endpoint, so the hook has
         # nothing to check and adds no header.

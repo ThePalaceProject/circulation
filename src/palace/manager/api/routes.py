@@ -188,7 +188,7 @@ def add_public_cors_to_error_responses(response: Response) -> Response:
     """
     if "Access-Control-Allow-Origin" not in response.headers and request.endpoint:
         view = current_app.view_functions.get(request.endpoint)
-        if view is not None and getattr(view, "allows_public_cors", False):
+        if getattr(view, "allows_public_cors", False):
             response.headers["Access-Control-Allow-Origin"] = "*"
     return response
 
