@@ -153,6 +153,35 @@ class TestOverdriveAPI:
         assert 200 == status_code
         assert b"some content" == content
 
+    def test_get_library_refreshes_expired_token(
+        self, overdrive_api_fixture: OverdriveAPIFixture
+    ):
+        """A token refresh can happen while the library document is being
+        fetched.
+
+        This is the one path that takes the API's library lock and the
+        request layer's token lock at the same time, so it is worth covering
+        here as well as at the request layer: if those two locks were ever
+        collapsed into one non-reentrant lock, this test would hang while the
+        request-layer tests stayed green.
+        """
+        http = overdrive_api_fixture.mock_http
+
+        # The library document is requested and the token is rejected.
+        http.queue_response(401)
+        # So the token is refreshed...
+        overdrive_api_fixture.queue_access_token_response("new bearer token")
+        # ...and the retry succeeds.
+        overdrive_api_fixture.queue_collection_token("a collection token")
+
+        library = overdrive_api_fixture.api.get_library()
+
+        assert library.collection_token == "a collection token"
+        assert (
+            overdrive_api_fixture.api.client_requests._client_oauth_token
+            == "new bearer token"
+        )
+
     def test_failure_to_get_library_is_fatal(
         self, overdrive_api_fixture: OverdriveAPIFixture
     ):

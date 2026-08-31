@@ -277,12 +277,9 @@ class OverdriveAPI(
             )
         self._library_id = library_id
 
-        if not self._settings.overdrive_client_key:
-            raise CannotLoadConfiguration("Overdrive client key is not configured")
-        if not self._settings.overdrive_client_secret:
-            raise CannotLoadConfiguration(
-                "Overdrive client password/secret is not configured"
-            )
+        # The client key and secret are validated by OverdriveClientRequests,
+        # which is the layer that uses them. The website ID is used here, for
+        # the patron authentication scope.
         if not self._settings.overdrive_website_id:
             raise CannotLoadConfiguration("Overdrive website ID is not configured")
 
