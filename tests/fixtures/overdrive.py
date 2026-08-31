@@ -66,10 +66,12 @@ class OverdriveAPIFixture:
         its first API call, so seed both caches up front.
         """
         api._cached_collection_token = OverdriveToken(
-            "fake collection token", utc_now() + timedelta(hours=1)
+            token="fake collection token",
+            expires=utc_now() + timedelta(hours=1),
         )
         api._cached_client_oauth_token = OverdriveToken(
-            "fake client oauth token", utc_now() + timedelta(hours=1)
+            token="fake client oauth token",
+            expires=utc_now() + timedelta(hours=1),
         )
 
     def create_api(self, collection: Collection) -> OverdriveAPI:
