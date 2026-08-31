@@ -97,6 +97,11 @@ class TestAllowsPublicCors:
         app = flask.Flask(__name__)
         app.after_request(routes.add_public_cors_to_error_responses)
 
+        @app.route("/public-ok")
+        @routes.allows_public_cors
+        def public_ok() -> str:
+            return "ok"
+
         @app.route("/public-error")
         @routes.allows_public_cors
         def public_error() -> str:
@@ -115,6 +120,20 @@ class TestAllowsPublicCors:
 
         response = client.get(
             "/private-error", headers={"Origin": "http://any.web.client"}
+        )
+        assert response.status_code == 404
+        assert "Access-Control-Allow-Origin" not in response.headers
+
+        # A successful decorated response already carries the header, so
+        # the hook leaves it alone.
+        response = client.get("/public-ok", headers={"Origin": "http://any.web.client"})
+        assert response.status_code == 200
+        assert response.headers["Access-Control-Allow-Origin"] == "*"
+
+        # A URL that matches no route has no endpoint, so the hook has
+        # nothing to check and adds no header.
+        response = client.get(
+            "/no-such-route", headers={"Origin": "http://any.web.client"}
         )
         assert response.status_code == 404
         assert "Access-Control-Allow-Origin" not in response.headers
