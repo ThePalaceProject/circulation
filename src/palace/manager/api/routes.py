@@ -2,7 +2,7 @@ import logging
 from functools import update_wrapper, wraps
 
 import flask
-from flask import Response, make_response, request
+from flask import Response, current_app, make_response, request
 from flask_cors import cross_origin
 from flask_cors.core import get_cors_options, set_cors_headers
 from werkzeug.exceptions import MethodNotAllowed
@@ -122,11 +122,36 @@ def allows_patron_web(f):
 # stacking them produces broken CORS responses. The methods list below only
 # limits what a preflight advertises; it does not block other methods on the
 # actual response, so apply this decorator only to GET/HEAD routes.
-allows_public_cors = cross_origin(
+_public_cors = cross_origin(
     methods=["GET", "HEAD", "OPTIONS"],
+    max_age=3600,
     send_wildcard=True,
     supports_credentials=False,
 )
+
+
+def allows_public_cors(f):
+    # The marker attribute is read by add_public_cors_to_error_responses.
+    # It survives outer decorators because functools.wraps copies __dict__.
+    f.allows_public_cors = True
+    return _public_cors(f)
+
+
+@app.after_request
+def add_public_cors_to_error_responses(response):
+    """Back-fill the wildcard CORS header on public routes.
+
+    The allows_public_cors decorator cannot add headers to a response it
+    never sees. A view that raises gets its response built by the app-level
+    error handler, and an outer decorator such as has_library can return a
+    problem detail without calling the view. Cross-origin clients need the
+    header on those responses to read the error body.
+    """
+    if "Access-Control-Allow-Origin" not in response.headers and request.endpoint:
+        view = current_app.view_functions.get(request.endpoint)
+        if view is not None and getattr(view, "allows_public_cors", False):
+            response.headers["Access-Control-Allow-Origin"] = "*"
+    return response
 
 
 def has_library(f):

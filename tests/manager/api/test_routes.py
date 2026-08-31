@@ -74,7 +74,50 @@ class TestAllowsPublicCors:
         assert (
             "authorization" in response.headers["Access-Control-Allow-Headers"].lower()
         )
+        assert response.headers["Access-Control-Max-Age"] == "3600"
         assert "Access-Control-Allow-Credentials" not in response.headers
+
+    def test_preflight_does_not_advertise_write_methods(
+        self, client: FlaskClient
+    ) -> None:
+        response = client.options(
+            "/public",
+            headers={
+                "Origin": "http://any.web.client",
+                "Access-Control-Request-Method": "POST",
+            },
+        )
+        assert response.headers["Access-Control-Allow-Origin"] == "*"
+        assert "Access-Control-Allow-Methods" not in response.headers
+
+    def test_error_responses_keep_cors(self) -> None:
+        # A raising view never returns through the decorator, so the
+        # after_request hook must back-fill the wildcard header. Routes
+        # without the decorator must stay untouched.
+        app = flask.Flask(__name__)
+        app.after_request(routes.add_public_cors_to_error_responses)
+
+        @app.route("/public-error")
+        @routes.allows_public_cors
+        def public_error() -> str:
+            flask.abort(404)
+
+        @app.route("/private-error")
+        def private_error() -> str:
+            flask.abort(404)
+
+        client = app.test_client()
+        response = client.get(
+            "/public-error", headers={"Origin": "http://any.web.client"}
+        )
+        assert response.status_code == 404
+        assert response.headers["Access-Control-Allow-Origin"] == "*"
+
+        response = client.get(
+            "/private-error", headers={"Origin": "http://any.web.client"}
+        )
+        assert response.status_code == 404
+        assert "Access-Control-Allow-Origin" not in response.headers
 
     def test_stacked_with_wrapping_decorator(self) -> None:
         # routes.py applies other decorators (has_library, allows_auth) on top
