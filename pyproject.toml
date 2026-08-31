@@ -43,7 +43,7 @@ dependencies = [
     "annotated-types>=0.8.0,<0.9",
     "aws-xray-sdk>=2.15,<2.16",
     "bcrypt>=5.0.0,<6",
-    "bidict>=0.23.1,<0.24",
+    "bidict>=0.23.1,<0.25",
     "boto3>=1.43.71,<2",
     "celery[redis,sqs,tblib]>=5.6.3,<6",
     "certifi",
