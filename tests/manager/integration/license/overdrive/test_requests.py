@@ -704,7 +704,7 @@ class TestOverdrivePatronRequests:
         assert isinstance(checkout, Checkout)
         # The identifier is upper-cased in the URL.
         assert client.requests_methods == ["GET"]
-        assert client.requests[0].endswith("/checkouts/AN-IDENTIFIER")
+        assert client.requests[0].endswith("/v1/patrons/me/checkouts/AN-IDENTIFIER")
 
     def test_create_checkout(
         self,
@@ -754,6 +754,11 @@ class TestOverdrivePatronRequests:
             ),
             pytest.param(
                 None, {"name": "ignoreHoldEmail", "value": True}, id="without_email"
+            ),
+            # Overdrive can report the patron's address as an empty string,
+            # which suppresses the notice the same way a missing one does.
+            pytest.param(
+                "", {"name": "ignoreHoldEmail", "value": True}, id="empty_email"
             ),
         ],
     )
