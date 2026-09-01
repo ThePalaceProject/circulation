@@ -1,16 +1,19 @@
 import logging
 from collections.abc import Callable
 from functools import update_wrapper, wraps
+from typing import TYPE_CHECKING, Any, cast
 
 import flask
 from flask import Response, current_app, make_response, request
 from flask_cors import cross_origin
 from flask_cors.core import get_cors_options, set_cors_headers
+from frozendict import frozendict
 from werkzeug.exceptions import MethodNotAllowed
 
 from palace.util.exceptions import PalaceValueError
 
 from palace.manager.api.app import app
+from palace.manager.api.util.flask import PUBLIC_CORS_METHODS
 from palace.manager.core.app_server import (
     cache_control_headers,
     compressible,
@@ -19,6 +22,11 @@ from palace.manager.core.app_server import (
 )
 from palace.manager.sqlalchemy.hassessioncache import HasSessionCache
 from palace.manager.util.problem_detail import ProblemDetail
+
+if TYPE_CHECKING:
+    # _Options exists only in the flask-cors type stubs, so it can only be
+    # imported while type checking.
+    from flask_cors.core import _Options
 
 log = logging.getLogger(__name__)
 
@@ -123,13 +131,17 @@ def allows_patron_web(f):
     return wrapper
 
 
-_public_cors = cross_origin(
+# Options for the public CORS policy, shared by the decorator and the
+# error-response hook so the two cannot drift apart.
+_PUBLIC_CORS_OPTIONS: frozendict[str, Any] = frozendict(
     origins="*",
-    methods=["GET", "HEAD", "OPTIONS"],
+    methods=PUBLIC_CORS_METHODS,
     max_age=3600,
     send_wildcard=True,
     supports_credentials=False,
 )
+
+_public_cors = cross_origin(**_PUBLIC_CORS_OPTIONS)
 
 
 def allows_public_cors[**P](f: Callable[P, object]) -> Callable[P, Response]:
@@ -147,7 +159,8 @@ def allows_public_cors[**P](f: Callable[P, object]) -> Callable[P, Response]:
     stacking them raises PalaceValueError at decoration time. The
     advertised methods list only limits what a preflight advertises; it
     does not block other methods on the actual response, so apply this
-    decorator only to GET/HEAD routes.
+    decorator only to GET/HEAD routes. PalaceFlask.add_url_rule enforces
+    that requirement when the route is registered.
 
     Place this decorator outside has_library and any other decorator that
     can answer a request without calling the view. That way this wrapper
@@ -174,7 +187,7 @@ def allows_public_cors[**P](f: Callable[P, object]) -> Callable[P, Response]:
 
 @app.after_request
 def add_public_cors_to_error_responses(response: Response) -> Response:
-    """Back-fill the wildcard CORS header on public routes.
+    """Back-fill the public CORS headers on public routes.
 
     The allows_public_cors decorator cannot add headers to a response it
     never sees. A view that raises gets its response built by the app-level
@@ -189,10 +202,15 @@ def add_public_cors_to_error_responses(response: Response) -> Response:
     CORS routes with strict_slashes=False (see library_dir_route) so a
     trailing-slash mismatch never becomes an unreadable redirect.
     """
-    if "Access-Control-Allow-Origin" not in response.headers and request.endpoint:
-        view = current_app.view_functions.get(request.endpoint)
-        if getattr(view, "allows_public_cors", False):
-            response.headers["Access-Control-Allow-Origin"] = "*"
+    if "Access-Control-Allow-Origin" in response.headers or not request.endpoint:
+        return response
+    view = current_app.view_functions.get(request.endpoint)
+    if getattr(view, "allows_public_cors", False):
+        # get_cors_options never mutates its arguments, so the shared
+        # frozendict can be passed directly; the cast satisfies the stub's
+        # TypedDict parameter type.
+        options = cast("_Options", _PUBLIC_CORS_OPTIONS)
+        set_cors_headers(response, get_cors_options(current_app, options))
     return response
 
 
