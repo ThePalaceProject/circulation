@@ -423,10 +423,12 @@ class TestOverdrivePatronRequests:
         requests = overdrive_patron_requests.requests
 
         # A token response with no token_type at all. The body is a 2xx, so
-        # the access token in it is live.
+        # the access token in it is live. It is deliberately short: pydantic
+        # elides the middle of a long value, which would hide a leak here
+        # rather than catch it.
         overdrive_patron_requests.client.queue_response(
             200,
-            content=json.dumps(dict(access_token="live-bearer-token", expires_in=3600)),
+            content=json.dumps(dict(access_token="tok1", expires_in=3600)),
         )
         with pytest.raises(
             PatronAuthorizationFailedException,
@@ -440,10 +442,14 @@ class TestOverdrivePatronRequests:
         assert "token_type" in caplog.text
         assert "Errors:" in caplog.text
 
-        # ...without the token reaching the log or the exception.
-        assert "live-bearer-token" not in caplog.text
-        assert "live-bearer-token" not in str(excinfo.value)
-        assert "live-bearer-token" not in str(excinfo.value.problem_detail)
+        # ...without the token reaching the log or the exception. The
+        # traceback counts: caplog.text includes it, and pydantic renders the
+        # input it was given there unless we keep it out.
+        assert "tok1" not in caplog.text
+        assert "input_value" not in caplog.text
+        assert "Traceback" not in caplog.text
+        assert "tok1" not in str(excinfo.value)
+        assert "tok1" not in str(excinfo.value.problem_detail)
 
     def test_patron_token_request_policy(
         self, overdrive_patron_requests: OverdrivePatronRequestsFixture

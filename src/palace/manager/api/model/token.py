@@ -28,6 +28,10 @@ class OAuthTokenResponse(BaseModel):
 
     model_config = ConfigDict(
         frozen=True,
+        # The input to this model is a token response, so it carries a live
+        # credential. Keep pydantic from echoing it into validation errors,
+        # which callers log and attach to exceptions.
+        hide_input_in_errors=True,
     )
 
     access_token: str

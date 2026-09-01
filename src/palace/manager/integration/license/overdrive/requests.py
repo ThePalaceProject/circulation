@@ -44,6 +44,11 @@ class PatronTokenProvider(Protocol):
 
     The token itself is persisted in the database by the API layer, so the
     request layer reaches it through this callable rather than owning it.
+
+    A forced refresh must be visible to later calls: the retry after a 401
+    calls the provider again rather than using what the refresh returned, so
+    a provider that handed back a fresh token without storing it would retry
+    with the rejected one.
     """
 
     def __call__(self, *, force_refresh: bool = False) -> str: ...
@@ -441,7 +446,7 @@ class OverdrivePatronRequests(BaseOverdriveRequests):
                 f"refresh_patron_oauth_token got an unusable token response. "
                 f"Errors: '{errors}'."
             )
-            self.log.exception(debug_message)
+            self.log.error(debug_message)
             raise PatronAuthorizationFailedException(
                 "Failed to authenticate with Overdrive", debug_message
             ) from e

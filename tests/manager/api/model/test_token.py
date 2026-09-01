@@ -53,6 +53,22 @@ class TestOAuthTokenResponse:
                 {"access_token": "token", "token_type": token_type, "expires_in": 600}
             )
 
+    def test_validation_errors_hide_the_token(self) -> None:
+        """A validation error must not echo the response it was given.
+
+        The input to this model is a token response carrying a live
+        credential, and callers log these errors and attach them to
+        exceptions.
+        """
+        with pytest.raises(ValidationError) as excinfo:
+            OAuthTokenResponse.model_validate(
+                {"access_token": "tok1", "expires_in": 600}
+            )
+
+        assert "token_type" in str(excinfo.value)
+        assert "tok1" not in str(excinfo.value)
+        assert "input_value" not in str(excinfo.value)
+
     def test_scope(self) -> None:
         token = OAuthTokenResponse(
             access_token="token", token_type="Bearer", expires_in=600
