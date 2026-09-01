@@ -182,6 +182,22 @@ class TestOverdriveAPI:
             == "new bearer token"
         )
 
+    def test_library_lock_is_shared_across_instances(
+        self, overdrive_api_fixture: OverdriveAPIFixture
+    ):
+        """The library document fetch is serialized process-wide.
+
+        Instances are built per configuration load and directly by scripts
+        and Celery tasks, so more than one can exist for a collection at a
+        time. The fetch writes to the representations table, where
+        (url, media_type) is unique, so a per-instance lock would let two of
+        them race to insert the same row.
+        """
+        other = overdrive_api_fixture.create_api(overdrive_api_fixture.collection)
+
+        assert other is not overdrive_api_fixture.api
+        assert other._library_lock is overdrive_api_fixture.api._library_lock
+
     def test_failure_to_get_library_is_fatal(
         self, overdrive_api_fixture: OverdriveAPIFixture
     ):

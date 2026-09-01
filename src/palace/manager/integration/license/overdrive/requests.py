@@ -12,6 +12,7 @@ from threading import Lock
 from typing import Any
 
 from frozendict import frozendict
+from pydantic import ValidationError
 from requests import Response
 from requests.structures import CaseInsensitiveDict
 
@@ -20,6 +21,9 @@ from palace.util.log import LoggerMixin
 from palace.manager.api.model.token import OAuthTokenResponse
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.integration.license.overdrive.constants import OverdriveConstants
+from palace.manager.integration.license.overdrive.exception import (
+    OverdriveValidationError,
+)
 from palace.manager.integration.license.overdrive.settings import OverdriveSettings
 from palace.manager.util import base64
 from palace.manager.util.http.exception import BadResponseException
@@ -233,7 +237,21 @@ class OverdriveClientRequests(BaseOverdriveRequests):
                 {"Authorization": self._collection_context_basic_auth_header},
                 allowed_response_codes=[200],
             )
-            token = OAuthTokenResponse.model_validate_json(response.content)
+            try:
+                token = OAuthTokenResponse.model_validate_json(response.content)
+            except ValidationError as e:
+                # Overdrive accepted the credentials but sent back something
+                # we can't use as a token. Raise it as an Overdrive error
+                # rather than letting a bare ValidationError escape.
+                self.log.exception(
+                    "Unable to validate Overdrive token response. %s", str(e)
+                )
+                raise OverdriveValidationError(
+                    response.url,
+                    "Error validating Overdrive token response",
+                    response,
+                    debug_message=str(e),
+                ) from e
             self._cached_token = token
             return token
 

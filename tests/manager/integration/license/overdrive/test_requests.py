@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import timedelta
 
 import pytest
@@ -7,6 +8,9 @@ from freezegun import freeze_time
 
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.integration.license.overdrive.constants import OverdriveConstants
+from palace.manager.integration.license.overdrive.exception import (
+    OverdriveValidationError,
+)
 from palace.manager.integration.license.overdrive.requests import (
     OverdriveClientRequests,
 )
@@ -181,6 +185,27 @@ class TestOverdriveClientRequests:
             match="Got status code 401 .* can only continue on: 200.",
         ):
             overdrive_client_requests.requests.refresh_client_oauth_token()
+
+    def test_refresh_client_oauth_token_unusable_response(
+        self,
+        overdrive_client_requests: OverdriveClientRequestsFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A 200 body we can't turn into a token raises an Overdrive error.
+
+        OAuthTokenResponse requires more of the body than we used to read, so
+        this has to be translated rather than escaping as a bare pydantic
+        ValidationError.
+        """
+        # A token response with no token_type at all.
+        overdrive_client_requests.client.queue_response(
+            200, content=json.dumps(dict(access_token="token", expires_in=3600))
+        )
+        with pytest.raises(OverdriveValidationError) as excinfo:
+            overdrive_client_requests.requests.refresh_client_oauth_token()
+
+        assert excinfo.value.problem_detail.debug_message is not None
+        assert "1 validation error for OAuthTokenResponse" in caplog.text
 
     def test_raw_get_success(
         self, overdrive_client_requests: OverdriveClientRequestsFixture

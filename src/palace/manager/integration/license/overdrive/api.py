@@ -212,6 +212,12 @@ class OverdriveAPI(
     # reasonable window without hitting the DB on every request.
     COLLECTION_TOKEN_MAX_AGE: datetime.timedelta = datetime.timedelta(minutes=5)
 
+    # Serializes fetches of the library document across every instance in the
+    # process. The document is cached in the representations table, where
+    # (url, media_type) is unique, so two instances for the same collection
+    # racing past LIBRARY_MAX_AGE would otherwise both try to write the row.
+    _library_lock = Lock()
+
     TIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
     NEXT_REL = "next"
@@ -289,10 +295,6 @@ class OverdriveAPI(
             if client_requests is None
             else client_requests
         )
-
-        # Serializes fetches of the library document, which writes to the
-        # representations table.
-        self._library_lock = Lock()
 
         # In-memory cache for the collectionToken extracted from the library
         # document. Expires after COLLECTION_TOKEN_MAX_AGE so that long-lived
