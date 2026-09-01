@@ -57,9 +57,9 @@ class PatronTokenProvider(Protocol):
     def __call__(self, *, force_refresh: bool = False) -> str: ...
 
 
-# The host portion of every client-context URL template. Module level so both
-# request classes can build their templates from it; a class attribute on the
-# base would not be visible inside a subclass's own class body.
+# The host portion of every client-context URL template. Module level because
+# OverdriveClientRequests builds its templates in its own class body, where a
+# class attribute inherited from the base would not be visible.
 HOST_ENDPOINT_BASE = "%(host)s"
 
 
