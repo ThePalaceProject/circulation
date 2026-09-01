@@ -22,9 +22,8 @@ from palace.manager.api.circulation.exceptions import (
     CannotFulfill,
     PatronAuthorizationFailedException,
 )
-from palace.manager.api.config import Configuration
 from palace.manager.api.model.token import OAuthTokenResponse
-from palace.manager.core.config import CannotLoadConfiguration
+from palace.manager.core.config import CannotLoadConfiguration, Configuration
 from palace.manager.core.exceptions import IntegrationException
 from palace.manager.integration.license.overdrive.constants import OverdriveConstants
 from palace.manager.integration.license.overdrive.exception import (
@@ -363,6 +362,10 @@ class OverdrivePatronRequests(BaseOverdriveRequests):
     def _do_request(
         self, http_method: str, url: str, **kwargs: Unpack[RequestKwargs]
     ) -> Response:
+        # Unlike the token endpoints, patron API calls stay on the global HTTP
+        # timeout and retry defaults. A patron is waiting on these, so failing
+        # fast beats holding the request open for the token endpoint's two
+        # minutes.
         url = self.endpoint(url)
         return HTTP.request_with_timeout(
             http_method,

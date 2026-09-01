@@ -335,9 +335,7 @@ class TestOverdriveClientRequests:
 
 class TestOverdrivePatronRequests:
     def test_refresh_patron_oauth_token(
-        self,
-        overdrive_patron_requests: OverdrivePatronRequestsFixture,
-        overdrive_files_fixture: OverdriveFilesFixture,
+        self, overdrive_patron_requests: OverdrivePatronRequestsFixture
     ) -> None:
         """Verify that patron information is included in the request
         when refreshing a patron access token.
@@ -486,6 +484,35 @@ class TestOverdrivePatronRequests:
         client.queue_response(401)
         with pytest.raises(IntegrationException, match="patron OAuth Bearer Token"):
             requests.patron_request(provider, "http://example.com/")
+
+    def test_patron_request_401_retry_returns_parsed_model(
+        self,
+        overdrive_patron_requests: OverdrivePatronRequestsFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
+    ) -> None:
+        """The retry after a 401 still parses into the requested model.
+
+        The retry has to forward response_type, or a caller that asked for a
+        model gets a raw Response back the moment a token happens to expire.
+        """
+        requests = overdrive_patron_requests.requests
+        client = overdrive_patron_requests.client
+
+        client.queue_response(401)
+        client.queue_response(
+            200,
+            content=overdrive_files_fixture.sample_data(
+                "checkout_response_no_format_locked_in.json"
+            ),
+        )
+
+        checkout = requests.patron_request(
+            overdrive_patron_requests.token_provider,
+            "http://example.com/",
+            response_type=Checkout,
+        )
+
+        assert isinstance(checkout, Checkout)
 
     def test_patron_request_raises_validation_error(
         self,

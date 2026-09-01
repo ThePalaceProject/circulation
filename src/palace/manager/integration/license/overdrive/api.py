@@ -272,8 +272,6 @@ class OverdriveAPI(
         if not self._settings.overdrive_website_id:
             raise CannotLoadConfiguration("Overdrive website ID is not configured")
 
-        self._server_nickname = self._settings.overdrive_server_nickname
-
         self.client_requests = (
             OverdriveClientRequests(
                 self._settings, parent_library_id=self.parent_library_id
