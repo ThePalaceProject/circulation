@@ -14,7 +14,7 @@ from palace.manager.integration.license.overdrive.requests import (
     OverdrivePatronRequests,
 )
 from palace.manager.integration.license.overdrive.settings import OverdriveSettings
-from tests.fixtures.http import MockHttpClientFixture
+from tests.fixtures.http import MockAsyncClientFixture, MockHttpClientFixture
 
 create_settings = partial(
     OverdriveSettings,
@@ -51,7 +51,8 @@ def overdrive_client_requests(
 class OverdriveAsyncRequestsFixture:
     """An OverdriveAsyncRequests and the client context it takes its token from."""
 
-    def __init__(self) -> None:
+    def __init__(self, client: MockAsyncClientFixture) -> None:
+        self.client = client
         self.settings = create_settings()
         self.client_requests = OverdriveClientRequests(self.settings)
         # The async client builds its Authorization header up front, so seed a
@@ -63,8 +64,10 @@ class OverdriveAsyncRequestsFixture:
 
 
 @pytest.fixture
-def overdrive_async_requests() -> OverdriveAsyncRequestsFixture:
-    return OverdriveAsyncRequestsFixture()
+def overdrive_async_requests(
+    async_http_client: MockAsyncClientFixture,
+) -> OverdriveAsyncRequestsFixture:
+    return OverdriveAsyncRequestsFixture(async_http_client)
 
 
 class OverdrivePatronRequestsFixture:
