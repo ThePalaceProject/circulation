@@ -159,7 +159,7 @@ class RouteTestFixture:
     def close(self):
         self.routes.app = self.original_app
 
-    def request(self, url, method="GET"):
+    def request(self, url, method="GET", headers=None):
         """Simulate a request to a URL without triggering any code outside
         routes.py.
         """
@@ -171,7 +171,9 @@ class RouteTestFixture:
 
         # Call it in the context of the mock app, using the same HTTP method so that
         # route functions that inspect flask.request.method see the correct value.
-        with self.controller_fixture.app.test_request_context(url, method=method):
+        with self.controller_fixture.app.test_request_context(
+            url, method=method, headers=headers
+        ):
             return mock_function(**kwargs)
 
     def assert_request_calls(self, url, method, *args, **kwargs):

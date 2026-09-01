@@ -243,6 +243,62 @@ class TestAllowsPublicCors:
         assert response.get_data(as_text=True) == "stacked"
         assert response.headers["Access-Control-Allow-Origin"] == "*"
 
+    # Routes that serve public data carry the allows_public_cors decorator,
+    # so they allow any web origin without configuration.
+    @pytest.mark.parametrize(
+        "url",
+        [
+            pytest.param("/", id="index"),
+            pytest.param("/authentication_document", id="authentication-document"),
+            pytest.param("/groups", id="groups"),
+            pytest.param("/feed", id="feed"),
+            pytest.param("/navigation", id="navigation"),
+            pytest.param("/search", id="search"),
+            pytest.param("/crawlable", id="crawlable-library"),
+            pytest.param("/lists/mylist/crawlable", id="crawlable-list"),
+            pytest.param(
+                "/collections/mycollection/crawlable", id="crawlable-collection"
+            ),
+            pytest.param("/marc", id="marc"),
+            pytest.param("/works", id="works"),
+            pytest.param("/works/contributor/somebody", id="contributor"),
+            pytest.param("/works/series/someseries", id="series"),
+            pytest.param("/works/sometype/some/identifier", id="permalink"),
+            pytest.param(
+                "/works/sometype/some/identifier/recommendations", id="recommendations"
+            ),
+            pytest.param(
+                "/works/sometype/some/identifier/related_books", id="related-books"
+            ),
+            pytest.param(
+                "/analytics/sometype/some/identifier/someevent", id="analytics"
+            ),
+            pytest.param("/version.json", id="version"),
+        ],
+    )
+    def test_public_routes_allow_any_origin(
+        self, route_test: RouteTestFixture, url: str
+    ) -> None:
+        response = route_test.request(url, headers={"Origin": "http://any.web.client"})
+        assert response.headers["Access-Control-Allow-Origin"] == "*"
+        assert "Access-Control-Allow-Credentials" not in response.headers
+
+    def test_public_route_cors_survives_library_error(
+        self, route_test: RouteTestFixture, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The fixture calls the view directly, bypassing after_request, so
+        # this only passes when the decorator sits outside has_library and
+        # adds headers to the library-not-found short circuit itself.
+        monkeypatch.setattr(
+            route_test.manager.index_controller,
+            "library_for_request",
+            lambda *args, **kwargs: LIBRARY_NOT_FOUND,
+        )
+        response = route_test.request(
+            "/groups", headers={"Origin": "http://any.web.client"}
+        )
+        assert response.headers["Access-Control-Allow-Origin"] == "*"
+
 
 class TestAdminRequestLifecycle:
     def test_requests_check_if_settings_need_reload(
@@ -432,6 +488,17 @@ class TestLoansController:
     def fixture(self, route_test: RouteTestFixture) -> RouteTestFixture:
         route_test.set_controller_name(self.CONTROLLER_NAME)
         return route_test
+
+    def test_loans_cors_uses_allowlist(self, fixture: RouteTestFixture) -> None:
+        # /loans keeps the allows_patron_web behavior: only configured
+        # patron web origins are allowed, never the wildcard.
+        response = fixture.request("/loans", headers={"Origin": "http://patron/web"})
+        assert response.headers["Access-Control-Allow-Origin"] == "http://patron/web"
+
+        response = fixture.request(
+            "/loans", headers={"Origin": "http://unknown.example"}
+        )
+        assert "Access-Control-Allow-Origin" not in response.headers
 
     def test_active_loans(self, fixture: RouteTestFixture):
         url = "/loans"

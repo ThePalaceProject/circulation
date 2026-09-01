@@ -323,8 +323,8 @@ def library_dir_route(path, *args, **kwargs):
 
 
 @library_route("/", strict_slashes=False)
+@allows_public_cors
 @has_library
-@allows_patron_web
 @returns_problem_detail
 @cache_control_headers(default_max_age=3600)
 @compressible
@@ -333,6 +333,7 @@ def index():
 
 
 @library_route("/authentication_document")
+@allows_public_cors
 @has_library
 @returns_problem_detail
 @cache_control_headers(default_max_age=3600)
@@ -343,8 +344,8 @@ def authentication_document():
 
 @library_dir_route("/groups", defaults=dict(lane_identifier=None))
 @library_route("/groups/<lane_identifier>")
+@allows_public_cors
 @has_library
-@allows_patron_web
 @returns_problem_detail
 @cache_control_headers()
 @compressible
@@ -354,8 +355,8 @@ def acquisition_groups(lane_identifier):
 
 @library_dir_route("/feed", defaults=dict(lane_identifier=None))
 @library_route("/feed/<lane_identifier>")
+@allows_public_cors
 @has_library
-@allows_patron_web
 @returns_problem_detail
 @compressible
 def feed(lane_identifier):
@@ -364,8 +365,8 @@ def feed(lane_identifier):
 
 @library_dir_route("/navigation", defaults=dict(lane_identifier=None))
 @library_route("/navigation/<lane_identifier>")
+@allows_public_cors
 @has_library
-@allows_patron_web
 @returns_problem_detail
 @compressible
 def navigation_feed(lane_identifier):
@@ -373,8 +374,8 @@ def navigation_feed(lane_identifier):
 
 
 @library_route("/crawlable")
+@allows_public_cors
 @has_library
-@allows_patron_web
 @returns_problem_detail
 @compressible
 def crawlable_library_feed():
@@ -382,8 +383,8 @@ def crawlable_library_feed():
 
 
 @library_route("/lists/<list_name>/crawlable")
+@allows_public_cors
 @has_library
-@allows_patron_web
 @returns_problem_detail
 @compressible
 def crawlable_list_feed(list_name):
@@ -391,7 +392,7 @@ def crawlable_list_feed(list_name):
 
 
 @app.route("/collections/<collection_name>/crawlable")
-@allows_patron_web
+@allows_public_cors
 @returns_problem_detail
 @compressible
 def crawlable_collection_feed(collection_name):
@@ -399,6 +400,7 @@ def crawlable_collection_feed(collection_name):
 
 
 @library_route("/marc")
+@allows_public_cors
 @has_library
 @returns_problem_detail
 @compressible
@@ -408,8 +410,8 @@ def marc_page():
 
 @library_dir_route("/search", defaults=dict(lane_identifier=None))
 @library_route("/search/<lane_identifier>")
+@allows_public_cors
 @has_library
-@allows_patron_web
 @returns_problem_detail
 @compressible
 def lane_search(lane_identifier):
@@ -562,8 +564,8 @@ def loan_or_hold_detail(identifier_type, identifier):
 
 
 @library_dir_route("/works")
+@allows_public_cors
 @has_library
-@allows_patron_web
 @returns_problem_detail
 @compressible
 def work():
@@ -578,8 +580,8 @@ def work():
     "/works/contributor/<contributor_name>/<languages>", defaults=dict(audiences=None)
 )
 @library_route("/works/contributor/<contributor_name>/<languages>/<audiences>")
+@allows_public_cors
 @has_library
-@allows_patron_web
 @returns_problem_detail
 @compressible
 def contributor(contributor_name, languages, audiences):
@@ -595,8 +597,8 @@ def contributor(contributor_name, languages, audiences):
     "/works/series/<series_name>/<languages>", defaults=dict(audiences=None)
 )
 @library_route("/works/series/<series_name>/<languages>/<audiences>")
+@allows_public_cors
 @has_library
-@allows_patron_web
 @returns_problem_detail
 @compressible
 def series(series_name, languages, audiences):
@@ -604,9 +606,9 @@ def series(series_name, languages, audiences):
 
 
 @library_route("/works/<identifier_type>/<path:identifier>")
+@allows_public_cors
 @has_library
 @allows_auth
-@allows_patron_web
 @returns_problem_detail
 @compressible
 def permalink(identifier_type, identifier):
@@ -614,8 +616,8 @@ def permalink(identifier_type, identifier):
 
 
 @library_route("/works/<identifier_type>/<path:identifier>/recommendations")
+@allows_public_cors
 @has_library
-@allows_patron_web
 @returns_problem_detail
 @compressible
 def recommendations(identifier_type, identifier):
@@ -623,8 +625,8 @@ def recommendations(identifier_type, identifier):
 
 
 @library_route("/works/<identifier_type>/<path:identifier>/related_books")
+@allows_public_cors
 @has_library
-@allows_patron_web
 @returns_problem_detail
 @compressible
 def related_books(identifier_type, identifier):
@@ -632,9 +634,9 @@ def related_books(identifier_type, identifier):
 
 
 @library_route("/analytics/<identifier_type>/<path:identifier>/<event_type>")
+@allows_public_cors
 @has_library
 @allows_auth
-@allows_patron_web
 @returns_problem_detail
 def track_analytics_event(identifier_type, identifier, event_type):
     return app.manager.analytics_controller.track_event(
@@ -811,6 +813,7 @@ def opds2_with_odl_notification(
 
 # Controllers used for operations purposes
 @app.route("/version.json")
+@allows_public_cors
 def application_version():
     return app.manager.version.version()
 
