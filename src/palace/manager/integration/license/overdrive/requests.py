@@ -192,7 +192,42 @@ class BaseOverdriveRequests(LoggerMixin):
         return HTTP.post_with_timeout(url, data=payload, headers=headers, **kwargs)
 
 
-class OverdriveClientRequests(BaseOverdriveRequests):
+class ClientCredentialsRequests(BaseOverdriveRequests):
+    """Shared client-credential handling for the two client-context layers.
+
+    Both acquire a bearer token with the collection's configured key and
+    secret, and both read it from the same cache so a collection only ever
+    holds one.
+    """
+
+    def __init__(
+        self,
+        settings: OverdriveSettings,
+        *,
+        token_cache: ClientTokenCache | None = None,
+    ) -> None:
+        super().__init__(settings)
+
+        if not settings.overdrive_client_key:
+            raise CannotLoadConfiguration("Overdrive client key is not configured")
+        if not settings.overdrive_client_secret:
+            raise CannotLoadConfiguration(
+                "Overdrive client password/secret is not configured"
+            )
+
+        self._client_key = settings.overdrive_client_key
+        self._client_secret = settings.overdrive_client_secret
+        self._token_cache = (
+            token_cache if token_cache is not None else ClientTokenCache()
+        )
+
+    @property
+    def _collection_context_basic_auth_header(self) -> str:
+        """The Basic Auth header used to acquire an OAuth bearer token."""
+        return collection_basic_auth_header(self._client_key, self._client_secret)
+
+
+class OverdriveClientRequests(ClientCredentialsRequests):
     """The Overdrive "Client Authentication" request context.
 
     Uses the collection-configured client key/secret to acquire a bearer
@@ -239,25 +274,13 @@ class OverdriveClientRequests(BaseOverdriveRequests):
         parent_library_id: str | None = None,
         token_cache: ClientTokenCache | None = None,
     ) -> None:
-        super().__init__(settings)
+        super().__init__(settings, token_cache=token_cache)
 
         if not settings.external_account_id:
             raise CannotLoadConfiguration("Overdrive library ID is not configured")
-        if not settings.overdrive_client_key:
-            raise CannotLoadConfiguration("Overdrive client key is not configured")
-        if not settings.overdrive_client_secret:
-            raise CannotLoadConfiguration(
-                "Overdrive client password/secret is not configured"
-            )
 
         self._library_id = settings.external_account_id
         self._parent_library_id = parent_library_id
-        self._client_key = settings.overdrive_client_key
-        self._client_secret = settings.overdrive_client_secret
-
-        self._token_cache = (
-            token_cache if token_cache is not None else ClientTokenCache()
-        )
         self._lock = Lock()
 
     @property
@@ -279,21 +302,9 @@ class OverdriveClientRequests(BaseOverdriveRequests):
             endpoint = self.LIBRARY_ENDPOINT
         return self.endpoint(endpoint, **args)
 
-    @property
-    def _collection_context_basic_auth_header(self) -> str:
-        """The Basic Auth header used to acquire an OAuth bearer token."""
-        return collection_basic_auth_header(self._client_key, self._client_secret)
-
     @staticmethod
     def _auth_headers(auth_token: str) -> dict[str, str]:
         return {"Authorization": f"Bearer {auth_token}"}
-
-    def auth_headers(self) -> dict[str, str]:
-        """The Authorization header for a client-context request.
-
-        Refreshes the cached bearer token if needed.
-        """
-        return self._auth_headers(self._client_oauth_token)
 
     @property
     def _client_oauth_token(self) -> str:
@@ -383,7 +394,7 @@ class OverdriveClientAuth(httpx.Auth):
     """Attaches the client credentials token, refreshing it on a 401.
 
     httpx runs this flow around every request, so the token is read fresh
-    each time and a expiry partway through a page costs one retry rather
+    each time and an expiry partway through a page costs one retry rather
     than the whole page.
     """
 
@@ -406,7 +417,7 @@ class OverdriveClientAuth(httpx.Auth):
             yield request
 
 
-class OverdriveAsyncRequests(BaseOverdriveRequests):
+class OverdriveAsyncRequests(ClientCredentialsRequests):
     """The client-context requests made concurrently by import workers.
 
     Separate from OverdriveClientRequests because it shares none of that
@@ -423,20 +434,7 @@ class OverdriveAsyncRequests(BaseOverdriveRequests):
         *,
         token_cache: ClientTokenCache | None = None,
     ) -> None:
-        super().__init__(settings)
-
-        if not settings.overdrive_client_key:
-            raise CannotLoadConfiguration("Overdrive client key is not configured")
-        if not settings.overdrive_client_secret:
-            raise CannotLoadConfiguration(
-                "Overdrive client password/secret is not configured"
-            )
-
-        self._client_key = settings.overdrive_client_key
-        self._client_secret = settings.overdrive_client_secret
-        self._token_cache = (
-            token_cache if token_cache is not None else ClientTokenCache()
-        )
+        super().__init__(settings, token_cache=token_cache)
         self._token_lock = asyncio.Lock()
 
     async def bearer_token(self, *, rejected: str | None = None) -> str:
@@ -466,16 +464,17 @@ class OverdriveAsyncRequests(BaseOverdriveRequests):
         """Ask Overdrive for a new client credentials token."""
         url = self.endpoint(TOKEN_ENDPOINT)
         async with AsyncClient.for_worker(
-            allowed_response_codes=[200], timeout=self.REQUEST_TIMEOUT
+            allowed_response_codes=[200],
+            timeout=self.REQUEST_TIMEOUT,
+            # The request whose auth flow we are running inside retries
+            # already. Retrying here too multiplies out, and every other
+            # request on the page waits on the token lock while it happens.
+            max_retries=0,
         ) as client:
             response = await client.post(
                 url,
                 data={"grant_type": "client_credentials"},
-                headers={
-                    "Authorization": collection_basic_auth_header(
-                        self._client_key, self._client_secret
-                    )
-                },
+                headers={"Authorization": self._collection_context_basic_auth_header},
             )
         try:
             token = OAuthTokenResponse.model_validate_json(response.content)

@@ -37,6 +37,7 @@ from palace.manager.integration.license.overdrive.requests import (
     OverdrivePatronRequests,
 )
 from palace.manager.util import base64
+from palace.manager.util.http.async_http import AsyncClient
 from palace.manager.util.http.exception import BadResponseException
 from tests.fixtures.files import OverdriveFilesFixture
 from tests.fixtures.http import MockAsyncClientFixture
@@ -1080,6 +1081,28 @@ class TestOverdriveAsyncRequests:
         timeout = async_http_client.requests[0].extensions.get("timeout")
         assert timeout is not None
         assert timeout["connect"] == float(OverdriveAsyncRequests.REQUEST_TIMEOUT)
+
+    async def test_token_request_does_not_retry(
+        self,
+        overdrive_async_requests: OverdriveAsyncRequestsFixture,
+        async_http_client: MockAsyncClientFixture,
+    ) -> None:
+        """The token client must not retry on top of the caller that does.
+
+        This refresh runs inside the auth flow of a page request whose client
+        already retries, and it holds the token lock while it does, so
+        retrying here multiplies the attempts and the wait for every other
+        request on the page.
+        """
+        with patch.object(
+            AsyncClient, "for_worker", side_effect=AsyncClient.for_worker
+        ) as for_worker:
+            async_http_client.queue_response(
+                200, content=overdrive_async_requests.token_response()
+            )
+            await overdrive_async_requests.requests.bearer_token()
+
+        assert for_worker.call_args.kwargs["max_retries"] == 0
 
     async def test_concurrent_refresh_fetches_one_token(
         self,
