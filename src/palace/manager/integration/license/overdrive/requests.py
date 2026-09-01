@@ -735,9 +735,11 @@ class OverdrivePatronRequests(BaseOverdriveRequests):
         """Place a hold on a title for the patron.
 
         :param notification_email_address: Where Overdrive should send the
-            "hold is ready" notice. If None, Overdrive is told to send none.
+            "hold is ready" notice. If empty or None, Overdrive is told to
+            send none; the address comes back from Overdrive itself, which
+            can report it as an empty string.
         """
-        fields: dict[str, str | bool | int] = {"reserveId": overdrive_id}
+        fields: dict[str, str | bool] = {"reserveId": overdrive_id}
         if notification_email_address:
             fields["emailAddress"] = notification_email_address
         else:
