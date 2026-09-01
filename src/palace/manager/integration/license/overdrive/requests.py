@@ -699,6 +699,9 @@ class OverdrivePatronRequests(BaseOverdriveRequests):
         """The patron's loan for a single title."""
         return self.patron_request(
             token,
+            # This is the one patron endpoint given the identifier uppercased.
+            # Nothing records why, so it keeps the casing it has always been
+            # called with rather than being made uniform with its neighbours.
             RequestSpec.get(
                 self.endpoint(self.CHECKOUT_ENDPOINT, overdrive_id=overdrive_id.upper())
             ),
@@ -745,9 +748,9 @@ class OverdrivePatronRequests(BaseOverdriveRequests):
             response_type=Hold,
         )
 
-    def delete_hold(self, token: PatronTokenProvider, product_id: str) -> None:
+    def delete_hold(self, token: PatronTokenProvider, overdrive_id: str) -> None:
         """Release the patron's hold on a title."""
-        url = self.endpoint(self.HOLD_ENDPOINT, product_id=product_id)
+        url = self.endpoint(self.HOLD_ENDPOINT, product_id=overdrive_id)
         self.patron_request(token, RequestSpec("DELETE", url))
 
     def get_patron_information(self, token: PatronTokenProvider) -> PatronInformation:
