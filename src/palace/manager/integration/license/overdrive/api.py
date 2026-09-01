@@ -1397,7 +1397,7 @@ class OverdriveAPI(
             with Overdrive, or Overdrive refuses to release the hold for
             any reason.
         """
-        url = self.endpoint(
+        url = self.patron_requests.endpoint(
             self.patron_requests.HOLD_ENDPOINT,
             product_id=licensepool.identifier.identifier,
         )

@@ -422,19 +422,28 @@ class TestOverdrivePatronRequests:
         """
         requests = overdrive_patron_requests.requests
 
-        # A token response with no token_type at all.
+        # A token response with no token_type at all. The body is a 2xx, so
+        # the access token in it is live.
         overdrive_patron_requests.client.queue_response(
-            200, content=json.dumps(dict(access_token="token", expires_in=3600))
+            200,
+            content=json.dumps(dict(access_token="live-bearer-token", expires_in=3600)),
         )
         with pytest.raises(
             PatronAuthorizationFailedException,
             match="Failed to authenticate with Overdrive",
-        ):
+        ) as excinfo:
             requests.refresh_patron_oauth_token(
                 username="barcode", password="a pin", scope="scope"
             )
 
-        assert "1 validation error for OAuthTokenResponse" in caplog.text
+        # The validation failure is reported...
+        assert "token_type" in caplog.text
+        assert "Errors:" in caplog.text
+
+        # ...without the token reaching the log or the exception.
+        assert "live-bearer-token" not in caplog.text
+        assert "live-bearer-token" not in str(excinfo.value)
+        assert "live-bearer-token" not in str(excinfo.value.problem_detail)
 
     def test_patron_token_request_policy(
         self, overdrive_patron_requests: OverdrivePatronRequestsFixture

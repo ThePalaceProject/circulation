@@ -335,7 +335,6 @@ class OverdrivePatronRequests(BaseOverdriveRequests):
 
     PATRON_INFORMATION_ENDPOINT = "%(patron_host)s/v1/patrons/me"
     CHECKOUTS_ENDPOINT = "%(patron_host)s/v1/patrons/me/checkouts"
-    CHECKOUT_ENDPOINT = "%(patron_host)s/v1/patrons/me/checkouts/%(overdrive_id)s"
     HOLDS_ENDPOINT = "%(patron_host)s/v1/patrons/me/holds"
     HOLD_ENDPOINT = "%(patron_host)s/v1/patrons/me/holds/%(product_id)s"
 
@@ -433,8 +432,16 @@ class OverdrivePatronRequests(BaseOverdriveRequests):
             # Overdrive accepted the credentials but sent back something we
             # can't use as a token. Surface it as an authorization failure so
             # it stays inside the circulation error path.
-            debug_message = f"refresh_patron_oauth_token got an unusable token response. Error: '{e}'."
-            self.log.exception(debug_message + f" Response: '{response.text}'")
+            #
+            # The body is a 2xx token document, so it carries a live bearer
+            # token: report the validation errors without it, and without
+            # pydantic's echo of the input that produced them.
+            errors = e.errors(include_input=False, include_url=False)
+            debug_message = (
+                f"refresh_patron_oauth_token got an unusable token response. "
+                f"Errors: '{errors}'."
+            )
+            self.log.exception(debug_message)
             raise PatronAuthorizationFailedException(
                 "Failed to authenticate with Overdrive", debug_message
             ) from e
