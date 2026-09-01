@@ -221,7 +221,7 @@ class RequestSpec:
 
 def build_field_request(
     url: str,
-    fields: typing.Mapping[str, str | bool | int],
+    fields: Mapping[str, str | bool | int],
     *,
     method: str = "POST",
 ) -> RequestSpec:
@@ -289,6 +289,7 @@ class Action(BaseOverdriveModel):
 
         :raises MissingRequiredFieldError: If a required field is missing.
         :raises InvalidFieldOptionError: If a field has a value that is not in its options.
+        :raises ExtraFieldsError: If a supplied field is not one the action declares.
 
         :return: The request to make.
         """
@@ -430,6 +431,12 @@ class Checkout(BaseOverdriveModel):
         :param kwargs: The values to provide in the request for fields in the action.
 
         :raises NotFoundError: If the checkout has no action with that name.
+        :raises MissingRequiredFieldError: If a field the action requires was
+            not supplied.
+        :raises InvalidFieldOptionError: If a supplied value is not one of the
+            options the action declares for that field.
+        :raises ExtraFieldsError: If a supplied field is not one the action
+            declares.
 
         :return: The request to make.
         """
