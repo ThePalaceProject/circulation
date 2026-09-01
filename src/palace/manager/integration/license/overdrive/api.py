@@ -773,11 +773,16 @@ class OverdriveAPI(
         """Build the callable the request layer uses to get a patron's token.
 
         The token lives in the Credential table, so the request layer reaches
-        it through this closure rather than holding a database session.
+        it through this closure rather than holding a database session. The
+        credential is looked up once and held for the life of the callable,
+        which spans a single logical request and its retry.
         """
+        credential: Credential | None = None
 
         def provider(*, force_refresh: bool = False) -> str:
-            credential = self._get_patron_oauth_credential(patron, pin)
+            nonlocal credential
+            if credential is None:
+                credential = self._get_patron_oauth_credential(patron, pin)
             if force_refresh:
                 self._refresh_patron_oauth_token(credential, patron, pin)
             assert credential.credential
@@ -818,9 +823,9 @@ class OverdriveAPI(
         generating the X-Overdrive-Scope header used by apps to set up
         their own Patron Authentication.
         """
-        return "websiteid:{} authorizationname:{}".format(
-            self.settings.overdrive_website_id,
-            self.ils_name(library),
+        return (
+            f"websiteid:{self.settings.overdrive_website_id} "
+            f"authorizationname:{self.ils_name(library)}"
         )
 
     def _refresh_patron_oauth_token(

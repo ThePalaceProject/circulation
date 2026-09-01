@@ -1742,9 +1742,9 @@ class TestOverdriveAPI:
         assert isinstance(payload, dict)
         assert payload["username"] == "barcode"
         assert payload["password"] == "a pin"
-        assert payload["scope"] == "websiteid:{} authorizationname:{}".format(
-            api.website_id(),
-            api.ils_name(patron.library),
+        assert (
+            payload["scope"]
+            == f"websiteid:{api.website_id()} authorizationname:{api.ils_name(patron.library)}"
         )
 
         # The token Overdrive returned is now stored on the credential.

@@ -357,11 +357,8 @@ class OverdrivePatronRequests(BaseOverdriveRequests):
         except CannotLoadConfiguration as e:
             raise CannotFulfill() from e
 
-        s = "{}:{}".format(
-            client_credentials["key"],
-            client_credentials["secret"],
-        )
-        return "Basic " + base64.standard_b64encode(s).strip()
+        credentials = f"{client_credentials['key']}:{client_credentials['secret']}"
+        return "Basic " + base64.standard_b64encode(credentials).strip()
 
     def _do_request(
         self, http_method: str, url: str, **kwargs: Unpack[RequestKwargs]
