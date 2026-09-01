@@ -42,6 +42,7 @@ from palace.manager.integration.license.overdrive.model import (
     Format,
     LibraryResponse,
     Link,
+    RequestSpec,
 )
 from palace.manager.integration.license.overdrive.representation import (
     OverdriveRepresentationExtractor,
@@ -1771,7 +1772,7 @@ class TestOverdriveAPI:
         # ...and the retry succeeds.
         http.queue_response(200, content="at last, the content")
 
-        response = api.patron_request(patron, "pin", db.fresh_url())
+        response = api.patron_request(patron, "pin", RequestSpec.get(db.fresh_url()))
 
         assert response.text == "at last, the content"
         assert (

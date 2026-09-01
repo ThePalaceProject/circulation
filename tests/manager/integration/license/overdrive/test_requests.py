@@ -555,7 +555,7 @@ class TestOverdrivePatronRequests:
 
         checkout = requests.patron_request(
             overdrive_patron_requests.token_provider,
-            "http://example.com/",
+            RequestSpec.get("http://example.com/"),
             response_type=Checkout,
         )
 
@@ -584,7 +584,8 @@ class TestOverdrivePatronRequests:
         )
         with pytest.raises(NoActiveLoan, match="The title is not checked out."):
             requests.patron_request(
-                overdrive_patron_requests.token_provider, "http://example.com/"
+                overdrive_patron_requests.token_provider,
+                RequestSpec.get("http://example.com/"),
             )
 
         # An error code we don't map falls through to a generic Overdrive error.
@@ -599,7 +600,8 @@ class TestOverdrivePatronRequests:
         )
         with pytest.raises(OverdriveResponseException) as excinfo:
             requests.patron_request(
-                overdrive_patron_requests.token_provider, "http://example.com/"
+                overdrive_patron_requests.token_provider,
+                RequestSpec.get("http://example.com/"),
             )
         assert excinfo.value.error_code == "SomethingNewFromOverdrive"
 

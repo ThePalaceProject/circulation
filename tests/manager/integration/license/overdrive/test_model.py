@@ -4,6 +4,7 @@ from functools import partial
 from uuid import uuid4
 
 import pytest
+from frozendict import frozendict
 from httpx import Headers
 
 from palace.util.datetime_helpers import utc_now
@@ -42,6 +43,7 @@ from palace.manager.integration.license.overdrive.model import (
     LinkTemplate,
     PatronInformation,
     RequestSpec,
+    build_field_request,
 )
 from palace.manager.util.http.exception import ResponseData
 from tests.fixtures.files import OverdriveFilesFixture
@@ -233,6 +235,29 @@ class TestLinkTemplate:
             template.template(manyParam="abc", muchWow="def")
             == "http://example.com/abc/def"
         )
+
+
+class TestRequestSpec:
+    def test_headers_are_frozen(self) -> None:
+        """A prepared request cannot be altered after it is described.
+
+        The retry path reuses the same spec, so headers handed in by a caller
+        have to be frozen rather than merely held on a frozen field.
+        """
+        spec = RequestSpec("POST", "http://example.com/", headers={"A": "b"})
+
+        assert isinstance(spec.headers, frozendict)
+        with pytest.raises(TypeError):
+            spec.headers["C"] = "d"  # type: ignore[index]  # the point of the test
+
+        # Freezing the headers is what makes the spec hashable.
+        assert hash(spec) == hash(
+            RequestSpec("POST", "http://example.com/", headers={"A": "b"})
+        )
+
+    def test_build_field_request_headers_are_frozen(self) -> None:
+        spec = build_field_request("http://example.com/", {"reserveId": "1"})
+        assert isinstance(spec.headers, frozendict)
 
 
 class TestAction:
@@ -487,7 +512,7 @@ class TestCheckout:
                 "checkout_response_no_format_locked_in.json"
             )
         )
-        assert checkout.action("early_return") == RequestSpec(
+        assert checkout.build_action_request("early_return") == RequestSpec(
             method="DELETE",
             url="http://patron.api.overdrive.com/v1/patrons/me/checkouts/8B0F1552-4677-4FEC-8CE4-8466CFD47E17",
             data=None,
@@ -498,7 +523,7 @@ class TestCheckout:
             NotFoundError,
             match="Action not found: unknownAction. Available actions: earlyReturn, format",
         ):
-            checkout.action("unknown_action")
+            checkout.build_action_request("unknown_action")
 
 
 class TestCheckouts:

@@ -808,7 +808,9 @@ class OverdriveAPI(
                 do_early_return = not already_checked_out and existing_hold is None
 
                 if do_early_return:
-                    self.patron_request(patron, pin, checkout.action("early_return"))
+                    self.patron_request(
+                        patron, pin, checkout.build_action_request("early_return")
+                    )
 
                 # If this was a hold, we remove the hold record from the database before
                 # we raise the exception, since the hold has been converted to a checkout.
@@ -853,7 +855,7 @@ class OverdriveAPI(
         # First we get the loan for this patron.
         try:
             loan = self.get_loan(patron, pin, licensepool.identifier.identifier)
-            self.patron_request(patron, pin, loan.action("early_return"))
+            self.patron_request(patron, pin, loan.build_action_request("early_return"))
         except NoActiveLoan:
             # The loan is already gone, no need to return it. This exception gets
             # handled higher up the stack.
@@ -1005,7 +1007,7 @@ class OverdriveAPI(
             format_data = self.patron_request(
                 patron,
                 pin,
-                loan.action("format", format_type=format_type),
+                loan.build_action_request("format", format_type=format_type),
                 response_type=Format,
             )
         except InvalidFieldOptionError:

@@ -1,15 +1,14 @@
-from __future__ import annotations
-
 import json
 import re
 import typing
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import StrEnum
 from functools import cached_property
 from typing import Self, overload
 from urllib.parse import quote_plus
 
+from frozendict import frozendict
 from pydantic import (
     AliasChoices,
     AwareDatetime,
@@ -207,10 +206,15 @@ class RequestSpec:
     method: str
     url: str
     data: str | None = None
-    headers: Mapping[str, str] = field(default_factory=dict)
+    headers: Mapping[str, str] = frozendict()
+
+    def __post_init__(self) -> None:
+        # Freeze whatever the caller passed, so that the headers are covered
+        # by the frozen contract rather than only the field holding them.
+        object.__setattr__(self, "headers", frozendict(self.headers))
 
     @classmethod
-    def get(cls, url: str) -> RequestSpec:
+    def get(cls, url: str) -> Self:
         """A plain GET of the given URL."""
         return cls("GET", url)
 
@@ -418,7 +422,7 @@ class Checkout(BaseOverdriveModel):
 
         return formats
 
-    def action(self, name: str, **kwargs: str) -> RequestSpec:
+    def build_action_request(self, name: str, **kwargs: str) -> RequestSpec:
         """
         Describe the request to the action with the specified name.
 
