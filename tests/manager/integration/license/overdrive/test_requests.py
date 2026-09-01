@@ -788,6 +788,32 @@ class TestOverdriveAsyncRequests:
                 BookInfoEndpoint(url="/books")
             )
 
+    async def test_fetch_book_info_list_last_page(
+        self, overdrive_async_requests: OverdriveAsyncRequestsFixture
+    ) -> None:
+        """The final page carries links, but no next one.
+
+        This is what ends the import loop in production, and it is a
+        different branch from a page with no links at all.
+        """
+        overdrive_async_requests.client.queue_response(
+            200,
+            content={
+                "totalItems": 1,
+                "links": {"self": {"href": "http://example.com/books"}},
+                "products": [{"id": "ABC", "links": {}}],
+            },
+        )
+
+        book_info_list, next_endpoint = (
+            await overdrive_async_requests.requests.fetch_book_info_list(
+                BookInfoEndpoint(url="/books")
+            )
+        )
+
+        assert next_endpoint is None
+        assert len(book_info_list) == 1
+
     async def test_fetch_book_info_list_empty_collection(
         self,
         overdrive_async_requests: OverdriveAsyncRequestsFixture,
