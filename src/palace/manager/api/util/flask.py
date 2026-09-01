@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Literal, overload
 
 import flask
+from flask.typing import RouteCallable
 from sqlalchemy.orm import Session
 
 from palace.util.exceptions import PalaceValueError
@@ -129,6 +130,12 @@ def get_request_patron[TDefault](
     return get_request_var("patron", Patron, default=default)
 
 
+#: The methods a route may allow while using the public wildcard CORS policy.
+#: A wildcard Access-Control-Allow-Origin is only safe on requests that cannot
+#: change state.
+PUBLIC_CORS_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+
 class PalaceFlask(flask.Flask):
     """
     A subclass of Flask sets properties used by Palace.
@@ -169,3 +176,36 @@ class PalaceFlask(flask.Flask):
         super().__init__(*args, **kwargs)
         self._db: Session
         self.manager: CirculationManager
+
+    def add_url_rule(
+        self,
+        rule: str,
+        endpoint: str | None = None,
+        view_func: RouteCallable | None = None,
+        provide_automatic_options: bool | None = None,
+        **options: Any,
+    ) -> None:
+        """Register a URL rule, rejecting unsafe uses of allows_public_cors.
+
+        A route's methods are not known until it is registered, so this is
+        the first point where the GET/HEAD-only requirement behind the
+        wildcard CORS policy can be checked.
+        """
+        if getattr(view_func, "allows_public_cors", False):
+            methods = options.get("methods")
+            if methods is None:
+                methods = getattr(view_func, "methods", None) or ("GET",)
+            # A bare string here is invalid; skip the check so Flask raises
+            # its own clear TypeError for it.
+            if not isinstance(methods, str):
+                unsafe = {method.upper() for method in methods} - PUBLIC_CORS_METHODS
+                if unsafe:
+                    raise PalaceValueError(
+                        f"Route '{rule}' allows {', '.join(sorted(unsafe))}, so it "
+                        f"must not use allows_public_cors: a wildcard "
+                        f"Access-Control-Allow-Origin would let any web origin read "
+                        f"the response."
+                    )
+        super().add_url_rule(
+            rule, endpoint, view_func, provide_automatic_options, **options
+        )

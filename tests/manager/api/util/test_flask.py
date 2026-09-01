@@ -1,8 +1,10 @@
+from collections.abc import Callable
+
 import pytest
 
 from palace.util.exceptions import PalaceValueError
 
-from palace.manager.api.util.flask import get_request_var
+from palace.manager.api.util.flask import PalaceFlask, get_request_var
 from tests.fixtures.flask import FlaskAppFixture
 
 
@@ -34,3 +36,88 @@ class TestGetRequestVar:
                 PalaceValueError, match="incorrect type 'int' expected 'str'"
             ):
                 get_request_var("foo", str)
+
+
+class TestPalaceFlask:
+    # add_url_rule reads the marker attribute that allows_public_cors
+    # stamps on its wrapper, so a bare function with the marker is enough
+    # to exercise the check without importing the routes module.
+    @staticmethod
+    def _marked_view() -> Callable[[], str]:
+        def view() -> str:
+            return "view"
+
+        setattr(view, "allows_public_cors", True)
+        return view
+
+    @pytest.mark.parametrize(
+        "methods",
+        [
+            pytest.param(None, id="default-get"),
+            pytest.param(["GET"], id="get"),
+            pytest.param(["GET", "HEAD", "OPTIONS"], id="all-read-methods"),
+        ],
+    )
+    def test_add_url_rule_accepts_read_only_public_cors(
+        self, methods: list[str] | None
+    ) -> None:
+        app = PalaceFlask(__name__)
+        app.add_url_rule("/read", view_func=self._marked_view(), methods=methods)
+        # The override must still delegate to Flask and register the rule.
+        rule = next(r for r in app.url_map.iter_rules() if r.rule == "/read")
+        assert rule.methods is not None and "GET" in rule.methods
+
+    @pytest.mark.parametrize(
+        "methods",
+        [
+            pytest.param(["GET", "POST"], id="post"),
+            pytest.param(["PUT"], id="put"),
+            pytest.param(["get", "delete"], id="lowercase-delete"),
+        ],
+    )
+    def test_add_url_rule_rejects_write_methods_with_public_cors(
+        self, methods: list[str]
+    ) -> None:
+        app = PalaceFlask(__name__)
+        with pytest.raises(PalaceValueError, match="must not use allows_public_cors"):
+            app.add_url_rule("/write", view_func=self._marked_view(), methods=methods)
+
+    def test_add_url_rule_ignores_unmarked_views(self) -> None:
+        app = PalaceFlask(__name__)
+
+        def view() -> str:
+            return "view"
+
+        app.add_url_rule("/write", view_func=view, methods=["GET", "POST"])
+        rule = next(r for r in app.url_map.iter_rules() if r.rule == "/write")
+        assert rule.methods is not None and "POST" in rule.methods
+
+    def test_add_url_rule_rejects_decorated_view_with_write_methods(self) -> None:
+        # End-to-end contract check: the real decorator must stamp the same
+        # marker attribute this guard reads. Local import: the routes module
+        # registers the whole application's routes at import time, so keep
+        # it out of the module-level imports.
+        from palace.manager.api.routes import allows_public_cors
+
+        app = PalaceFlask(__name__)
+
+        @allows_public_cors
+        def view() -> str:
+            return "view"
+
+        with pytest.raises(PalaceValueError, match="must not use allows_public_cors"):
+            app.add_url_rule("/write", view_func=view, methods=["GET", "POST"])
+
+    def test_add_url_rule_string_methods_raise_flask_type_error(self) -> None:
+        # A bare string is invalid; the check defers to Flask's clear error
+        # instead of raising a confusing per-character PalaceValueError.
+        app = PalaceFlask(__name__)
+        with pytest.raises(TypeError):
+            app.add_url_rule("/write", view_func=self._marked_view(), methods="POST")
+
+    def test_add_url_rule_empty_methods_pass_through(self) -> None:
+        # An explicit empty list contains no unsafe methods, so the check
+        # lets Flask decide what to do with it.
+        app = PalaceFlask(__name__)
+        app.add_url_rule("/read", view_func=self._marked_view(), methods=[])
+        assert any(r.rule == "/read" for r in app.url_map.iter_rules())

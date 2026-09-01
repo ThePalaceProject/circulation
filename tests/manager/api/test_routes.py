@@ -1,9 +1,14 @@
 import logging
+from collections.abc import Callable
+from functools import wraps
 from unittest.mock import MagicMock, patch
 
 import flask
 import pytest
+from flask.testing import FlaskClient
 from werkzeug.datastructures import ImmutableMultiDict
+
+from palace.util.exceptions import PalaceValueError
 
 from palace.manager.api import routes
 from palace.manager.api.problem_details import LIBRARY_NOT_FOUND
@@ -17,6 +22,226 @@ class TestAppConfiguration:
     # Test the configuration of the real Flask app.
     def test_configuration(self):
         assert False == routes.app.url_map.merge_slashes
+        # The CORS back-fill hook must be registered on the real app.
+        assert (
+            routes.add_public_cors_to_error_responses
+            in routes.app.after_request_funcs[None]
+        )
+
+
+class TestAllowsPublicCors:
+    @pytest.fixture
+    def client(self) -> FlaskClient:
+        # Use a minimal Flask app so the decorator is tested in isolation.
+        app = flask.Flask(__name__)
+
+        @app.route("/public")
+        @routes.allows_public_cors
+        def public_route() -> str:
+            return "public"
+
+        return app.test_client()
+
+    @pytest.mark.parametrize(
+        "headers",
+        [
+            pytest.param({}, id="no-origin"),
+            pytest.param({"Origin": "http://any.web.client"}, id="with-origin"),
+        ],
+    )
+    def test_get_allows_any_origin(
+        self, client: FlaskClient, headers: dict[str, str]
+    ) -> None:
+        response = client.get("/public", headers=headers)
+        assert response.status_code == 200
+        assert response.get_data(as_text=True) == "public"
+        assert response.headers["Access-Control-Allow-Origin"] == "*"
+        assert "Access-Control-Allow-Credentials" not in response.headers
+        # The wildcard origin is constant, so responses must stay cacheable
+        # without a Vary: Origin header.
+        assert "Origin" not in response.headers.get("Vary", "")
+
+    def test_preflight(self, client: FlaskClient) -> None:
+        response = client.options(
+            "/public",
+            headers={
+                "Origin": "http://any.web.client",
+                "Access-Control-Request-Method": "GET",
+                "Access-Control-Request-Headers": "Authorization",
+            },
+        )
+        assert response.status_code == 200
+        assert response.headers["Access-Control-Allow-Origin"] == "*"
+        # Only the read-only methods are advertised.
+        assert {
+            method.strip()
+            for method in response.headers["Access-Control-Allow-Methods"].split(",")
+        } == {"GET", "HEAD", "OPTIONS"}
+        assert (
+            "authorization" in response.headers["Access-Control-Allow-Headers"].lower()
+        )
+        assert response.headers["Access-Control-Max-Age"] == "3600"
+        assert "Access-Control-Allow-Credentials" not in response.headers
+
+    def test_preflight_does_not_advertise_write_methods(
+        self, client: FlaskClient
+    ) -> None:
+        response = client.options(
+            "/public",
+            headers={
+                "Origin": "http://any.web.client",
+                "Access-Control-Request-Method": "POST",
+            },
+        )
+        assert response.headers["Access-Control-Allow-Origin"] == "*"
+        assert "Access-Control-Allow-Methods" not in response.headers
+
+    @pytest.fixture
+    def backfill_client(self) -> FlaskClient:
+        # An app with the back-fill hook and one route per scenario.
+        app = flask.Flask(__name__)
+        app.after_request(routes.add_public_cors_to_error_responses)
+
+        @app.route("/public-ok")
+        @routes.allows_public_cors
+        def public_ok() -> str:
+            return "ok"
+
+        @app.route("/public-error")
+        @routes.allows_public_cors
+        def public_error() -> str:
+            flask.abort(404)
+
+        # A plain exception, unlike an HTTPException, escapes the request
+        # dispatch and reaches the hook through the error-handler path.
+        @app.route("/public-raises")
+        @routes.allows_public_cors
+        def public_raises() -> str:
+            raise RuntimeError("boom")
+
+        @app.route("/private-error")
+        def private_error() -> str:
+            flask.abort(404)
+
+        # An outer decorator that returns a response without calling the
+        # view. Such decorators belong inside allows_public_cors, but the
+        # hook still back-fills the header when a stack gets that wrong.
+        def short_circuit(
+            f: Callable[..., flask.Response],
+        ) -> Callable[..., flask.Response]:
+            @wraps(f)
+            def decorated(*args: object, **kwargs: object) -> flask.Response:
+                return flask.Response("no library", status=404)
+
+            return decorated
+
+        @app.route("/short-circuit")
+        @short_circuit
+        @routes.allows_public_cors
+        def short_circuit_route() -> str:
+            return "unreachable"
+
+        return app.test_client()
+
+    @pytest.mark.parametrize(
+        "path,status,expect_header",
+        [
+            pytest.param("/public-error", 404, True, id="aborting-view"),
+            pytest.param("/public-raises", 500, True, id="raising-view"),
+            pytest.param("/short-circuit", 404, True, id="short-circuiting-decorator"),
+            pytest.param("/public-ok", 200, True, id="successful-view"),
+            pytest.param("/private-error", 404, False, id="undecorated-route"),
+            pytest.param("/no-such-route", 404, False, id="unmatched-url"),
+        ],
+    )
+    def test_back_fill(
+        self,
+        backfill_client: FlaskClient,
+        path: str,
+        status: int,
+        expect_header: bool,
+    ) -> None:
+        response = backfill_client.get(
+            path, headers={"Origin": "http://any.web.client"}
+        )
+        assert response.status_code == status
+        if expect_header:
+            # Exactly one header, never a duplicate.
+            assert response.headers.getlist("Access-Control-Allow-Origin") == ["*"]
+        else:
+            assert "Access-Control-Allow-Origin" not in response.headers
+
+    @pytest.mark.parametrize(
+        "outer,inner",
+        [
+            pytest.param(
+                routes.allows_public_cors,
+                routes.allows_patron_web,
+                id="public-cors-outer",
+            ),
+            pytest.param(
+                routes.allows_patron_web,
+                routes.allows_public_cors,
+                id="patron-web-outer",
+            ),
+        ],
+    )
+    def test_stacking_with_allows_patron_web_raises(
+        self, outer: Callable[..., object], inner: Callable[..., object]
+    ) -> None:
+        # The two CORS decorators are mutually exclusive on a route, and
+        # misuse must fail at decoration time in either stacking order.
+        def view() -> str:
+            return "view"
+
+        with pytest.raises(PalaceValueError, match="must not be stacked"):
+            outer(inner(view))
+
+    def test_double_application_raises(self) -> None:
+        # Applying the decorator twice is a route table mistake, and it
+        # fails at decoration time like the patron web stacking check.
+        def view() -> str:
+            return "view"
+
+        decorated = routes.allows_public_cors(view)
+        with pytest.raises(PalaceValueError, match="already applied"):
+            routes.allows_public_cors(decorated)
+
+    def test_stacked_with_wrapping_decorator(self) -> None:
+        # The decorator's OPTIONS interception attributes and marker must
+        # survive an outer wraps-based decorator, whatever the stack looks
+        # like, so Flask still routes preflights to the view.
+        app = flask.Flask(__name__)
+
+        def passthrough(
+            f: Callable[..., flask.Response],
+        ) -> Callable[..., flask.Response]:
+            @wraps(f)
+            def decorated(*args: object, **kwargs: object) -> flask.Response:
+                return f(*args, **kwargs)
+
+            return decorated
+
+        @app.route("/stacked")
+        @passthrough
+        @routes.allows_public_cors
+        def stacked_route() -> str:
+            return "stacked"
+
+        client = app.test_client()
+        response = client.options(
+            "/stacked",
+            headers={
+                "Origin": "http://any.web.client",
+                "Access-Control-Request-Method": "GET",
+            },
+        )
+        assert response.status_code == 200
+        assert response.headers["Access-Control-Allow-Origin"] == "*"
+
+        response = client.get("/stacked", headers={"Origin": "http://any.web.client"})
+        assert response.get_data(as_text=True) == "stacked"
+        assert response.headers["Access-Control-Allow-Origin"] == "*"
 
 
 class TestAdminRequestLifecycle:

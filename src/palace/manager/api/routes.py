@@ -1,12 +1,19 @@
 import logging
+from collections.abc import Callable
 from functools import update_wrapper, wraps
+from typing import TYPE_CHECKING, Any, cast
 
 import flask
-from flask import Response, make_response, request
+from flask import Response, current_app, make_response, request
+from flask_cors import cross_origin
 from flask_cors.core import get_cors_options, set_cors_headers
+from frozendict import frozendict
 from werkzeug.exceptions import MethodNotAllowed
 
+from palace.util.exceptions import PalaceValueError
+
 from palace.manager.api.app import app
+from palace.manager.api.util.flask import PUBLIC_CORS_METHODS
 from palace.manager.core.app_server import (
     cache_control_headers,
     compressible,
@@ -15,6 +22,11 @@ from palace.manager.core.app_server import (
 )
 from palace.manager.sqlalchemy.hassessioncache import HasSessionCache
 from palace.manager.util.problem_detail import ProblemDetail
+
+if TYPE_CHECKING:
+    # _Options exists only in the flask-cors type stubs, so it can only be
+    # imported while type checking.
+    from flask_cors.core import _Options
 
 log = logging.getLogger(__name__)
 
@@ -85,6 +97,12 @@ def allows_auth(f):
 # can't use that decorator because we aren't able to look up the patron web
 # client url configuration setting at the time we create the decorator.
 def allows_patron_web(f):
+    if getattr(f, "allows_public_cors", False):
+        raise PalaceValueError(
+            "allows_patron_web and allows_public_cors must not be stacked "
+            "on one route."
+        )
+
     # Override Flask's default behavior and intercept the OPTIONS method for
     # every request so CORS headers can be added.
     f.required_methods = getattr(f, "required_methods", set())
@@ -106,7 +124,94 @@ def allows_patron_web(f):
 
         return resp
 
-    return update_wrapper(wrapped_function, f)
+    wrapper = update_wrapper(wrapped_function, f)
+    # Marker checked by allows_public_cors to reject stacking both CORS
+    # decorators on one route.
+    wrapper.allows_patron_web = True
+    return wrapper
+
+
+# Options for the public CORS policy, shared by the decorator and the
+# error-response hook so the two cannot drift apart.
+_PUBLIC_CORS_OPTIONS: frozendict[str, Any] = frozendict(
+    origins="*",
+    methods=PUBLIC_CORS_METHODS,
+    max_age=3600,
+    send_wildcard=True,
+    supports_credentials=False,
+)
+
+_public_cors = cross_origin(**_PUBLIC_CORS_OPTIONS)
+
+
+def allows_public_cors[**P](f: Callable[P, object]) -> Callable[P, Response]:
+    """Decorator that adds permissive CORS headers to a public route.
+
+    Anyone can already read these routes without authenticating, so every
+    web origin is allowed and no configuration is needed. The
+    Access-Control-Allow-Credentials header is never sent, so browsers
+    refuse to share these responses with cross-origin scripts that make
+    cookie-authenticated requests, which is what keeps the wildcard origin
+    safe. Patron-specific behavior on these routes works only through the
+    Authorization header, which a cross-origin script must set explicitly.
+
+    Use either this decorator or allows_patron_web on a route, never both;
+    stacking them raises PalaceValueError at decoration time. The
+    advertised methods list only limits what a preflight advertises; it
+    does not block other methods on the actual response, so apply this
+    decorator only to GET/HEAD routes. PalaceFlask.add_url_rule enforces
+    that requirement when the route is registered.
+
+    Place this decorator outside has_library and any other decorator that
+    can answer a request without calling the view. That way this wrapper
+    answers OPTIONS preflights itself, with the full CORS header set a
+    preflight needs, and adds headers to short-circuit responses. The
+    add_public_cors_to_error_responses hook covers what remains, mainly
+    responses built by the app-level error handler.
+    """
+    if getattr(f, "allows_patron_web", False):
+        raise PalaceValueError(
+            "allows_public_cors and allows_patron_web must not be stacked "
+            "on one route."
+        )
+    if getattr(f, "allows_public_cors", False):
+        raise PalaceValueError("allows_public_cors is already applied to this route.")
+
+    wrapper = _public_cors(f)
+    # The marker attribute is read by add_public_cors_to_error_responses
+    # and by allows_patron_web's stacking check. It survives outer
+    # decorators because functools.wraps copies __dict__.
+    setattr(wrapper, "allows_public_cors", True)
+    return wrapper
+
+
+@app.after_request
+def add_public_cors_to_error_responses(response: Response) -> Response:
+    """Back-fill the public CORS headers on public routes.
+
+    The allows_public_cors decorator cannot add headers to a response it
+    never sees. A view that raises gets its response built by the app-level
+    error handler, and cross-origin clients need the header on that
+    response to read the error body. As a safety net, the hook also covers
+    stacks that ignore the placement rule in allows_public_cors, where an
+    outer decorator returns a problem detail without calling the view.
+
+    Responses produced before routing resolves an endpoint cannot be
+    attributed to a view and are not back-filled: a 405 for a method the
+    route does not allow, and a strict_slashes redirect. Register public
+    CORS routes with strict_slashes=False (see library_dir_route) so a
+    trailing-slash mismatch never becomes an unreadable redirect.
+    """
+    if "Access-Control-Allow-Origin" in response.headers or not request.endpoint:
+        return response
+    view = current_app.view_functions.get(request.endpoint)
+    if getattr(view, "allows_public_cors", False):
+        # get_cors_options never mutates its arguments, so the shared
+        # frozendict can be passed directly; the cast satisfies the stub's
+        # TypedDict parameter type.
+        options = cast("_Options", _PUBLIC_CORS_OPTIONS)
+        set_cors_headers(response, get_cors_options(current_app, options))
+    return response
 
 
 def has_library(f):
