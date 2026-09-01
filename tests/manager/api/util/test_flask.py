@@ -63,6 +63,9 @@ class TestPalaceFlask:
     ) -> None:
         app = PalaceFlask(__name__)
         app.add_url_rule("/read", view_func=self._marked_view(), methods=methods)
+        # The override must still delegate to Flask and register the rule.
+        rule = next(r for r in app.url_map.iter_rules() if r.rule == "/read")
+        assert rule.methods is not None and "GET" in rule.methods
 
     @pytest.mark.parametrize(
         "methods",
@@ -86,6 +89,24 @@ class TestPalaceFlask:
             return "view"
 
         app.add_url_rule("/write", view_func=view, methods=["GET", "POST"])
+        rule = next(r for r in app.url_map.iter_rules() if r.rule == "/write")
+        assert rule.methods is not None and "POST" in rule.methods
+
+    def test_add_url_rule_rejects_decorated_view_with_write_methods(self) -> None:
+        # End-to-end contract check: the real decorator must stamp the same
+        # marker attribute this guard reads. Local import: the routes module
+        # registers the whole application's routes at import time, so keep
+        # it out of the module-level imports.
+        from palace.manager.api.routes import allows_public_cors
+
+        app = PalaceFlask(__name__)
+
+        @allows_public_cors
+        def view() -> str:
+            return "view"
+
+        with pytest.raises(PalaceValueError, match="must not use allows_public_cors"):
+            app.add_url_rule("/write", view_func=view, methods=["GET", "POST"])
 
     def test_add_url_rule_string_methods_raise_flask_type_error(self) -> None:
         # A bare string is invalid; the check defers to Flask's clear error
@@ -99,3 +120,4 @@ class TestPalaceFlask:
         # lets Flask decide what to do with it.
         app = PalaceFlask(__name__)
         app.add_url_rule("/read", view_func=self._marked_view(), methods=[])
+        assert any(r.rule == "/read" for r in app.url_map.iter_rules())
