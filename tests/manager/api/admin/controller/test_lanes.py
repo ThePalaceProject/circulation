@@ -13,7 +13,6 @@ from palace.manager.api.admin.problem_details import (
     NO_CUSTOM_LISTS_FOR_LANE,
     NO_DISPLAY_NAME_FOR_LANE,
 )
-from palace.manager.core.query.customlist import CustomListQueries
 from palace.manager.sqlalchemy.model.admin import AdminRole
 from palace.manager.sqlalchemy.model.customlist import CustomList
 from palace.manager.sqlalchemy.model.datasource import DataSource
@@ -314,10 +313,7 @@ class TestLanesController:
         library = alm_fixture.ctrl.db.library()
         alm_fixture.admin.add_role(AdminRole.LIBRARY_MANAGER, library=library)
 
-        success = CustomListQueries.share_locally_with_library(
-            alm_fixture.ctrl.db.session, list, library
-        )
-        assert success is True
+        list.shared_locally = True
 
         with alm_fixture.request_context_with_library_and_admin(
             "/", method="POST", library=library

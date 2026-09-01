@@ -6,84 +6,17 @@ from typing import TYPE_CHECKING, Any
 
 from palace.util.log import LoggerMixin
 
-from palace.manager.api.admin.problem_details import (
-    CUSTOMLIST_ENTRY_NOT_VALID_FOR_LIBRARY,
-    CUSTOMLIST_SOURCE_COLLECTION_MISSING,
-)
 from palace.manager.feed.facets.search import SearchFacets
 from palace.manager.feed.worklist.base import WorkList
 from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.search.pagination import SortKeyPagination
-from palace.manager.sqlalchemy.model.customlist import CustomList, CustomListEntry
-from palace.manager.sqlalchemy.model.library import Library
-from palace.manager.sqlalchemy.model.licensing import LicensePool
-from palace.manager.util.problem_detail import ProblemDetail
+from palace.manager.sqlalchemy.model.customlist import CustomList
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
 
 class CustomListQueries(LoggerMixin):
-    @classmethod
-    def share_locally_with_library(
-        cls, _db: Session, customlist: CustomList, library: Library
-    ) -> ProblemDetail | bool:
-        # All customlist collections must be present in the library
-        log = cls.logger()
-        log.info(
-            f"Attempting to share customlist '{customlist.name}' with library '{library.name}'."
-        )
-        for collection in customlist.collections:
-            if collection not in library.active_collections:
-                log.info(
-                    f"Unable to share customlist: Collection '{collection.name}'"
-                    " is missing from or inactive for the library."
-                )
-                return CUSTOMLIST_SOURCE_COLLECTION_MISSING
-
-        # All entries must be valid for the library
-        library_collection_ids = [c.id for c in library.active_collections]
-        entry: CustomListEntry
-        missing_work_id_count = 0
-        for entry in customlist.entries:
-            # It appears that many many lists have entries without works.
-            # see https://ebce-lyrasis.atlassian.net/browse/PP-708 for the full story.
-            # Because of this frequently occurring condition, lists are quietly not shared
-            # with the majority of libraries causing confusion for our users.  As it stands
-            # there is nothing that prevents lists with work-less entries that have already been
-            # shared from being unshared.  So for the time being the least intrusive intervention
-            # for enabling sharing to work again for many existing lists would be to relax the
-            # validation when an entry does not have an associated work.
-            if not entry.work:
-                missing_work_id_count += 1
-                continue
-
-            valid_license = (
-                _db.query(LicensePool)
-                .filter(
-                    LicensePool.work_id == entry.work_id,
-                    LicensePool.collection_id.in_(library_collection_ids),
-                )
-                .first()
-            )
-            if valid_license is None:
-                log.info(
-                    f"Unable to share customlist: No license for work '{entry.work.title}'."
-                )
-
-                return CUSTOMLIST_ENTRY_NOT_VALID_FOR_LIBRARY
-
-        if missing_work_id_count > 0:
-            log.warning(
-                f"This list contains {missing_work_id_count} {'entries' if missing_work_id_count > 1 else 'entry'} "
-                f"without an associated work. "
-            )
-        customlist.shared_locally_with_libraries.append(library)
-        log.info(
-            f"Successfully shared customlist '{customlist.name}' with library '{library.name}'."
-        )
-        return True
-
     @classmethod
     def populate_query_pages(
         cls,

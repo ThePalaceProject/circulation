@@ -16,11 +16,12 @@ from sqlalchemy import (
     Table,
     Unicode,
     UniqueConstraint,
+    false,
     func,
 )
 from sqlalchemy.orm import Mapped, relationship
 from sqlalchemy.orm.session import Session
-from sqlalchemy.sql.expression import or_, select
+from sqlalchemy.sql.expression import Select, or_, select
 
 from palace.util.datetime_helpers import utc_now
 
@@ -74,12 +75,13 @@ class CustomList(Base):
         "CustomListEntry", back_populates="customlist", uselist=True
     )
 
-    # List sharing mechanisms
-    shared_locally_with_libraries: Mapped[list[Library]] = relationship(
-        "Library",
-        secondary="customlist_sharedlibraries",
-        back_populates="shared_custom_lists",
-        uselist=True,
+    # Is this list shared with the other libraries on this Palace Manager? Sharing
+    # is all or nothing -- there is no way to share a list with a single library --
+    # and it is forward inclusive: libraries created after a list is shared can use
+    # it too. The server default is required as well as the Python-side default; see
+    # the migration that adds this column for why.
+    shared_locally: Mapped[bool] = Column(
+        Boolean, nullable=False, default=False, server_default=false()
     )
 
     auto_update_enabled: Mapped[bool] = Column(Boolean, default=False, nullable=False)
@@ -142,6 +144,27 @@ class CustomList(Base):
             .join(Edition)
             .filter(CustomListEntry.list_id == list_id)
             .order_by(Edition.sort_title)
+        )
+
+    @classmethod
+    def shared_with_library(cls, library: Library) -> Select:
+        """A query for the lists another library on this Palace Manager has shared.
+
+        Membership is derived at read time from the sharing flag rather than
+        recorded when the list is shared, so a library created after a list was
+        shared can use it too.
+
+        :param library: The library the lists are shared *with*.
+        :return: A Select of CustomLists, excluding the ones ``library`` owns.
+        """
+        return select(cls).where(
+            cls.shared_locally.is_(True),
+            # IS DISTINCT FROM rather than !=: deleting a library nulls
+            # customlists.library_id instead of deleting the list, and such an
+            # ownerless list is still shared. `!=` evaluates to NULL against a NULL
+            # owner, which would hide those lists from every library -- including
+            # ones that already have lanes built on them.
+            cls.library_id.is_distinct_from(library.id),
         )
 
     @classmethod
@@ -364,6 +387,11 @@ class CustomList(Base):
         ).scalar_one()
 
 
+# Retained for one release only. Sharing state now lives on
+# CustomList.shared_locally, and no code reads or writes this table. It stays in
+# Base.metadata so that a database built by create_all still has it, which keeps the
+# previous release working while this release's migration runs online -- see the
+# online-migration section of CLAUDE.md. A stacked follow-up PR drops it.
 customlist_sharedlibrary: Table = Table(
     "customlist_sharedlibraries",
     Base.metadata,
