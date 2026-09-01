@@ -72,6 +72,9 @@ class PatronTokenProvider(Protocol):
 # class attribute inherited from the base would not be visible.
 HOST_ENDPOINT_BASE = "%(host)s"
 
+# The client-credentials token endpoint, used by both client-context layers.
+TOKEN_ENDPOINT = "%(oauth_host)s/token"
+
 
 @dataclass
 class BookInfoEndpoint:
@@ -100,9 +103,6 @@ class ClientTokenCache:
     @token.setter
     def token(self, token: OAuthTokenResponse) -> None:
         self._token = token
-
-    def clear(self) -> None:
-        self._token = None
 
 
 def collection_basic_auth_header(client_key: str, client_secret: str) -> str:
@@ -208,8 +208,6 @@ class OverdriveClientRequests(BaseOverdriveRequests):
     # the endpoint() method (if there are other variables in the
     # template), or by the request methods (if there are no other
     # variables).
-    TOKEN_ENDPOINT = "%(oauth_host)s/token"
-
     LIBRARY_ENDPOINT = "%(host)s/v1/libraries/%(library_id)s"
     ADVANTAGE_LIBRARY_ENDPOINT = (
         "%(host)s/v1/libraries/%(parent_library_id)s/advantageAccounts/%(library_id)s"
@@ -315,7 +313,7 @@ class OverdriveClientRequests(BaseOverdriveRequests):
         """Fetch a fresh client credentials bearer token and cache it."""
         with self._lock:
             response = self._do_post(
-                self.TOKEN_ENDPOINT,
+                TOKEN_ENDPOINT,
                 dict(grant_type="client_credentials"),
                 {"Authorization": self._collection_context_basic_auth_header},
                 allowed_response_codes=[200],
@@ -417,8 +415,6 @@ class OverdriveAsyncRequests(BaseOverdriveRequests):
     token, through the cache passed to both.
     """
 
-    TOKEN_ENDPOINT = "%(oauth_host)s/token"
-    HOST_ENDPOINT_BASE = "%(host)s"
     NEXT_REL = "next"
 
     def __init__(
@@ -468,8 +464,10 @@ class OverdriveAsyncRequests(BaseOverdriveRequests):
 
     async def _refresh_token(self) -> OAuthTokenResponse:
         """Ask Overdrive for a new client credentials token."""
-        url = self.endpoint(self.TOKEN_ENDPOINT)
-        async with AsyncClient.for_worker(allowed_response_codes=[200]) as client:
+        url = self.endpoint(TOKEN_ENDPOINT)
+        async with AsyncClient.for_worker(
+            allowed_response_codes=[200], timeout=self.REQUEST_TIMEOUT
+        ) as client:
             response = await client.post(
                 url,
                 data={"grant_type": "client_credentials"},
@@ -479,7 +477,22 @@ class OverdriveAsyncRequests(BaseOverdriveRequests):
                     )
                 },
             )
-        token = OAuthTokenResponse.model_validate_json(response.content)
+        try:
+            token = OAuthTokenResponse.model_validate_json(response.content)
+        except ValidationError as e:
+            # Overdrive accepted the credentials but sent back something we
+            # can't use as a token. The body is a live token document, so
+            # report the errors without it.
+            errors = e.errors(include_input=False, include_url=False)
+            self.log.error(
+                "Unable to validate Overdrive token response. Errors: '%s'.", errors
+            )
+            raise OverdriveValidationError(
+                str(response.url),
+                "Error validating Overdrive token response",
+                response,
+                debug_message=str(errors),
+            ) from e
         self._token_cache.token = token
         return token
 

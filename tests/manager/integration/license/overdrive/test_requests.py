@@ -14,6 +14,7 @@ from palace.manager.api.circulation.exceptions import (
     PatronAuthorizationFailedException,
 )
 from palace.manager.api.config import Configuration
+from palace.manager.api.model.token import OAuthTokenResponse
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.exceptions import IntegrationException
 from palace.manager.integration.license.overdrive.constants import OverdriveConstants
@@ -31,6 +32,7 @@ from palace.manager.integration.license.overdrive.model import (
 )
 from palace.manager.integration.license.overdrive.requests import (
     BookInfoEndpoint,
+    OverdriveAsyncRequests,
     OverdriveClientRequests,
     OverdrivePatronRequests,
 )
@@ -1058,6 +1060,27 @@ class TestOverdriveAsyncRequests:
         # Only one request was made for it.
         assert len(async_http_client.requests) == 1
 
+    async def test_token_request_keeps_the_long_timeout(
+        self,
+        overdrive_async_requests: OverdriveAsyncRequestsFixture,
+        async_http_client: MockAsyncClientFixture,
+    ) -> None:
+        """The token endpoint gets the long timeout, not the worker default.
+
+        Overdrive is slow to answer here, and this refresh runs inside the
+        auth flow of a page request, so timing out early would be retried by
+        both this client and the page's.
+        """
+        async_http_client.queue_response(
+            200, content=overdrive_async_requests.token_response()
+        )
+
+        await overdrive_async_requests.requests.bearer_token()
+
+        timeout = async_http_client.requests[0].extensions.get("timeout")
+        assert timeout is not None
+        assert timeout["connect"] == float(OverdriveAsyncRequests.REQUEST_TIMEOUT)
+
     async def test_concurrent_refresh_fetches_one_token(
         self,
         overdrive_async_requests: OverdriveAsyncRequestsFixture,
@@ -1079,6 +1102,85 @@ class TestOverdriveAsyncRequests:
 
         assert tokens == ["fresh token"] * 10
         assert len(async_http_client.requests) == 1
+
+    async def test_token_refreshed_while_waiting_for_the_lock(
+        self,
+        overdrive_async_requests: OverdriveAsyncRequestsFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A caller that waited for the lock uses what the winner fetched.
+
+        The other dedup test never reaches the lock, because the mocked
+        refresh finishes before the later callers start. This one holds the
+        refresh open so they queue behind it.
+        """
+        requests = overdrive_async_requests.requests
+        overdrive_async_requests.seed_token("stale token")
+
+        started, finish = asyncio.Event(), asyncio.Event()
+        calls = 0
+
+        async def refresh() -> OAuthTokenResponse:
+            nonlocal calls
+            calls += 1
+            started.set()
+            await finish.wait()
+            overdrive_async_requests.seed_token("fresh token")
+            token = overdrive_async_requests.token_cache.token
+            assert token is not None
+            return token
+
+        monkeypatch.setattr(requests, "_refresh_token", refresh)
+
+        first = asyncio.create_task(requests.bearer_token(rejected="stale token"))
+        await started.wait()
+        second = asyncio.create_task(requests.bearer_token(rejected="stale token"))
+        await asyncio.sleep(0)
+        finish.set()
+
+        assert await first == "fresh token"
+        assert await second == "fresh token"
+        # The waiter took the winner's token rather than fetching its own.
+        assert calls == 1
+
+    async def test_unusable_token_response(
+        self,
+        overdrive_async_requests: OverdriveAsyncRequestsFixture,
+        async_http_client: MockAsyncClientFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A 200 that isn't a usable token is an Overdrive error, not a crash.
+
+        The body is a live token document, so neither it nor pydantic's echo
+        of it may reach the log or the exception.
+        """
+        async_http_client.queue_response(
+            200, content=json.dumps(dict(access_token="tok1", expires_in=3600))
+        )
+
+        with pytest.raises(OverdriveValidationError) as excinfo:
+            await overdrive_async_requests.requests.bearer_token()
+
+        assert "token_type" in caplog.text
+        assert "tok1" not in caplog.text
+        assert "tok1" not in str(excinfo.value)
+
+    @pytest.mark.parametrize(
+        "missing_setting",
+        ["overdrive_client_key", "overdrive_client_secret"],
+    )
+    def test_missing_configuration(
+        self,
+        overdrive_async_requests: OverdriveAsyncRequestsFixture,
+        missing_setting: str,
+    ) -> None:
+        # model_copy skips validation, so we can build the partially
+        # configured settings that these guards defend against.
+        settings = overdrive_async_requests.settings.model_copy(
+            update={missing_setting: None}
+        )
+        with pytest.raises(CannotLoadConfiguration):
+            OverdriveAsyncRequests(settings)
 
     async def test_token_shared_with_sync_layer(
         self,
