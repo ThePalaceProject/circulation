@@ -124,6 +124,7 @@ def allows_patron_web(f):
 
 
 _public_cors = cross_origin(
+    origins="*",
     methods=["GET", "HEAD", "OPTIONS"],
     max_age=3600,
     send_wildcard=True,

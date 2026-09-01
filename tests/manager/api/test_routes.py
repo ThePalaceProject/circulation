@@ -113,6 +113,13 @@ class TestAllowsPublicCors:
         def public_error() -> str:
             flask.abort(404)
 
+        # A plain exception, unlike an HTTPException, escapes the request
+        # dispatch and reaches the hook through the error-handler path.
+        @app.route("/public-raises")
+        @routes.allows_public_cors
+        def public_raises() -> str:
+            raise RuntimeError("boom")
+
         @app.route("/private-error")
         def private_error() -> str:
             flask.abort(404)
@@ -140,6 +147,12 @@ class TestAllowsPublicCors:
             "/public-error", headers={"Origin": "http://any.web.client"}
         )
         assert response.status_code == 404
+        assert response.headers["Access-Control-Allow-Origin"] == "*"
+
+        response = client.get(
+            "/public-raises", headers={"Origin": "http://any.web.client"}
+        )
+        assert response.status_code == 500
         assert response.headers["Access-Control-Allow-Origin"] == "*"
 
         response = client.get(
