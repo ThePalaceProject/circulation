@@ -57,6 +57,12 @@ class PatronTokenProvider(Protocol):
     def __call__(self, *, force_refresh: bool = False) -> str: ...
 
 
+# The host portion of every client-context URL template. Module level so both
+# request classes can build their templates from it; a class attribute on the
+# base would not be visible inside a subclass's own class body.
+HOST_ENDPOINT_BASE = "%(host)s"
+
+
 @dataclass
 class BookInfoEndpoint:
     url: str
@@ -158,7 +164,6 @@ class OverdriveClientRequests(BaseOverdriveRequests):
     # variables).
     TOKEN_ENDPOINT = "%(oauth_host)s/token"
 
-    HOST_ENDPOINT_BASE = "%(host)s"
     LIBRARY_ENDPOINT = "%(host)s/v1/libraries/%(library_id)s"
     ADVANTAGE_LIBRARY_ENDPOINT = (
         "%(host)s/v1/libraries/%(parent_library_id)s/advantageAccounts/%(library_id)s"
@@ -345,7 +350,6 @@ class OverdriveAsyncRequests(BaseOverdriveRequests):
     holds one.
     """
 
-    HOST_ENDPOINT_BASE = "%(host)s"
     NEXT_REL = "next"
 
     def __init__(
@@ -377,7 +381,7 @@ class OverdriveAsyncRequests(BaseOverdriveRequests):
         of book data. In this way, "page" retrievals are accelerated while allowing the client to retrieve chunks
         in a deterministic and therefore retriable manner.
         """
-        base_url = self.endpoint(self.HOST_ENDPOINT_BASE)
+        base_url = self.endpoint(HOST_ENDPOINT_BASE)
         async with self._create_configured_async_client(base_url=base_url) as client:
             books: dict[str, Any] = {}
             req = client.get(endpoint.url)

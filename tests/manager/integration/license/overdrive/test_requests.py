@@ -671,16 +671,18 @@ class TestOverdriveAsyncRequests:
                 "overdrive_book_list_with_next_link.json"
             ),
         )
+        # fetch_book_info_list queues the metadata request before the
+        # availability one, and the mock client answers in order.
         async_http_client.queue_response(
             200,
             content=overdrive_files_fixture.sample_data(
-                "overdrive_availability_information.json"
+                "bibliographic_information_book_list_test.json"
             ),
         )
         async_http_client.queue_response(
             200,
             content=overdrive_files_fixture.sample_data(
-                "bibliographic_information_book_list_test.json"
+                "overdrive_availability_information.json"
             ),
         )
 
@@ -693,8 +695,8 @@ class TestOverdriveAsyncRequests:
         )
         assert next_endpoint
         assert len(book_info_list) == 1
-        assert book_info_list[0]["metadata"]
-        assert book_info_list[0]["availabilityV2"]
+        assert "id" in book_info_list[0]["metadata"]
+        assert "copiesOwned" in book_info_list[0]["availabilityV2"]
 
     async def test_fetch_book_info_list_retry_and_unrecoverable_error(
         self,
