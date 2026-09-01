@@ -31,3 +31,12 @@ def test_backfills_shared_locally(
     assert alembic_database.fetch_customlist(shared_id).shared_locally is True
     assert alembic_database.fetch_customlist(unshared_id).shared_locally is False
     assert alembic_database.fetch_customlist(orphaned_id).shared_locally is True
+
+    # The server default is what lets the previous release keep writing lists
+    # while this migration runs: it omits the column from its INSERTs entirely.
+    # AlembicDatabaseFixture.customlist() makes exactly that shaped insert.
+    written_by_previous_release = alembic_database.customlist(library_id=owner_id)
+    assert (
+        alembic_database.fetch_customlist(written_by_previous_release).shared_locally
+        is False
+    )
