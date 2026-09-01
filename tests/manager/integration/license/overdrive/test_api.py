@@ -1751,6 +1751,37 @@ class TestOverdriveAPI:
         assert credential.credential == "a patron token"
         assert credential.expires is not None
 
+    def test_patron_request_401_rewrites_credential(
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
+    ):
+        """A 401 on a patron request rewrites the stored Credential.
+
+        The request layer only knows about the PatronTokenProvider callable,
+        so this is the one place the force_refresh path is joined up to the
+        database. The request-layer test for the same 401 uses an in-memory
+        provider and would stay green if this glue broke.
+        """
+        http = overdrive_api_fixture.mock_http
+        api = overdrive_api_fixture.api
+        patron = db.patron()
+
+        # The patron has no token yet, so one is fetched...
+        overdrive_api_fixture.queue_access_token_response("bearer token")
+        # ...and rejected.
+        http.queue_response(401)
+        # So the token is refreshed...
+        overdrive_api_fixture.queue_access_token_response("new bearer token")
+        # ...and the retry succeeds.
+        http.queue_response(200, content="at last, the content")
+
+        response = api.patron_request(patron, "pin", db.fresh_url())
+
+        assert response.text == "at last, the content"
+        assert (
+            api._get_patron_oauth_credential(patron, "pin").credential
+            == "new bearer token"
+        )
+
     def test_no_drm_fulfillment(
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
     ):

@@ -18,6 +18,7 @@ from palace.manager.integration.license.overdrive.exception import (
 from palace.manager.integration.license.overdrive.model import Checkout
 from palace.manager.integration.license.overdrive.requests import (
     OverdriveClientRequests,
+    OverdrivePatronRequests,
 )
 from palace.manager.util import base64
 from palace.manager.util.http.exception import BadResponseException
@@ -409,6 +410,55 @@ class TestOverdrivePatronRequests:
             requests.refresh_patron_oauth_token(
                 username="barcode", password="a pin", scope="scope"
             )
+
+    def test_refresh_patron_oauth_token_unusable_response(
+        self,
+        overdrive_patron_requests: OverdrivePatronRequestsFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A 2xx body we can't turn into a token is still an auth failure.
+
+        Overdrive says yes, but sends something that isn't a usable token, so
+        the failure has to stay inside the circulation error path rather than
+        escaping as a bare pydantic ValidationError.
+        """
+        requests = overdrive_patron_requests.requests
+
+        # A token response with no token_type at all.
+        overdrive_patron_requests.client.queue_response(
+            200, content=json.dumps(dict(access_token="token", expires_in=3600))
+        )
+        with pytest.raises(
+            PatronAuthorizationFailedException,
+            match="Failed to authenticate with Overdrive",
+        ):
+            requests.refresh_patron_oauth_token(
+                username="barcode", password="a pin", scope="scope"
+            )
+
+        assert "1 validation error for OAuthTokenResponse" in caplog.text
+
+    def test_patron_token_request_policy(
+        self, overdrive_patron_requests: OverdrivePatronRequestsFixture
+    ) -> None:
+        """The patron token request uses the integration's timeout and retries.
+
+        Overdrive can be slow to answer this endpoint, and the retry count is
+        configurable per collection, so neither may fall back to the global
+        HTTP defaults.
+        """
+        settings = overdrive_patron_requests.create_settings(max_retry_count=7)
+        requests = OverdrivePatronRequests(settings)
+
+        token = dict(access_token="token", token_type="bearer", expires_in=3600)
+        overdrive_patron_requests.client.queue_response(200, content=json.dumps(token))
+        requests.refresh_patron_oauth_token(
+            username="barcode", password="a pin", scope="scope"
+        )
+
+        kwargs = overdrive_patron_requests.client.requests_args[0]
+        assert kwargs["timeout"] == 120
+        assert kwargs["max_retry_count"] == 7
 
     def test_patron_request_401_refreshes_bearer_token(
         self, overdrive_patron_requests: OverdrivePatronRequestsFixture

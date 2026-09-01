@@ -80,9 +80,14 @@ class BaseOverdriveRequests(LoggerMixin):
         }
     )
 
+    # Overdrive can be slow to answer, particularly on the token endpoints, so
+    # we allow far more than the global default before giving up.
+    REQUEST_TIMEOUT = 120
+
     def __init__(self, settings: OverdriveSettings) -> None:
         self._server_nickname = settings.overdrive_server_nickname
         self._hosts = self._determine_hosts(server_nickname=self._server_nickname)
+        self._max_retry_count = settings.max_retry_count
 
     @classmethod
     def _determine_hosts(cls, *, server_nickname: str) -> dict[str, str]:
@@ -107,6 +112,20 @@ class BaseOverdriveRequests(LoggerMixin):
             return url
         kwargs.update(self._hosts)
         return url % kwargs
+
+    def _do_get(self, url: str, headers: dict[str, str], **kwargs: Any) -> Response:
+        url = self.endpoint(url)
+        kwargs["max_retry_count"] = self._max_retry_count
+        kwargs["timeout"] = self.REQUEST_TIMEOUT
+        return HTTP.get_with_timeout(url, headers=headers, **kwargs)
+
+    def _do_post(
+        self, url: str, payload: dict[str, str], headers: dict[str, str], **kwargs: Any
+    ) -> Response:
+        url = self.endpoint(url)
+        kwargs["max_retry_count"] = self._max_retry_count
+        kwargs["timeout"] = self.REQUEST_TIMEOUT
+        return HTTP.post_with_timeout(url, data=payload, headers=headers, **kwargs)
 
 
 class OverdriveClientRequests(BaseOverdriveRequests):
@@ -173,7 +192,6 @@ class OverdriveClientRequests(BaseOverdriveRequests):
         self._parent_library_id = parent_library_id
         self._client_key = settings.overdrive_client_key
         self._client_secret = settings.overdrive_client_secret
-        self._max_retry_count = settings.max_retry_count
 
         # This is set by access to ._client_oauth_token
         self._cached_token: OAuthTokenResponse | None = None
@@ -219,20 +237,6 @@ class OverdriveClientRequests(BaseOverdriveRequests):
         Refreshes the cached bearer token if needed.
         """
         return self._auth_headers(self._client_oauth_token)
-
-    def _do_get(self, url: str, headers: dict[str, str], **kwargs: Any) -> Response:
-        url = self.endpoint(url)
-        kwargs["max_retry_count"] = self._max_retry_count
-        kwargs["timeout"] = 120
-        return HTTP.get_with_timeout(url, headers=headers, **kwargs)
-
-    def _do_post(
-        self, url: str, payload: dict[str, str], headers: dict[str, str], **kwargs: Any
-    ) -> Response:
-        url = self.endpoint(url)
-        kwargs["max_retry_count"] = self._max_retry_count
-        kwargs["timeout"] = 120
-        return HTTP.post_with_timeout(url, data=payload, headers=headers, **kwargs)
 
     @property
     def _client_oauth_token(self) -> str:
@@ -359,12 +363,6 @@ class OverdrivePatronRequests(BaseOverdriveRequests):
         )
         return "Basic " + base64.standard_b64encode(s).strip()
 
-    def _do_post(
-        self, url: str, payload: dict[str, str], headers: dict[str, str], **kwargs: Any
-    ) -> Response:
-        url = self.endpoint(url)
-        return HTTP.post_with_timeout(url, data=payload, headers=headers, **kwargs)
-
     def _do_request(
         self, http_method: str, url: str, **kwargs: Unpack[RequestKwargs]
     ) -> Response:
@@ -429,7 +427,17 @@ class OverdrivePatronRequests(BaseOverdriveRequests):
             self.log.info(debug_message + f" Response: '{e.response.text}'")
             raise PatronAuthorizationFailedException(description, debug_message) from e
 
-        return OAuthTokenResponse.model_validate_json(response.content)
+        try:
+            return OAuthTokenResponse.model_validate_json(response.content)
+        except ValidationError as e:
+            # Overdrive accepted the credentials but sent back something we
+            # can't use as a token. Surface it as an authorization failure so
+            # it stays inside the circulation error path.
+            debug_message = f"refresh_patron_oauth_token got an unusable token response. Error: '{e}'."
+            self.log.exception(debug_message + f" Response: '{response.text}'")
+            raise PatronAuthorizationFailedException(
+                "Failed to authenticate with Overdrive", debug_message
+            ) from e
 
     @overload
     def patron_request(
