@@ -112,15 +112,6 @@ class Library(Base, HasSessionCache):
         "CustomList", back_populates="library", uselist=True
     )
 
-    # Lists shared with this library
-    # shared_custom_lists: "CustomList"
-    shared_custom_lists: Mapped[list[CustomList]] = relationship(
-        "CustomList",
-        secondary="customlist_sharedlibraries",
-        back_populates="shared_locally_with_libraries",
-        uselist=True,
-    )
-
     # Any additional configuration information is stored as JSON on this column.
     settings_dict: Mapped[dict[str, Any]] = Column(JSONB, nullable=False, default=dict)
 

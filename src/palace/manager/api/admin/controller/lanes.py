@@ -133,13 +133,13 @@ class LanesController(CirculationManagerController, AdminPermissionsControllerMi
             for list_id in custom_list_ids:
                 list = get_one(self._db, CustomList, library=library, id=list_id)
                 if not list:
-                    # We did not find a list, is this a shared list?
-                    list = (
-                        self._db.query(CustomList)
-                        .join(CustomList.shared_locally_with_libraries)
-                        .filter(CustomList.id == list_id, Library.id == library.id)
-                        .first()
-                    )
+                    # Not a list this library owns -- is it one another library
+                    # on this Palace Manager has shared?
+                    list = self._db.scalars(
+                        CustomList.shared_with_library(library).where(
+                            CustomList.id == list_id
+                        )
+                    ).first()
                 if not list:
                     self._db.rollback()
                     return MISSING_CUSTOM_LIST.detailed(

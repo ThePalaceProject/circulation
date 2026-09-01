@@ -8,6 +8,8 @@ from typing import Any, cast
 import flask
 from flask import Response, url_for
 from flask_babel import lazy_gettext as _
+from sqlalchemy import func, select
+from sqlalchemy.orm import selectinload
 
 from palace.manager.api.admin.controller.base import AdminPermissionsControllerMixin
 from palace.manager.api.admin.model.custom_lists import (
@@ -76,7 +78,7 @@ class CustomListsController(
             auto_update_facets=list.auto_update_facets,
             auto_update_status=list.auto_update_status,
             is_owner=is_owner,
-            is_shared=len(list.shared_locally_with_libraries) > 0,
+            is_shared=list.shared_locally,
         )
 
     def custom_lists(self) -> dict[str, Any] | ProblemDetail | Response | None:
@@ -88,8 +90,14 @@ class CustomListsController(
             for list in library.custom_lists:
                 custom_lists.append(self._list_as_json(list))
 
-            for list in library.shared_custom_lists:
-                custom_lists.append(self._list_as_json(list, is_owner=False))
+            shared_lists = self._db.scalars(
+                CustomList.shared_with_library(library).options(
+                    selectinload(CustomList.collections)
+                )
+            ).all()
+            custom_lists.extend(
+                self._list_as_json(list, is_owner=False) for list in shared_lists
+            )
 
             return dict(custom_lists=sorted(custom_lists, key=lambda x: x["name"]))
 
@@ -386,7 +394,7 @@ class CustomListsController(
             # Deleting requires a library manager.
             self.require_library_manager(get_request_library())
 
-            if len(list.shared_locally_with_libraries) > 0:
+            if list.shared_locally:
                 return CANNOT_DELETE_SHARED_LIST
 
             # Delete any lanes based solely on this custom list (which is about
@@ -424,45 +432,39 @@ class CustomListsController(
         else:
             return METHOD_NOT_ALLOWED
 
-    def share_locally_POST(
-        self, customlist: CustomList
-    ) -> ProblemDetail | dict[str, int]:
-        successes = []
-        failures = []
-        self.log.info(f"Begin sharing customlist '{customlist.name}'")
-        for library in self._db.query(Library).all():
-            # Do not share with self
-            if library == customlist.library:
-                continue
+    def share_locally_POST(self, customlist: CustomList) -> dict[str, int]:
+        """Share a custom list with every other library on this Palace Manager.
 
-            # Do not attempt to re-share
-            if library in customlist.shared_locally_with_libraries:
-                self.log.info(
-                    f"Customlist '{customlist.name}' is already shared with library '{library.name}'"
-                )
-                continue
+        Sharing is all or nothing and forward inclusive: libraries added to this
+        manager later can use the list too, without it being shared again.
 
-            # Attempt to share the list
-            response = CustomListQueries.share_locally_with_library(
-                self._db, customlist, library
-            )
+        ``successes`` and ``failures`` are retained for compatibility with the
+        admin interface. Sharing can no longer fail for an individual library, so
+        ``failures`` is always 0 and ``successes`` is simply a count of the
+        libraries that can now use the list -- neither is a per-library outcome.
+        """
+        customlist.shared_locally = True
 
-            if response is not True:
-                failures.append(library)
-            else:
-                successes.append(library)
-
-        self._db.commit()
-        self.log.info(f"Done sharing customlist {customlist.name}")
+        # A plain != is safe here: share_locally() has already established that the
+        # requesting library owns this list, so library_id is not NULL.
+        shared_with = self._db.scalar(
+            select(func.count())
+            .select_from(Library)
+            .where(Library.id != customlist.library_id)
+        )
+        self.log.info(
+            f"Shared customlist '{customlist.name}' with every other library on "
+            f"this Palace Manager."
+        )
         return CustomListSharePostResponse(
-            successes=len(successes), failures=len(failures)
+            successes=shared_with, failures=0
         ).model_dump()
 
     def share_locally_DELETE(self, customlist: CustomList) -> ProblemDetail | Response:
         """Delete the shared status of a custom list
         If a customlist is actively in use by another library, then disallow the unshare
         """
-        if not customlist.shared_locally_with_libraries:
+        if not customlist.shared_locally:
             return Response("", 204)
 
         shared_list_lanes = (
@@ -481,8 +483,7 @@ class CustomListsController(
                 )
             )
 
-        # This list is not in use by any other libraries, we can delete the share
-        # by simply emptying the list of shared libraries
-        customlist.shared_locally_with_libraries = []
+        # This list is not in use by any other libraries, so we can withdraw the share
+        customlist.shared_locally = False
 
         return Response("", status=204)
