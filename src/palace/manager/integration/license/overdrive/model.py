@@ -209,6 +209,9 @@ class RequestSpec:
     headers: Mapping[str, str] = frozendict()
 
     def __post_init__(self) -> None:
+        # Two specs that describe the same wire request should compare equal,
+        # and requests uppercases the verb regardless, so normalize it here.
+        object.__setattr__(self, "method", self.method.upper())
         # Freeze whatever the caller passed, so that the headers are covered
         # by the frozen contract rather than only the field holding them.
         object.__setattr__(self, "headers", frozendict(self.headers))
@@ -314,7 +317,7 @@ class Action(BaseOverdriveModel):
             raise ExtraFieldsError(camel_kwargs.keys())
 
         return build_field_request(
-            method=self.method.upper(),
+            method=self.method,
             url=self.href,
             fields=field_data,
         )

@@ -255,6 +255,20 @@ class TestRequestSpec:
             RequestSpec("POST", "http://example.com/", headers={"A": "b"})
         )
 
+    def test_method_is_normalized(self) -> None:
+        """Specs describing the same wire request compare equal.
+
+        requests uppercases the verb before sending either way, so the casing
+        a caller happens to use must not make two specs differ.
+        """
+        assert RequestSpec("get", "http://example.com/") == RequestSpec(
+            "GET", "http://example.com/"
+        )
+        assert hash(RequestSpec("delete", "http://example.com/")) == hash(
+            RequestSpec("DELETE", "http://example.com/")
+        )
+        assert RequestSpec("get", "http://example.com/").method == "GET"
+
     def test_build_field_request_headers_are_frozen(self) -> None:
         spec = build_field_request("http://example.com/", {"reserveId": "1"})
         assert isinstance(spec.headers, frozendict)
