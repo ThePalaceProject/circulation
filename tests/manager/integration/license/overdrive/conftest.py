@@ -51,8 +51,11 @@ def overdrive_client_requests(
 class OverdriveAsyncRequestsFixture:
     """An OverdriveAsyncRequests and the client context it takes its token from."""
 
-    def __init__(self, client: MockAsyncClientFixture) -> None:
+    def __init__(
+        self, client: MockAsyncClientFixture, http_client: MockHttpClientFixture
+    ) -> None:
         self.client = client
+        self.http_client = http_client
         self.settings = create_settings()
         self.client_requests = OverdriveClientRequests(self.settings)
         # The async client builds its Authorization header up front, so seed a
@@ -66,8 +69,9 @@ class OverdriveAsyncRequestsFixture:
 @pytest.fixture
 def overdrive_async_requests(
     async_http_client: MockAsyncClientFixture,
+    http_client: MockHttpClientFixture,
 ) -> OverdriveAsyncRequestsFixture:
-    return OverdriveAsyncRequestsFixture(async_http_client)
+    return OverdriveAsyncRequestsFixture(async_http_client, http_client)
 
 
 class OverdrivePatronRequestsFixture:

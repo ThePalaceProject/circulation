@@ -234,6 +234,7 @@ class OverdriveAPI(
         collection: Collection,
         client_requests: OverdriveClientRequests | None = None,
         patron_requests: OverdrivePatronRequests | None = None,
+        async_requests: OverdriveAsyncRequests | None = None,
     ) -> None:
         super().__init__(_db, collection)
 
@@ -277,8 +278,10 @@ class OverdriveAPI(
             if patron_requests is None
             else patron_requests
         )
-        self.async_requests = OverdriveAsyncRequests(
-            self._settings, self.client_requests
+        self.async_requests = (
+            OverdriveAsyncRequests(self._settings, self.client_requests)
+            if async_requests is None
+            else async_requests
         )
 
         # In-memory cache for the collectionToken extracted from the library
