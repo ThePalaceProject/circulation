@@ -183,9 +183,11 @@ def add_public_cors_to_error_responses(response: Response) -> Response:
     stacks that ignore the placement rule in allows_public_cors, where an
     outer decorator returns a problem detail without calling the view.
 
-    Responses produced before routing resolves an endpoint, such as a 405
-    for a method the route does not allow, cannot be attributed to a view
-    and are not back-filled.
+    Responses produced before routing resolves an endpoint cannot be
+    attributed to a view and are not back-filled: a 405 for a method the
+    route does not allow, and a strict_slashes redirect. Register public
+    CORS routes with strict_slashes=False (see library_dir_route) so a
+    trailing-slash mismatch never becomes an unreadable redirect.
     """
     if "Access-Control-Allow-Origin" not in response.headers and request.endpoint:
         view = current_app.view_functions.get(request.endpoint)
