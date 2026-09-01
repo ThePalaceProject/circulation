@@ -634,9 +634,9 @@ def related_books(identifier_type, identifier):
 
 
 @library_route("/analytics/<identifier_type>/<path:identifier>/<event_type>")
+@allows_public_cors
 @has_library
 @allows_auth
-@allows_patron_web
 @returns_problem_detail
 def track_analytics_event(identifier_type, identifier, event_type):
     return app.manager.analytics_controller.track_event(

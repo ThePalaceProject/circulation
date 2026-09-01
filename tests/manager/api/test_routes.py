@@ -270,6 +270,9 @@ class TestAllowsPublicCors:
             pytest.param(
                 "/works/sometype/some/identifier/related_books", id="related-books"
             ),
+            pytest.param(
+                "/analytics/sometype/some/identifier/someevent", id="analytics"
+            ),
             pytest.param("/version.json", id="version"),
         ],
     )
@@ -279,6 +282,22 @@ class TestAllowsPublicCors:
         response = route_test.request(url, headers={"Origin": "http://any.web.client"})
         assert response.headers["Access-Control-Allow-Origin"] == "*"
         assert "Access-Control-Allow-Credentials" not in response.headers
+
+    def test_public_route_cors_survives_library_error(
+        self, route_test: RouteTestFixture, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The fixture calls the view directly, bypassing after_request, so
+        # this only passes when the decorator sits outside has_library and
+        # adds headers to the library-not-found short circuit itself.
+        monkeypatch.setattr(
+            route_test.manager.index_controller,
+            "library_for_request",
+            lambda *args, **kwargs: LIBRARY_NOT_FOUND,
+        )
+        response = route_test.request(
+            "/groups", headers={"Origin": "http://any.web.client"}
+        )
+        assert response.headers["Access-Control-Allow-Origin"] == "*"
 
 
 class TestAdminRequestLifecycle:
