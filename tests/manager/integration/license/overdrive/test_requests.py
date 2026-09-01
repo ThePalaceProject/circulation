@@ -40,7 +40,7 @@ from palace.manager.util import base64
 from palace.manager.util.http.async_http import AsyncClient
 from palace.manager.util.http.exception import BadResponseException
 from tests.fixtures.files import OverdriveFilesFixture
-from tests.fixtures.http import MockAsyncClientFixture
+from tests.fixtures.http import MockAsyncClientFixture, MockHttpClientFixture
 from tests.fixtures.webserver import MockAPIServer, MockAPIServerResponse
 from tests.manager.integration.license.overdrive.conftest import (
     OverdriveAsyncRequestsFixture,
@@ -224,15 +224,18 @@ class TestOverdriveClientRequests:
         this has to be translated rather than escaping as a bare pydantic
         ValidationError.
         """
-        # A token response with no token_type at all.
+        # A token response with no token_type at all. It is a 2xx body, so
+        # the access token in it is live.
         overdrive_client_requests.client.queue_response(
-            200, content=json.dumps(dict(access_token="token", expires_in=3600))
+            200, content=json.dumps(dict(access_token="tok1", expires_in=3600))
         )
         with pytest.raises(OverdriveValidationError) as excinfo:
             overdrive_client_requests.requests.refresh_client_oauth_token()
 
         assert excinfo.value.problem_detail.debug_message is not None
-        assert "1 validation error for OAuthTokenResponse" in caplog.text
+        assert "token_type" in caplog.text
+        assert "tok1" not in caplog.text
+        assert "tok1" not in str(excinfo.value)
 
     def test_raw_get_success(
         self, overdrive_client_requests: OverdriveClientRequestsFixture
@@ -1209,7 +1212,11 @@ class TestOverdriveAsyncRequests:
         self,
         overdrive_async_requests: OverdriveAsyncRequestsFixture,
         async_http_client: MockAsyncClientFixture,
+        http_client: MockHttpClientFixture,
     ) -> None:
+        # http_client is requested for its patching side effect: this is the
+        # one test that builds a real OverdriveClientRequests, so if the cache
+        # sharing regressed it would otherwise make a live token request.
         # Both layers read the same cache, so a collection only ever holds
         # one token.
         client_requests = OverdriveClientRequests(
@@ -1318,12 +1325,13 @@ class TestOverdriveClientAuth:
                 "overdrive_book_list_with_next_link.json"
             ),
         )
-        for _ in range(4):
-            async_http_client.queue_response(401, content="Unauthorized")
-            async_http_client.queue_response(
-                200, content=overdrive_async_requests.token_response("fresh token")
-            )
-            async_http_client.queue_response(401, content="Unauthorized")
+        # One round only: the auth flow refreshes and retries once, and the
+        # page client is told not to retry a 401 on top of that.
+        async_http_client.queue_response(401, content="Unauthorized")
+        async_http_client.queue_response(
+            200, content=overdrive_async_requests.token_response("fresh token")
+        )
+        async_http_client.queue_response(401, content="Unauthorized")
 
         with patch(
             "palace.manager.integration.license.overdrive.requests.WORKER_DEFAULT_BACKOFF",

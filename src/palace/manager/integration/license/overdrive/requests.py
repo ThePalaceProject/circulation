@@ -105,15 +105,6 @@ class ClientTokenCache:
         self._token = token
 
 
-def collection_basic_auth_header(client_key: str, client_secret: str) -> str:
-    """The Basic Auth header used to acquire a client credentials token.
-
-    These are the collection's credentials, as configured through the admin
-    interface.
-    """
-    return "Basic " + base64.standard_b64encode(f"{client_key}:{client_secret}").strip()
-
-
 class BaseOverdriveRequests(LoggerMixin):
     """Shared host and URL-template machinery for the Overdrive request classes."""
 
@@ -223,8 +214,37 @@ class ClientCredentialsRequests(BaseOverdriveRequests):
 
     @property
     def _collection_context_basic_auth_header(self) -> str:
-        """The Basic Auth header used to acquire an OAuth bearer token."""
-        return collection_basic_auth_header(self._client_key, self._client_secret)
+        """The Basic Auth header used to acquire an OAuth bearer token.
+
+        These are the collection's credentials, as configured through the
+        admin interface.
+        """
+        credentials = f"{self._client_key}:{self._client_secret}"
+        return "Basic " + base64.standard_b64encode(credentials).strip()
+
+    def _store_token(self, response: Response | httpx.Response) -> OAuthTokenResponse:
+        """Validate a token response and put the result in the shared cache.
+
+        :raises OverdriveValidationError: If the body is not a usable token.
+        """
+        try:
+            token = OAuthTokenResponse.model_validate_json(response.content)
+        except ValidationError as e:
+            # Overdrive accepted the credentials but sent back something we
+            # can't use as a token. The body is a live token document, so
+            # report the errors without it.
+            errors = e.errors(include_input=False, include_url=False)
+            self.log.error(
+                "Unable to validate Overdrive token response. Errors: '%s'.", errors
+            )
+            raise OverdriveValidationError(
+                str(response.url),
+                "Error validating Overdrive token response",
+                response,
+                debug_message=str(errors),
+            ) from e
+        self._token_cache.token = token
+        return token
 
 
 class OverdriveClientRequests(ClientCredentialsRequests):
@@ -329,23 +349,7 @@ class OverdriveClientRequests(ClientCredentialsRequests):
                 {"Authorization": self._collection_context_basic_auth_header},
                 allowed_response_codes=[200],
             )
-            try:
-                token = OAuthTokenResponse.model_validate_json(response.content)
-            except ValidationError as e:
-                # Overdrive accepted the credentials but sent back something
-                # we can't use as a token. Raise it as an Overdrive error
-                # rather than letting a bare ValidationError escape.
-                self.log.exception(
-                    "Unable to validate Overdrive token response. %s", str(e)
-                )
-                raise OverdriveValidationError(
-                    response.url,
-                    "Error validating Overdrive token response",
-                    response,
-                    debug_message=str(e),
-                ) from e
-            self._token_cache.token = token
-            return token
+            return self._store_token(response)
 
     def raw_get(
         self,
@@ -476,24 +480,7 @@ class OverdriveAsyncRequests(ClientCredentialsRequests):
                 data={"grant_type": "client_credentials"},
                 headers={"Authorization": self._collection_context_basic_auth_header},
             )
-        try:
-            token = OAuthTokenResponse.model_validate_json(response.content)
-        except ValidationError as e:
-            # Overdrive accepted the credentials but sent back something we
-            # can't use as a token. The body is a live token document, so
-            # report the errors without it.
-            errors = e.errors(include_input=False, include_url=False)
-            self.log.error(
-                "Unable to validate Overdrive token response. Errors: '%s'.", errors
-            )
-            raise OverdriveValidationError(
-                str(response.url),
-                "Error validating Overdrive token response",
-                response,
-                debug_message=str(errors),
-            ) from e
-        self._token_cache.token = token
-        return token
+        return self._store_token(response)
 
     @staticmethod
     def _page_link(page: dict[str, Any], rel: str) -> str | None:
@@ -616,6 +603,10 @@ class OverdriveAsyncRequests(ClientCredentialsRequests):
             base_url=base_url,
             auth=OverdriveClientAuth(self),
             allowed_response_codes=[200, 404],
+            # The auth flow has already refreshed and retried a 401 by the
+            # time we see one, so retrying the request cannot help: it opens
+            # by asking for the token that was just refused.
+            no_retry_status_codes=[401],
             backoff=WORKER_DEFAULT_BACKOFF,
         )
 
