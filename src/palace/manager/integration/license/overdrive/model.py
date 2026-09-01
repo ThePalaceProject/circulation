@@ -228,7 +228,17 @@ def build_field_request(
     *,
     method: str = "POST",
 ) -> RequestSpec:
-    """Describe a request whose body is an Overdrive "fields" document."""
+    """Describe a request whose body is an Overdrive "fields" document.
+
+    :param url: The URL to request.
+    :param fields: The field names and values to send. An empty mapping
+        produces a request with no body, though still with the JSON content
+        type, which is what an action taking no arguments needs.
+    :param method: The HTTP method, defaulting to POST because that is what
+        every Overdrive action that carries fields uses.
+
+    :return: The request to make.
+    """
     if fields:
         data = json.dumps(
             {
