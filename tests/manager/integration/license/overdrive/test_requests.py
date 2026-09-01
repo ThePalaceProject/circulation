@@ -698,6 +698,15 @@ class TestOverdriveAsyncRequests:
         assert "id" in book_info_list[0]["metadata"]
         assert "copiesOwned" in book_info_list[0]["availabilityV2"]
 
+        # The host comes from this class's own settings, and the bearer token
+        # from the client context it was handed. The mock answers from a queue
+        # regardless of either, so they have to be asserted directly.
+        assert (
+            async_http_client.request_urls[0]
+            == "https://integration.api.overdrive.com/books"
+        )
+        assert async_http_client.requests[0].headers["Authorization"] == "Bearer token"
+
     async def test_fetch_book_info_list_retry_and_unrecoverable_error(
         self,
         overdrive_async_requests: OverdriveAsyncRequestsFixture,

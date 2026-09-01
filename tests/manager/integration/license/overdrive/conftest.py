@@ -16,20 +16,23 @@ from palace.manager.integration.license.overdrive.requests import (
 from palace.manager.integration.license.overdrive.settings import OverdriveSettings
 from tests.fixtures.http import MockHttpClientFixture
 
+create_settings = partial(
+    OverdriveSettings,
+    external_account_id="library_id",
+    overdrive_website_id="website_id",
+    overdrive_client_key="client_key",
+    overdrive_client_secret="client_secret",
+    overdrive_server_nickname=OverdriveConstants.TESTING_SERVERS,
+)
+"""The settings every Overdrive request fixture is built from."""
+
 
 class OverdriveClientRequestsFixture:
     """A OverdriveClientRequests built from settings alone, with no database."""
 
     def __init__(self, http_client: MockHttpClientFixture) -> None:
         self.client = http_client
-        self.create_settings = partial(
-            OverdriveSettings,
-            external_account_id="library_id",
-            overdrive_website_id="website_id",
-            overdrive_client_key="client_key",
-            overdrive_client_secret="client_secret",
-            overdrive_server_nickname=OverdriveConstants.TESTING_SERVERS,
-        )
+        self.create_settings = create_settings
         self.settings = self.create_settings()
         self.requests = OverdriveClientRequests(self.settings)
 
@@ -49,13 +52,7 @@ class OverdriveAsyncRequestsFixture:
     """An OverdriveAsyncRequests and the client context it takes its token from."""
 
     def __init__(self) -> None:
-        self.settings = OverdriveSettings(
-            external_account_id="library_id",
-            overdrive_website_id="website_id",
-            overdrive_client_key="client_key",
-            overdrive_client_secret="client_secret",
-            overdrive_server_nickname=OverdriveConstants.TESTING_SERVERS,
-        )
+        self.settings = create_settings()
         self.client_requests = OverdriveClientRequests(self.settings)
         # The async client builds its Authorization header up front, so seed a
         # token rather than making every test queue a token response.
@@ -85,14 +82,7 @@ class OverdrivePatronRequestsFixture:
             f"{Configuration.OD_PREFIX_TESTING_PREFIX}_{Configuration.OD_FULFILLMENT_CLIENT_SECRET_SUFFIX}",
             "TestingSecret",
         )
-        self.create_settings = partial(
-            OverdriveSettings,
-            external_account_id="library_id",
-            overdrive_website_id="website_id",
-            overdrive_client_key="client_key",
-            overdrive_client_secret="client_secret",
-            overdrive_server_nickname=OverdriveConstants.TESTING_SERVERS,
-        )
+        self.create_settings = create_settings
         self.settings = self.create_settings()
         self.requests = OverdrivePatronRequests(self.settings)
         self.token = "patron token"
