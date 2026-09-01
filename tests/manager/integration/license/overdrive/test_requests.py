@@ -8,6 +8,7 @@ from freezegun import freeze_time
 
 from palace.manager.api.circulation.exceptions import (
     CannotFulfill,
+    NoActiveLoan,
     PatronAuthorizationFailedException,
 )
 from palace.manager.api.config import Configuration
@@ -15,6 +16,7 @@ from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.exceptions import IntegrationException
 from palace.manager.integration.license.overdrive.constants import OverdriveConstants
 from palace.manager.integration.license.overdrive.exception import (
+    OverdriveResponseException,
     OverdriveValidationError,
 )
 from palace.manager.integration.license.overdrive.model import Checkout
@@ -553,6 +555,48 @@ class TestOverdrivePatronRequests:
         )
 
         assert isinstance(checkout, Checkout)
+
+    def test_patron_request_translates_error_code(
+        self, overdrive_patron_requests: OverdrivePatronRequestsFixture
+    ) -> None:
+        """An Overdrive error body becomes the matching circulation exception.
+
+        This is what turns a 400 into something the circulation layer can act
+        on, so it belongs with the request that produces it rather than only
+        with the business methods that happen to call it.
+        """
+        requests = overdrive_patron_requests.requests
+        client = overdrive_patron_requests.client
+
+        client.queue_response(
+            400,
+            content=json.dumps(
+                {
+                    "errorCode": "TitleNotCheckedOut",
+                    "message": "The title is not checked out.",
+                }
+            ),
+        )
+        with pytest.raises(NoActiveLoan, match="The title is not checked out."):
+            requests.patron_request(
+                overdrive_patron_requests.token_provider, "http://example.com/"
+            )
+
+        # An error code we don't map falls through to a generic Overdrive error.
+        client.queue_response(
+            400,
+            content=json.dumps(
+                {
+                    "errorCode": "SomethingNewFromOverdrive",
+                    "message": "Something we have not seen before.",
+                }
+            ),
+        )
+        with pytest.raises(OverdriveResponseException) as excinfo:
+            requests.patron_request(
+                overdrive_patron_requests.token_provider, "http://example.com/"
+            )
+        assert excinfo.value.error_code == "SomethingNewFromOverdrive"
 
     def test_patron_request_raises_validation_error(
         self,

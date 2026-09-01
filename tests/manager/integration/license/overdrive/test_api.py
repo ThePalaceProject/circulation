@@ -47,7 +47,7 @@ from palace.manager.integration.license.overdrive.representation import (
     OverdriveRepresentationExtractor,
 )
 from palace.manager.integration.license.overdrive.requests import (
-    OverdriveClientRequests,
+    BaseOverdriveRequests,
     OverdrivePatronRequests,
 )
 from palace.manager.sqlalchemy.constants import MediaTypes
@@ -101,19 +101,16 @@ class TestOverdriveAPI:
         collection = overdrive_api_fixture.collection
 
         exception_message = "This is a unit test, you can't make HTTP requests!"
+        # Both request contexts inherit these from the base class, so patching
+        # it once covers every context the API can reach.
         with (
             patch.object(
-                OverdriveClientRequests,
+                BaseOverdriveRequests,
                 "_do_get",
                 side_effect=Exception(exception_message),
             ),
             patch.object(
-                OverdriveClientRequests,
-                "_do_post",
-                side_effect=Exception(exception_message),
-            ),
-            patch.object(
-                OverdrivePatronRequests,
+                BaseOverdriveRequests,
                 "_do_post",
                 side_effect=Exception(exception_message),
             ),
