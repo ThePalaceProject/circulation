@@ -7,8 +7,10 @@ import pytest
 from freezegun import freeze_time
 
 from palace.manager.api.circulation.exceptions import (
+    CannotFulfill,
     PatronAuthorizationFailedException,
 )
+from palace.manager.api.config import Configuration
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.exceptions import IntegrationException
 from palace.manager.integration.license.overdrive.constants import OverdriveConstants
@@ -450,6 +452,29 @@ class TestOverdrivePatronRequests:
         assert "Traceback" not in caplog.text
         assert "tok1" not in str(excinfo.value)
         assert "tok1" not in str(excinfo.value.problem_detail)
+
+    def test_refresh_patron_oauth_token_missing_palace_credentials(
+        self,
+        overdrive_patron_requests: OverdrivePatronRequestsFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Without the Palace credentials we cannot act for a patron at all.
+
+        These come from the environment rather than the collection, so a
+        missing one is a deployment problem, not a patron problem.
+        """
+        for suffix in (
+            Configuration.OD_FULFILLMENT_CLIENT_KEY_SUFFIX,
+            Configuration.OD_FULFILLMENT_CLIENT_SECRET_SUFFIX,
+        ):
+            monkeypatch.delenv(
+                f"{Configuration.OD_PREFIX_TESTING_PREFIX}_{suffix}", raising=False
+            )
+
+        with pytest.raises(CannotFulfill):
+            overdrive_patron_requests.requests.refresh_patron_oauth_token(
+                username="barcode", password="a pin", scope="scope"
+            )
 
     def test_patron_token_request_policy(
         self, overdrive_patron_requests: OverdrivePatronRequestsFixture

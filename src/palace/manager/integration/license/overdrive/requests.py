@@ -45,10 +45,9 @@ class PatronTokenProvider(Protocol):
     The token itself is persisted in the database by the API layer, so the
     request layer reaches it through this callable rather than owning it.
 
-    A forced refresh must be visible to later calls: the retry after a 401
-    calls the provider again rather than using what the refresh returned, so
-    a provider that handed back a fresh token without storing it would retry
-    with the rejected one.
+    Calling with ``force_refresh`` must return a newly issued token rather
+    than the one already in hand, since that is the only way a request that
+    has been refused gets a usable one.
     """
 
     def __call__(self, *, force_refresh: bool = False) -> str: ...
@@ -460,7 +459,6 @@ class OverdrivePatronRequests(BaseOverdriveRequests):
         data: str | None = ...,
         method: str | None = ...,
         response_type: None = ...,
-        exception_on_401: bool = ...,
     ) -> Response: ...
 
     @overload
@@ -472,7 +470,6 @@ class OverdrivePatronRequests(BaseOverdriveRequests):
         data: str | None = ...,
         method: str | None = ...,
         response_type: type[TOverdriveModel] = ...,
-        exception_on_401: bool = ...,
     ) -> TOverdriveModel: ...
 
     def patron_request[TOverdriveModel: BaseOverdriveModel](
@@ -483,7 +480,6 @@ class OverdrivePatronRequests(BaseOverdriveRequests):
         data: str | None = None,
         method: str | None = None,
         response_type: type[TOverdriveModel] | None = None,
-        exception_on_401: bool = False,
     ) -> Response | TOverdriveModel:
         """
         Make an HTTP request on behalf of a patron to Overdrive's API.
@@ -491,9 +487,6 @@ class OverdrivePatronRequests(BaseOverdriveRequests):
         A 401 response triggers a single token refresh and retry; a second
         401 raises an IntegrationException.
         """
-        headers = {"Authorization": f"Bearer {token()}"}
-        if extra_headers:
-            headers.update(extra_headers)
         if method and method.lower() in ("get", "post", "put", "delete"):
             method = method.lower()
         else:
@@ -502,34 +495,29 @@ class OverdrivePatronRequests(BaseOverdriveRequests):
             else:
                 method = "get"
         url = self.endpoint(url)
-        try:
-            response = self._do_request(
-                method,
-                url,
-                headers=headers,
-                data=data,
-                allowed_response_codes=["2xx", 401],
-            )
-        except BadResponseException as e:
-            ErrorResponse.raise_from_response_data(e.response, e.message)
-        if response.status_code == 401:
-            if exception_on_401:
-                # This is our second try. Give up.
+
+        bearer = token()
+        for last_attempt in (False, True):
+            headers = {"Authorization": f"Bearer {bearer}"}
+            if extra_headers:
+                headers.update(extra_headers)
+            try:
+                response = self._do_request(
+                    method,
+                    url,
+                    headers=headers,
+                    data=data,
+                    allowed_response_codes=["2xx", 401],
+                )
+            except BadResponseException as e:
+                ErrorResponse.raise_from_response_data(e.response, e.message)
+            if response.status_code != 401:
+                break
+            if last_attempt:
                 raise IntegrationException(
                     "Something's wrong with the patron OAuth Bearer Token!"
                 )
-            else:
-                # Refresh the token and try again.
-                token(force_refresh=True)
-                return self.patron_request(
-                    token,
-                    url,
-                    extra_headers=extra_headers,
-                    data=data,
-                    method=method,
-                    response_type=response_type,
-                    exception_on_401=True,
-                )
+            bearer = token(force_refresh=True)
 
         if response_type is None:
             return response
