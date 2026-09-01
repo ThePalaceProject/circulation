@@ -96,10 +96,9 @@ class TestAllowsPublicCors:
         assert response.headers["Access-Control-Allow-Origin"] == "*"
         assert "Access-Control-Allow-Methods" not in response.headers
 
-    def test_error_responses_keep_cors(self) -> None:
-        # A raising view never returns through the decorator, so the
-        # after_request hook must back-fill the wildcard header. Routes
-        # without the decorator must stay untouched.
+    @pytest.fixture
+    def backfill_client(self) -> FlaskClient:
+        # An app with the back-fill hook and one route per scenario.
         app = flask.Flask(__name__)
         app.after_request(routes.add_public_cors_to_error_responses)
 
@@ -142,47 +141,35 @@ class TestAllowsPublicCors:
         def short_circuit_route() -> str:
             return "unreachable"
 
-        client = app.test_client()
-        response = client.get(
-            "/public-error", headers={"Origin": "http://any.web.client"}
-        )
-        assert response.status_code == 404
-        assert response.headers["Access-Control-Allow-Origin"] == "*"
+        return app.test_client()
 
-        response = client.get(
-            "/public-raises", headers={"Origin": "http://any.web.client"}
+    @pytest.mark.parametrize(
+        "path,status,expect_header",
+        [
+            pytest.param("/public-error", 404, True, id="aborting-view"),
+            pytest.param("/public-raises", 500, True, id="raising-view"),
+            pytest.param("/short-circuit", 404, True, id="short-circuiting-decorator"),
+            pytest.param("/public-ok", 200, True, id="successful-view"),
+            pytest.param("/private-error", 404, False, id="undecorated-route"),
+            pytest.param("/no-such-route", 404, False, id="unmatched-url"),
+        ],
+    )
+    def test_back_fill(
+        self,
+        backfill_client: FlaskClient,
+        path: str,
+        status: int,
+        expect_header: bool,
+    ) -> None:
+        response = backfill_client.get(
+            path, headers={"Origin": "http://any.web.client"}
         )
-        assert response.status_code == 500
-        assert response.headers["Access-Control-Allow-Origin"] == "*"
-
-        response = client.get(
-            "/private-error", headers={"Origin": "http://any.web.client"}
-        )
-        assert response.status_code == 404
-        assert "Access-Control-Allow-Origin" not in response.headers
-
-        # The view never runs, but the marker propagated through the outer
-        # decorator's functools.wraps, so the hook still adds the header.
-        response = client.get(
-            "/short-circuit", headers={"Origin": "http://any.web.client"}
-        )
-        assert response.status_code == 404
-        assert response.get_data(as_text=True) == "no library"
-        assert response.headers["Access-Control-Allow-Origin"] == "*"
-
-        # A successful decorated response already carries the header, and
-        # the hook leaves it alone: exactly one header, not a duplicate.
-        response = client.get("/public-ok", headers={"Origin": "http://any.web.client"})
-        assert response.status_code == 200
-        assert response.headers.getlist("Access-Control-Allow-Origin") == ["*"]
-
-        # A URL that matches no route has no endpoint, so the hook has
-        # nothing to check and adds no header.
-        response = client.get(
-            "/no-such-route", headers={"Origin": "http://any.web.client"}
-        )
-        assert response.status_code == 404
-        assert "Access-Control-Allow-Origin" not in response.headers
+        assert response.status_code == status
+        if expect_header:
+            # Exactly one header, never a duplicate.
+            assert response.headers.getlist("Access-Control-Allow-Origin") == ["*"]
+        else:
+            assert "Access-Control-Allow-Origin" not in response.headers
 
     @pytest.mark.parametrize(
         "outer,inner",
