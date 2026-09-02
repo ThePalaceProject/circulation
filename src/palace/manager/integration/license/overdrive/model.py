@@ -140,8 +140,17 @@ class Link(BaseOverdriveModel):
     """Link model."""
 
     href: str
-    # Optional because nothing reads it, and requiring it would let a field we
-    # ignore fail a whole document that is otherwise usable.
+    type: str
+
+
+class FeedLink(BaseOverdriveModel):
+    """A link on a feed envelope.
+
+    Separate from :class:`Link` because only the href is ever followed here,
+    and a page of titles should not be lost over a field nothing reads.
+    """
+
+    href: str
     type: str | None = None
 
 
@@ -548,7 +557,7 @@ class BookListPage(BaseOverdriveModel):
     total_items: int | None = Field(None, alias="totalItems")
     limit: int | None = None
     offset: int | None = None
-    links: dict[str, Link] = Field(default_factory=dict)
+    links: dict[str, FeedLink] = Field(default_factory=dict)
     products: list[dict[str, Any]] | None = None
 
     def link_safe(self, rel: str) -> str | None:

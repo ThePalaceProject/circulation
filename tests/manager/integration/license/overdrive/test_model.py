@@ -6,6 +6,7 @@ from uuid import uuid4
 import pytest
 from frozendict import frozendict
 from httpx import Headers
+from pydantic import ValidationError
 
 from palace.util.datetime_helpers import utc_now
 
@@ -41,6 +42,7 @@ from palace.manager.integration.license.overdrive.model import (
     Hold,
     Holds,
     LibraryResponse,
+    Link,
     LinkTemplate,
     PatronInformation,
     RequestSpec,
@@ -816,6 +818,21 @@ class TestAdvantageAccountsResponse:
 
 
 class TestBookListPage:
+    def test_feed_links_tolerate_a_missing_type(self) -> None:
+        """A page is not lost over a link field nothing follows.
+
+        Only the href is read here, so requiring a type would let one link
+        abort a crawl. Link itself still requires it, because fulfillment
+        reads it off the contentlink to pick a delivery mechanism.
+        """
+        page = BookListPage.model_validate(
+            {"links": {"next": {"href": "http://example.com/2"}}}
+        )
+        assert page.link_safe("next") == "http://example.com/2"
+
+        with pytest.raises(ValidationError):
+            Link.model_validate({"href": "http://example.com/2"})
+
     def test_book_list_page(
         self, overdrive_files_fixture: OverdriveFilesFixture
     ) -> None:

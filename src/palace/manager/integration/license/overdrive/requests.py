@@ -9,7 +9,7 @@ and 401 retry behavior -- from the business logic in
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Mapping
 from dataclasses import dataclass
 from threading import Lock
 from typing import Any, Protocol, Unpack, overload
@@ -156,49 +156,6 @@ class BaseOverdriveRequests(LoggerMixin):
 
         return dict(cls.HOSTS[server_nickname])
 
-    def _parse_book_list_page(
-        self, status_code: int, url: str, headers: Any, content: bytes
-    ) -> BookListPage:
-        """Turn a feed body into a page, or say why it could not be.
-
-        The pieces are taken apart rather than as a ResponseData because that
-        decodes the body to text, and these pages run to megabytes on a crawl
-        where neither of the failures below normally happens.
-
-        :raises BadResponseException: If Overdrive refused the request.
-        :raises OverdriveValidationError: If the page is not a shape we know.
-        """
-
-        def response_data() -> ResponseData:
-            return ResponseData(
-                status_code=status_code,
-                url=url,
-                headers=Headers(headers),
-                text=content.decode(errors="replace"),
-                content=content,
-                extensions={},
-            )
-
-        if status_code != 200:
-            # Both callers are handed a 404 rather than having it raised, and
-            # every field of a page is optional, so an error document would
-            # otherwise validate into a feed with no titles.
-            raise BadResponseException(
-                url,
-                f"Got status code {status_code} from Overdrive, expected 200.",
-                response_data(),
-            )
-        try:
-            return BookListPage.model_validate_json(content)
-        except ValidationError as e:
-            self.log.exception("Unable to validate Overdrive book list page. %s", e)
-            raise OverdriveValidationError(
-                url,
-                "Error validating Overdrive book list page",
-                response_data(),
-                debug_message=str(e),
-            ) from e
-
     def endpoint(self, url: str, **kwargs: str) -> str:
         """Create the URL to an Overdrive API endpoint.
 
@@ -256,6 +213,49 @@ class ClientCredentialsRequests(BaseOverdriveRequests):
         self._token_cache = (
             token_cache if token_cache is not None else ClientTokenCache()
         )
+
+    def _parse_book_list_page(
+        self, status_code: int, url: str, headers: Mapping[str, str], content: bytes
+    ) -> BookListPage:
+        """Turn a feed body into a page, or say why it could not be.
+
+        The pieces are taken apart rather than as a ResponseData because that
+        decodes the body to text, and these pages run to megabytes on a crawl
+        where neither of the failures below normally happens.
+
+        :raises BadResponseException: If Overdrive refused the request.
+        :raises OverdriveValidationError: If the page is not a shape we know.
+        """
+
+        def response_data() -> ResponseData:
+            return ResponseData(
+                status_code=status_code,
+                url=url,
+                headers=Headers(headers),
+                text=content.decode(errors="replace"),
+                content=content,
+                extensions={},
+            )
+
+        if status_code != 200:
+            # Both callers are handed a 404 rather than having it raised, and
+            # every field of a page is optional, so an error document would
+            # otherwise validate into a feed with no titles.
+            raise BadResponseException(
+                url,
+                f"Got status code {status_code} from Overdrive, expected 200.",
+                response_data(),
+            )
+        try:
+            return BookListPage.model_validate_json(content)
+        except ValidationError as e:
+            self.log.exception("Unable to validate Overdrive book list page. %s", e)
+            raise OverdriveValidationError(
+                url,
+                "Error validating Overdrive book list page",
+                response_data(),
+                debug_message=str(e),
+            ) from e
 
     @property
     def token_cache(self) -> ClientTokenCache:
