@@ -477,8 +477,10 @@ class OverdriveAsyncRequests(ClientCredentialsRequests):
             if self._refresh_error is not None:
                 # A refresh already failed for this page. Every other request
                 # on it would fail the same way, one at a time behind this
-                # lock, so fail them with what we already know.
-                raise self._refresh_error
+                # lock, so fail them with what we already know. Clear the
+                # traceback first: re-raising one object hundreds of times
+                # otherwise appends a frame to it on every replay.
+                raise self._refresh_error.with_traceback(None)
             try:
                 return (await self._refresh_token()).access_token
             except Exception as e:

@@ -1216,6 +1216,34 @@ class TestOverdriveAsyncRequests:
         # The second caller got the first one's failure, not its own request.
         assert len(async_http_client.requests) == 1
 
+    async def test_replayed_refresh_failure_does_not_grow(
+        self,
+        overdrive_async_requests: OverdriveAsyncRequestsFixture,
+        async_http_client: MockAsyncClientFixture,
+    ) -> None:
+        """Replaying one failure must not accumulate tracebacks on it.
+
+        A page replays it once per request, so a traceback frame per replay
+        would keep that many frames, and their locals, alive.
+        """
+
+        def frames(error: BaseException) -> int:
+            count, tb = 0, error.__traceback__
+            while tb is not None:
+                count += 1
+                tb = tb.tb_next
+            return count
+
+        async_http_client.queue_response(500, content="nope")
+
+        depths = []
+        for _ in range(5):
+            with pytest.raises(BadResponseException) as excinfo:
+                await overdrive_async_requests.requests.bearer_token()
+            depths.append(frames(excinfo.value))
+
+        assert len(set(depths[1:])) == 1, f"traceback grew across replays: {depths}"
+
     @pytest.mark.parametrize(
         "missing_setting",
         ["overdrive_client_key", "overdrive_client_secret"],
