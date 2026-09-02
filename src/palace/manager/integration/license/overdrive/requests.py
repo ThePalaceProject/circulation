@@ -445,9 +445,44 @@ class OverdriveClientRequests(ClientCredentialsRequests):
         """Fetch one page of a product or events feed.
 
         These pages are not cached, because they change constantly.
+
+        :raises BadResponseException: If Overdrive refused the request.
+        :raises OverdriveValidationError: If the page is not a shape we know.
         """
-        _, _, content = self.raw_get(url, {})
-        return BookListPage.model_validate_json(content)
+        status_code, headers, content = self.raw_get(url, {})
+        if status_code != 200:
+            # raw_get hands a 404 back rather than raising it, and every field
+            # of a page is optional, so an error document would otherwise
+            # validate into an empty page and read as a feed with no titles.
+            raise BadResponseException(
+                url,
+                f"Got status code {status_code} from Overdrive, expected 200.",
+                ResponseData(
+                    status_code=status_code,
+                    url=url,
+                    headers=Headers(headers),
+                    text=content.decode(errors="replace"),
+                    content=content,
+                    extensions={},
+                ),
+            )
+        try:
+            return BookListPage.model_validate_json(content)
+        except ValidationError as e:
+            self.log.exception("Unable to validate Overdrive book list page. %s", e)
+            raise OverdriveValidationError(
+                url,
+                "Error validating Overdrive book list page",
+                ResponseData(
+                    status_code=status_code,
+                    url=url,
+                    headers=Headers(headers),
+                    text=content.decode(errors="replace"),
+                    content=content,
+                    extensions={},
+                ),
+                debug_message=str(e),
+            ) from e
 
 
 class OverdriveClientAuth(httpx.Auth):
@@ -580,13 +615,13 @@ class OverdriveAsyncRequests(ClientCredentialsRequests):
                 self.log.warning(
                     f"Overdrive response missing 'products' key for endpoint {endpoint.url}.",
                     extra={
-                        "palace_response_data": page.model_dump(),
+                        "palace_response_data": response.text,
                         "palace_response_status_code": response.status_code,
                     },
                 )
                 raise BadResponseException(
                     endpoint.url,
-                    f"Overdrive response missing 'products' key. Response data: {page}",
+                    f"Overdrive response missing 'products' key. Response data: {response.text}",
                     response,
                 )
             for product in response_products:

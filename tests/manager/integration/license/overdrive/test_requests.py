@@ -354,6 +354,39 @@ class TestOverdriveClientRequests:
         # Exactly one request was made for each error code, plus one for a token
         assert len(mock_web_server.requests()) == 8
 
+    def test_book_list_page_error_status_is_raised(
+        self, overdrive_client_requests: OverdriveClientRequestsFixture
+    ) -> None:
+        """An error document is not an empty page.
+
+        raw_get hands a 404 back rather than raising it, and every field of a
+        page is optional, so without this the error would validate into a page
+        with no titles and read as an empty collection.
+        """
+        overdrive_client_requests.queue_access_token_response()
+        overdrive_client_requests.client.queue_response(
+            404, content=json.dumps({"errorCode": "NotFound", "message": "no"})
+        )
+
+        with pytest.raises(BadResponseException, match="Got status code 404"):
+            overdrive_client_requests.requests.book_list_page("http://example.com/feed")
+
+    def test_book_list_page_unparseable_is_raised(
+        self, overdrive_client_requests: OverdriveClientRequestsFixture
+    ) -> None:
+        """A page in a shape we do not know raises an Overdrive error."""
+        overdrive_client_requests.queue_access_token_response()
+        # A link without a type, which the model requires.
+        overdrive_client_requests.client.queue_response(
+            200,
+            content=json.dumps({"links": {"next": {"href": "http://example.com/2"}}}),
+        )
+
+        with pytest.raises(OverdriveValidationError) as excinfo:
+            overdrive_client_requests.requests.book_list_page("http://example.com/feed")
+
+        assert excinfo.value.problem_detail.debug_message is not None
+
 
 class TestOverdrivePatronRequests:
     def test_refresh_patron_oauth_token(
