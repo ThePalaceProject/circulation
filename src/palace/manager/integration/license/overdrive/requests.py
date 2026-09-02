@@ -214,6 +214,15 @@ class ClientCredentialsRequests(BaseOverdriveRequests):
         )
 
     @property
+    def token_cache(self) -> ClientTokenCache:
+        """The cache this layer reads its bearer token from.
+
+        Exposed so another layer can be built against the same one, which is
+        what keeps a collection to a single token.
+        """
+        return self._token_cache
+
+    @property
     def _collection_context_basic_auth_header(self) -> str:
         """The Basic Auth header used to acquire an OAuth bearer token.
 

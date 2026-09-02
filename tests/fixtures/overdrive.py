@@ -72,7 +72,7 @@ class OverdriveAPIFixture:
         )
         # The client and async layers share one cache, so seeding either
         # seeds both.
-        api.client_requests._token_cache.token = OAuthTokenResponse(
+        api.client_requests.token_cache.token = OAuthTokenResponse(
             access_token="fake client oauth token",
             token_type="Bearer",
             expires_in=3600,
