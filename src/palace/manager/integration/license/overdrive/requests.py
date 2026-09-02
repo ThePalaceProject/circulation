@@ -156,6 +156,22 @@ class BaseOverdriveRequests(LoggerMixin):
 
         return dict(cls.HOSTS[server_nickname])
 
+    def _parse_book_list_page(self, response: ResponseData) -> BookListPage:
+        """Turn a feed body into a page, or say why it could not be.
+
+        :raises OverdriveValidationError: If the page is not a shape we know.
+        """
+        try:
+            return BookListPage.model_validate_json(response.content)
+        except ValidationError as e:
+            self.log.exception("Unable to validate Overdrive book list page. %s", e)
+            raise OverdriveValidationError(
+                response.url,
+                "Error validating Overdrive book list page",
+                response,
+                debug_message=str(e),
+            ) from e
+
     def endpoint(self, url: str, **kwargs: str) -> str:
         """Create the URL to an Overdrive API endpoint.
 
@@ -450,6 +466,14 @@ class OverdriveClientRequests(ClientCredentialsRequests):
         :raises OverdriveValidationError: If the page is not a shape we know.
         """
         status_code, headers, content = self.raw_get(url, {})
+        response = ResponseData(
+            status_code=status_code,
+            url=url,
+            headers=Headers(headers),
+            text=content.decode(errors="replace"),
+            content=content,
+            extensions={},
+        )
         if status_code != 200:
             # raw_get hands a 404 back rather than raising it, and every field
             # of a page is optional, so an error document would otherwise
@@ -457,32 +481,9 @@ class OverdriveClientRequests(ClientCredentialsRequests):
             raise BadResponseException(
                 url,
                 f"Got status code {status_code} from Overdrive, expected 200.",
-                ResponseData(
-                    status_code=status_code,
-                    url=url,
-                    headers=Headers(headers),
-                    text=content.decode(errors="replace"),
-                    content=content,
-                    extensions={},
-                ),
+                response,
             )
-        try:
-            return BookListPage.model_validate_json(content)
-        except ValidationError as e:
-            self.log.exception("Unable to validate Overdrive book list page. %s", e)
-            raise OverdriveValidationError(
-                url,
-                "Error validating Overdrive book list page",
-                ResponseData(
-                    status_code=status_code,
-                    url=url,
-                    headers=Headers(headers),
-                    text=content.decode(errors="replace"),
-                    content=content,
-                    extensions={},
-                ),
-                debug_message=str(e),
-            ) from e
+        return self._parse_book_list_page(response)
 
 
 class OverdriveClientAuth(httpx.Auth):
@@ -597,7 +598,7 @@ class OverdriveAsyncRequests(ClientCredentialsRequests):
             books: dict[str, Any] = {}
             req = client.get(endpoint.url)
             response = await req
-            page = BookListPage.model_validate_json(response.content)
+            page = self._parse_book_list_page(ResponseData.from_response(response))
             next_url = page.link_safe(self.NEXT_REL)
             next_endpoint: BookInfoEndpoint | None = (
                 BookInfoEndpoint(next_url) if next_url else None

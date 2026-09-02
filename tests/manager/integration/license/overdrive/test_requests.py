@@ -354,6 +354,27 @@ class TestOverdriveClientRequests:
         # Exactly one request was made for each error code, plus one for a token
         assert len(mock_web_server.requests()) == 8
 
+    def test_feed_urls_are_escaped(
+        self, overdrive_client_requests: OverdriveClientRequestsFixture
+    ) -> None:
+        """The feed URLs escape the characters Overdrive puts in them.
+
+        Both carry a colon in a query value, and the events feed carries a
+        space as well, so the escaping is the part of these that would break
+        without saying so.
+        """
+        requests = overdrive_client_requests.requests
+
+        products = requests.all_products_url("a-collection-token")
+        assert products.startswith("https://integration.api.overdrive.com")
+        assert "a-collection-token" in products
+        assert "sort=dateAdded%3Adesc" in products
+
+        # The caller formats the time as OverdriveAPI.TIME_FORMAT does.
+        events = requests.events_url("a-collection-token", "2020-01-01T12:00:00Z", 300)
+        assert "lastUpdateTime=2020-01-01T12%3A00%3A00Z" in events
+        assert "limit=300" in events
+
     def test_book_list_page_error_status_is_raised(
         self, overdrive_client_requests: OverdriveClientRequestsFixture
     ) -> None:
@@ -1049,6 +1070,28 @@ class TestOverdriveAsyncRequests:
 
         assert next_endpoint is None
         assert len(book_info_list) == 1
+
+    async def test_fetch_book_info_list_unparseable_page(
+        self, overdrive_async_requests: OverdriveAsyncRequestsFixture
+    ) -> None:
+        """A page in an unknown shape fails the same way on both paths.
+
+        The synchronous fetch translates this, and an import worker hitting
+        the same body should not get a bare pydantic error instead.
+        """
+        overdrive_async_requests.seed_token()
+        # A link without a type, which the model requires.
+        overdrive_async_requests.client.queue_response(
+            200,
+            content={"links": {"next": {"href": "http://example.com/2"}}},
+        )
+
+        with pytest.raises(OverdriveValidationError) as excinfo:
+            await overdrive_async_requests.requests.fetch_book_info_list(
+                BookInfoEndpoint(url="/books")
+            )
+
+        assert excinfo.value.problem_detail.debug_message is not None
 
     async def test_fetch_book_info_list_empty_collection(
         self,
