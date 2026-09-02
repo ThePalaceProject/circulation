@@ -1184,8 +1184,14 @@ class OverdriveAPI(
                 return
             raise CannotReleaseHold(e.error_code, debug_info=response.text) from e
 
-    def _availability_url(self, book: str | dict[str, Any]) -> tuple[str, str]:
+    def _resolve_availability_request(
+        self, book: str | dict[str, Any]
+    ) -> tuple[str, str]:
         """Resolve a book to its Overdrive ID and availability URL.
+
+        A bare Overdrive ID needs the collection token, which fetches the
+        library document when its cache is cold, so this reaches Overdrive
+        and can raise. A book list entry carries its own link and does not.
 
         :param book: Either an Overdrive ID, or an entry from a book list,
             which carries its own availability link.
@@ -1240,9 +1246,7 @@ class OverdriveAPI(
         # LicensePool for a book Overdrive says isn't in the
         # collection.
         try:
-            # Resolving the URL can reach Overdrive too, for the collection
-            # token, so it is guarded along with the lookup itself.
-            resolved_book_id, url = self._availability_url(book_id)
+            resolved_book_id, url = self._resolve_availability_request(book_id)
             availability = self.client_requests.availability(url)
         except Exception as e:
             self.log.error("Could not get availability for %r", book_id, exc_info=e)

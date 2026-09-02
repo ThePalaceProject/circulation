@@ -1454,7 +1454,9 @@ class TestOverdriveAPI:
         identifier = db.identifier(identifier_type=Identifier.OVERDRIVE_ID)
 
         with patch.object(
-            api, "_availability_url", side_effect=CannotLoadConfiguration("no token")
+            api,
+            "_resolve_availability_request",
+            side_effect=CannotLoadConfiguration("no token"),
         ):
             pool, was_new, changed = api.update_licensepool(identifier.identifier)
 
