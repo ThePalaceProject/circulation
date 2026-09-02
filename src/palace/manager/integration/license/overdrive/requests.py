@@ -451,7 +451,6 @@ class OverdriveAsyncRequests(ClientCredentialsRequests):
     ) -> None:
         super().__init__(settings, token_cache=token_cache)
         self._token_lock = asyncio.Lock()
-        self._refresh_error: Exception | None = None
 
     async def bearer_token(self, *, rejected: str | None = None) -> str:
         """The client credentials token, refreshed if needed.
@@ -474,18 +473,7 @@ class OverdriveAsyncRequests(ClientCredentialsRequests):
             current = self._token_cache.token
             if current is not None and current.access_token != rejected:
                 return current.access_token
-            if self._refresh_error is not None:
-                # A refresh already failed for this page. Every other request
-                # on it would fail the same way, one at a time behind this
-                # lock, so fail them with what we already know. Clear the
-                # traceback first: re-raising one object hundreds of times
-                # otherwise appends a frame to it on every replay.
-                raise self._refresh_error.with_traceback(None)
-            try:
-                return (await self._refresh_token()).access_token
-            except Exception as e:
-                self._refresh_error = e
-                raise
+            return (await self._refresh_token()).access_token
 
     async def _refresh_token(self) -> OAuthTokenResponse:
         """Ask Overdrive for a new client credentials token."""
@@ -526,7 +514,11 @@ class OverdriveAsyncRequests(ClientCredentialsRequests):
         of book data. In this way, "page" retrievals are accelerated while allowing the client to retrieve chunks
         in a deterministic and therefore retriable manner.
         """
-        self._refresh_error = None
+        # Get a token before opening the page. Every request on it needs
+        # one, so if Overdrive cannot give us one the page fails here, once,
+        # rather than each of its requests finding out separately.
+        await self.bearer_token()
+
         base_url = self.endpoint(HOST_ENDPOINT_BASE)
         async with self._create_configured_async_client(base_url=base_url) as client:
             books: dict[str, Any] = {}

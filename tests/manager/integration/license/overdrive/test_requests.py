@@ -1195,54 +1195,26 @@ class TestOverdriveAsyncRequests:
         assert "tok1" not in excinfo.value.response.text
         assert b"tok1" not in excinfo.value.response.content
 
-    async def test_failed_refresh_fails_the_page_once(
+    async def test_dead_token_endpoint_fails_the_page_once(
         self,
         overdrive_async_requests: OverdriveAsyncRequestsFixture,
         async_http_client: MockAsyncClientFixture,
     ) -> None:
-        """A dead token endpoint is asked once, not once per request.
+        """A page that cannot get a token fails before it starts.
 
-        Every request on the page needs the token, and they queue behind one
-        lock to get it, so without this each of them would wait out its own
-        attempt before failing the same way.
+        Every request on the page needs one, so asking up front means one
+        failed attempt rather than each request finding out for itself.
         """
         async_http_client.queue_response(500, content="nope")
 
         with pytest.raises(BadResponseException):
-            await overdrive_async_requests.requests.bearer_token()
-        with pytest.raises(BadResponseException):
-            await overdrive_async_requests.requests.bearer_token()
+            await overdrive_async_requests.requests.fetch_book_info_list(
+                BookInfoEndpoint(url="/books")
+            )
 
-        # The second caller got the first one's failure, not its own request.
+        # The token was asked for, and the page never started.
         assert len(async_http_client.requests) == 1
-
-    async def test_replayed_refresh_failure_does_not_grow(
-        self,
-        overdrive_async_requests: OverdriveAsyncRequestsFixture,
-        async_http_client: MockAsyncClientFixture,
-    ) -> None:
-        """Replaying one failure must not accumulate tracebacks on it.
-
-        A page replays it once per request, so a traceback frame per replay
-        would keep that many frames, and their locals, alive.
-        """
-
-        def frames(error: BaseException) -> int:
-            count, tb = 0, error.__traceback__
-            while tb is not None:
-                count += 1
-                tb = tb.tb_next
-            return count
-
-        async_http_client.queue_response(500, content="nope")
-
-        depths = []
-        for _ in range(5):
-            with pytest.raises(BadResponseException) as excinfo:
-                await overdrive_async_requests.requests.bearer_token()
-            depths.append(frames(excinfo.value))
-
-        assert len(set(depths[1:])) == 1, f"traceback grew across replays: {depths}"
+        assert async_http_client.request_urls[0].endswith("/token")
 
     @pytest.mark.parametrize(
         "missing_setting",
