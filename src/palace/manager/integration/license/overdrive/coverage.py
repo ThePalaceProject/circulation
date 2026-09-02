@@ -70,10 +70,7 @@ class OverdriveBibliographicCoverageProvider(BibliographicCoverageProvider):
         )
 
         if not bibliographic:
-            e = (
-                "Could not extract bibliographic data from Overdrive data: %r"
-                % info.raw
-            )
+            e = f"Could not extract bibliographic data from Overdrive data: {info.raw!r}"
             return self.failure(identifier, e)  # type: ignore[no-any-return]
 
         self.bibliographic_data_pre_hook(bibliographic)

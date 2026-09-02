@@ -498,7 +498,23 @@ class OverdriveClientRequests(ClientCredentialsRequests):
             item_id=item_id,
         )
         status_code, headers, content = self.raw_get(url)
-        return MetadataResponse.model_validate_json(content)
+        try:
+            return MetadataResponse.model_validate_json(content)
+        except ValidationError as e:
+            self.log.exception("Unable to validate Overdrive metadata. %s", e)
+            raise OverdriveValidationError(
+                url,
+                "Error validating Overdrive metadata",
+                ResponseData(
+                    status_code=status_code,
+                    url=url,
+                    headers=Headers(headers),
+                    text=content.decode(errors="replace"),
+                    content=content,
+                    extensions={},
+                ),
+                debug_message=str(e),
+            ) from e
 
     def book_list_page(self, url: str) -> BookListPage:
         """Fetch one page of a product or events feed.

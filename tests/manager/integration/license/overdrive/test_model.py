@@ -4,7 +4,6 @@ from functools import partial
 from uuid import uuid4
 
 import pytest
-from freezegun import freeze_time
 from frozendict import frozendict
 from httpx import Headers
 from pydantic import ValidationError
@@ -904,23 +903,28 @@ class TestMetadataResponse:
     def test_raw_feeds_the_extractor(
         self, overdrive_files_fixture: OverdriveFilesFixture
     ) -> None:
-        # A round trip through the model produces the same bibliographic
-        # data as passing Overdrive's document straight to the extractor.
+        # raw is what the extractor reads, and test_raw_is_verbatim already
+        # pins it to the document Overdrive sent.
         data = overdrive_files_fixture.sample_data("overdrive_metadata.json")
         response = MetadataResponse.model_validate_json(data)
 
-        # BibliographicData stamps itself with the current time, so freeze
-        # the clock to compare the extracted data itself.
-        with freeze_time():
-            from_model = OverdriveRepresentationExtractor.book_info_to_bibliographic(
-                response.raw
-            )
-            from_raw = OverdriveRepresentationExtractor.book_info_to_bibliographic(
-                json.loads(data)
-            )
-        assert from_model == from_raw
-        assert from_model is not None
-        assert from_model.title == "Agile Documentation"
+        bibliographic = OverdriveRepresentationExtractor.book_info_to_bibliographic(
+            response.raw
+        )
+        assert bibliographic is not None
+        assert bibliographic.title == "Agile Documentation"
+
+    def test_raw_is_left_alone_when_already_present(self) -> None:
+        """Round-tripping a model does not nest raw inside itself.
+
+        The validator fills raw from the document, so it has to leave a
+        document that already carries one exactly as it is.
+        """
+        original = MetadataResponse.model_validate({"id": "an-id", "title": "A book"})
+        again = MetadataResponse.model_validate(original.model_dump(by_alias=True))
+
+        assert again.raw == original.raw
+        assert "raw" not in again.raw
 
     def test_error_response(self) -> None:
         response = MetadataResponse.model_validate(
