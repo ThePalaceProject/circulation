@@ -1190,6 +1190,31 @@ class TestOverdriveAsyncRequests:
         assert "token_type" in caplog.text
         assert "tok1" not in caplog.text
         assert "tok1" not in str(excinfo.value)
+        # The exception snapshots the response body for the celery result
+        # backend, so the token must not be in there either.
+        assert "tok1" not in excinfo.value.response.text
+        assert b"tok1" not in excinfo.value.response.content
+
+    async def test_failed_refresh_fails_the_page_once(
+        self,
+        overdrive_async_requests: OverdriveAsyncRequestsFixture,
+        async_http_client: MockAsyncClientFixture,
+    ) -> None:
+        """A dead token endpoint is asked once, not once per request.
+
+        Every request on the page needs the token, and they queue behind one
+        lock to get it, so without this each of them would wait out its own
+        attempt before failing the same way.
+        """
+        async_http_client.queue_response(500, content="nope")
+
+        with pytest.raises(BadResponseException):
+            await overdrive_async_requests.requests.bearer_token()
+        with pytest.raises(BadResponseException):
+            await overdrive_async_requests.requests.bearer_token()
+
+        # The second caller got the first one's failure, not its own request.
+        assert len(async_http_client.requests) == 1
 
     @pytest.mark.parametrize(
         "missing_setting",

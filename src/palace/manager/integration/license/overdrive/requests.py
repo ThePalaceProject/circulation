@@ -16,6 +16,7 @@ from typing import Any, Protocol, Unpack, overload
 
 import httpx
 from frozendict import frozendict
+from httpx import Headers
 from pydantic import ValidationError
 from requests import Response
 from requests.structures import CaseInsensitiveDict
@@ -49,7 +50,7 @@ from palace.manager.integration.license.overdrive.settings import OverdriveSetti
 from palace.manager.integration.license.overdrive.util import _make_link_safe
 from palace.manager.util import base64
 from palace.manager.util.http.async_http import WORKER_DEFAULT_BACKOFF, AsyncClient
-from palace.manager.util.http.exception import BadResponseException
+from palace.manager.util.http.exception import BadResponseException, ResponseData
 from palace.manager.util.http.http import HTTP, RequestKwargs
 
 
@@ -240,7 +241,17 @@ class ClientCredentialsRequests(BaseOverdriveRequests):
             raise OverdriveValidationError(
                 str(response.url),
                 "Error validating Overdrive token response",
-                response,
+                # Not the response itself: BadResponseException snapshots its
+                # body into a ResponseData, which is pickled into the celery
+                # result backend, and the body is a live token document.
+                ResponseData(
+                    status_code=response.status_code,
+                    url=str(response.url),
+                    headers=Headers(response.headers),
+                    text="[redacted token response]",
+                    content=b"",
+                    extensions={},
+                ),
                 debug_message=str(errors),
             ) from e
         self._token_cache.token = token
@@ -440,6 +451,7 @@ class OverdriveAsyncRequests(ClientCredentialsRequests):
     ) -> None:
         super().__init__(settings, token_cache=token_cache)
         self._token_lock = asyncio.Lock()
+        self._refresh_error: Exception | None = None
 
     async def bearer_token(self, *, rejected: str | None = None) -> str:
         """The client credentials token, refreshed if needed.
@@ -462,7 +474,16 @@ class OverdriveAsyncRequests(ClientCredentialsRequests):
             current = self._token_cache.token
             if current is not None and current.access_token != rejected:
                 return current.access_token
-            return (await self._refresh_token()).access_token
+            if self._refresh_error is not None:
+                # A refresh already failed for this page. Every other request
+                # on it would fail the same way, one at a time behind this
+                # lock, so fail them with what we already know.
+                raise self._refresh_error
+            try:
+                return (await self._refresh_token()).access_token
+            except Exception as e:
+                self._refresh_error = e
+                raise
 
     async def _refresh_token(self) -> OAuthTokenResponse:
         """Ask Overdrive for a new client credentials token."""
@@ -503,6 +524,7 @@ class OverdriveAsyncRequests(ClientCredentialsRequests):
         of book data. In this way, "page" retrievals are accelerated while allowing the client to retrieve chunks
         in a deterministic and therefore retriable manner.
         """
+        self._refresh_error = None
         base_url = self.endpoint(HOST_ENDPOINT_BASE)
         async with self._create_configured_async_client(base_url=base_url) as client:
             books: dict[str, Any] = {}
