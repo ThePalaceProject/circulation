@@ -459,6 +459,37 @@ class TestOverdriveAPI:
         assert "username1" == patron1.authorization_identifier
         assert "password1" == password1
 
+    def test__run_self_tests_collection_size_unreported(
+        self,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        db: DatabaseTransactionFixture,
+    ):
+        """Overdrive omits totalItems on the product feed.
+
+        The self test used to read it unconditionally and raise a KeyError,
+        so it has to say the size is unknown rather than fail.
+        """
+        api = overdrive_api_fixture.api
+        api.client_requests.refresh_client_oauth_token = create_autospec(
+            api.client_requests.refresh_client_oauth_token
+        )
+        api.get_advantage_accounts = create_autospec(
+            api.get_advantage_accounts, return_value=[]
+        )
+        api.client_requests.book_list_page = create_autospec(
+            api.client_requests.book_list_page,
+            return_value=BookListPage(),
+        )
+
+        [collection_size] = [
+            result
+            for result in api._run_self_tests(db.session)
+            if result.name == "Counting size of collection"
+        ]
+
+        assert collection_size.success is True
+        assert collection_size.result == "Overdrive did not report a collection size"
+
     def test_run_self_tests_short_circuit(
         self, overdrive_api_fixture: OverdriveAPIFixture
     ):

@@ -464,7 +464,7 @@ class OverdriveAPI(
         # Prepare to get availability information for all the books on
         # this page.
         availability_queue = OverdriveRepresentationExtractor.availability_link_list(
-            {"products": page.products or []}
+            page.products or []
         )
         return availability_queue, page.link_safe(rel_to_follow)
 

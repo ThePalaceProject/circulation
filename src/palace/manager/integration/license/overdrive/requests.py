@@ -446,8 +446,9 @@ class OverdriveClientRequests(ClientCredentialsRequests):
 
         These pages are not cached, because they change constantly.
         """
-        status_code, headers, content = self.raw_get(url, {})
+        _, _, content = self.raw_get(url, {})
         return BookListPage.model_validate_json(content)
+
 
 class OverdriveClientAuth(httpx.Auth):
     """Attaches the client credentials token, refreshing it on a 401.
@@ -537,13 +538,6 @@ class OverdriveAsyncRequests(ClientCredentialsRequests):
             )
         return self._store_token(response)
 
-    @staticmethod
-    def _page_link(page: dict[str, Any], rel: str) -> str | None:
-        """The href of the given link relation on a book list page, if present."""
-        if "links" in page and rel in page["links"]:
-            return _make_link_safe(page["links"][rel]["href"])
-        return None
-
     async def fetch_book_info_list(
         self,
         endpoint: BookInfoEndpoint,
@@ -568,31 +562,31 @@ class OverdriveAsyncRequests(ClientCredentialsRequests):
             books: dict[str, Any] = {}
             req = client.get(endpoint.url)
             response = await req
-            data = response.json()
-            next_url = self._page_link(data, self.NEXT_REL)
+            page = BookListPage.model_validate_json(response.content)
+            next_url = page.link_safe(self.NEXT_REL)
             next_endpoint: BookInfoEndpoint | None = (
                 BookInfoEndpoint(next_url) if next_url else None
             )
             async_task_list = list()
-            response_products = data.get("products")
+            response_products = page.products
             if response_products is None:
                 # Overdrive omits the 'products' key entirely when a collection
                 # (or page) contains no titles. In that case 'totalItems' is 0
                 # and there is simply nothing to import, so we treat it as an
                 # empty page rather than an error.
-                if data.get("totalItems") == 0:
+                if page.total_items == 0:
                     return [], next_endpoint
 
                 self.log.warning(
                     f"Overdrive response missing 'products' key for endpoint {endpoint.url}.",
                     extra={
-                        "palace_response_data": data,
+                        "palace_response_data": page.model_dump(),
                         "palace_response_status_code": response.status_code,
                     },
                 )
                 raise BadResponseException(
                     endpoint.url,
-                    f"Overdrive response missing 'products' key. Response data: {data}",
+                    f"Overdrive response missing 'products' key. Response data: {page}",
                     response,
                 )
             for product in response_products:
