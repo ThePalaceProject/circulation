@@ -389,6 +389,23 @@ class TestWork:
 
         assert work.audience == Classifier.AUDIENCE_CHILDREN
 
+    def test_assign_genres_does_not_overwrite_fiction_with_null(
+        self, db: DatabaseTransactionFixture
+    ):
+        # Defensive invariant: when a recalculation pass reaches no fiction
+        # determination (e.g. every classification it gathered abstained), a
+        # previously-determined fiction status must be kept rather than
+        # overwritten with NULL. This matters more now that an unresolvable
+        # BISAC code abstains instead of voting nonfiction.
+        work = db.work(with_license_pool=True)
+        work.fiction = True
+        db.session.commit()
+
+        # Force the no-evidence + null-default path directly.
+        work.assign_genres(work._direct_identifier_ids, default_fiction=None)
+
+        assert work.fiction is True
+
     def test__choose_summary(self, db: DatabaseTransactionFixture):
         # Test the _choose_summary helper method, called by
         # calculate_presentation().
