@@ -1051,12 +1051,7 @@ class TestOverdriveAsyncRequests:
             200,
             content={
                 "totalItems": 1,
-                "links": {
-                    "self": {
-                        "href": "http://example.com/books",
-                        "type": "application/json",
-                    }
-                },
+                "links": {"self": {"href": "http://example.com/books"}},
                 "products": [{"id": "ABC", "links": {}}],
             },
         )

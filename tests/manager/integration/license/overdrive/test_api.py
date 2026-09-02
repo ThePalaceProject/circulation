@@ -339,26 +339,6 @@ class TestOverdriveAPI:
         assert next_link is not None
         assert "offset=1" in next_link
 
-    def test__get_book_list_page_follows_named_relation(
-        self,
-        overdrive_api_fixture: OverdriveAPIFixture,
-        overdrive_files_fixture: OverdriveFilesFixture,
-    ):
-        # A relation other than "next" can be followed.
-        http = overdrive_api_fixture.mock_http
-        http.queue_response(
-            200,
-            content=overdrive_files_fixture.sample_data(
-                "overdrive_book_list_with_next_link.json"
-            ),
-        )
-
-        _, link = overdrive_api_fixture.api._get_book_list_page(
-            "http://first-page/", "first"
-        )
-        assert link is not None
-        assert "offset=0" in link
-
     def test__run_self_tests(
         self,
         overdrive_api_fixture: OverdriveAPIFixture,

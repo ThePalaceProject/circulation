@@ -446,11 +446,7 @@ class OverdriveAPI(
     def _all_products_link(self) -> str:
         return self.client_requests.all_products_url(self.collection_token)
 
-    def _get_book_list_page(
-        self,
-        link: str,
-        rel_to_follow: str = NEXT_REL,
-    ) -> tuple[list[dict[str, str]], str | None]:
+    def _get_book_list_page(self, link: str) -> tuple[list[dict[str, str]], str | None]:
         """Process a page of inventory whose circulation we need to check.
 
         Returns a 2-tuple: (availability_info, next_link).
@@ -466,7 +462,7 @@ class OverdriveAPI(
         availability_queue = OverdriveRepresentationExtractor.availability_link_list(
             page.products or []
         )
-        return availability_queue, page.link_safe(rel_to_follow)
+        return availability_queue, page.link_safe(self.NEXT_REL)
 
     def book_info_initial_endpoint(
         self,
