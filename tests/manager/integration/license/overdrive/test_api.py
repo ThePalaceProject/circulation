@@ -1439,6 +1439,29 @@ class TestOverdriveAPI:
         pool, was_new, changed = overdrive_api_fixture.api.update_licensepool(book)
         assert pool is None
 
+    def test_update_licensepool_url_resolution_error(
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
+    ):
+        """Failing to build the URL is handled like failing to fetch it.
+
+        Resolving a bare Overdrive ID reaches the collection token, which can
+        make its own request. The reaper works through identifiers one at a
+        time, and the dispatcher asks for availability while handling
+        NoLicenses, so an error escaping here would take out a whole batch or
+        replace the error a patron should have seen.
+        """
+        api = overdrive_api_fixture.api
+        identifier = db.identifier(identifier_type=Identifier.OVERDRIVE_ID)
+
+        with patch.object(
+            api, "_availability_url", side_effect=CannotLoadConfiguration("no token")
+        ):
+            pool, was_new, changed = api.update_licensepool(identifier.identifier)
+
+        assert pool is None
+        assert was_new is None
+        assert changed is False
+
     def test_update_licensepool_not_found(
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
     ):

@@ -1239,13 +1239,13 @@ class OverdriveAPI(
         # LicensePool. However we shouldn't be creating a *brand new*
         # LicensePool for a book Overdrive says isn't in the
         # collection.
-        resolved_book_id, url = self._availability_url(book_id)
         try:
+            # Resolving the URL can reach Overdrive too, for the collection
+            # token, so it is guarded along with the lookup itself.
+            resolved_book_id, url = self._availability_url(book_id)
             availability = self.client_requests.availability(url)
         except Exception as e:
-            self.log.error(
-                "Could not get availability for %s", resolved_book_id, exc_info=e
-            )
+            self.log.error("Could not get availability for %r", book_id, exc_info=e)
             return None, None, False
 
         license_pool, is_new = LicensePool.for_foreign_id(

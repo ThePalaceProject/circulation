@@ -567,7 +567,6 @@ class TestOverdriveClientRequests:
     def test_availability_url(
         self, overdrive_client_requests: OverdriveClientRequestsFixture
     ) -> None:
-        overdrive_client_requests.seed_token()
         url = overdrive_client_requests.requests.availability_url(
             "collection-token", "an-identifier"
         )

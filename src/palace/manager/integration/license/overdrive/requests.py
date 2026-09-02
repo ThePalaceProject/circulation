@@ -544,13 +544,21 @@ class OverdriveClientRequests(ClientCredentialsRequests):
 
         :raises BadResponseException: If Overdrive returns any other
             non-success status.
+        :raises OverdriveValidationError: If the body is not a document we
+            can read.
         """
         # Make sure we use v2 of the availability API, even if we were
         # given a link to v1.
-        response = self._get_with_token(
-            _make_link_safe(url), allowed_response_codes=["2xx", "404"]
+        safe_url = _make_link_safe(url)
+        response = self._get_with_token(safe_url, allowed_response_codes=["2xx", "404"])
+        return self._validate_body(
+            Availability,
+            "availability",
+            response.status_code,
+            safe_url,
+            response.headers,
+            response.content,
         )
-        return Availability.model_validate_json(response.content)
 
     def metadata(self, collection_token: str, item_id: str) -> MetadataResponse:
         """Look up a title's metadata.
