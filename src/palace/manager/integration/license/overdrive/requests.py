@@ -157,6 +157,23 @@ class BaseOverdriveRequests(LoggerMixin):
 
         return dict(cls.HOSTS[server_nickname])
 
+    @staticmethod
+    def _response_data(
+        status_code: int, url: str, headers: Mapping[str, str], content: bytes
+    ) -> ResponseData:
+        """Snapshot a raw response for an exception to carry.
+
+        Only called on a failure: it decodes the body, and these run large.
+        """
+        return ResponseData(
+            status_code=status_code,
+            url=url,
+            headers=Headers(headers),
+            text=content.decode(errors="replace"),
+            content=content,
+            extensions={},
+        )
+
     def _validate_body[TModel: BaseOverdriveModel](
         self,
         model: type[TModel],
@@ -181,14 +198,7 @@ class BaseOverdriveRequests(LoggerMixin):
             raise OverdriveValidationError(
                 url,
                 f"Error validating Overdrive {description}",
-                ResponseData(
-                    status_code=status_code,
-                    url=url,
-                    headers=Headers(headers),
-                    text=content.decode(errors="replace"),
-                    content=content,
-                    extensions={},
-                ),
+                self._response_data(status_code, url, headers, content),
                 debug_message=str(e),
             ) from e
 
@@ -270,14 +280,7 @@ class ClientCredentialsRequests(BaseOverdriveRequests):
             raise BadResponseException(
                 url,
                 f"Got status code {status_code} from Overdrive, expected 200.",
-                ResponseData(
-                    status_code=status_code,
-                    url=url,
-                    headers=Headers(headers),
-                    text=content.decode(errors="replace"),
-                    content=content,
-                    extensions={},
-                ),
+                self._response_data(status_code, url, headers, content),
             )
         return self._validate_body(
             BookListPage, "book list page", status_code, url, headers, content

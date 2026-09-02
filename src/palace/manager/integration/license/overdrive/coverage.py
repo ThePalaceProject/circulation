@@ -58,9 +58,9 @@ class OverdriveBibliographicCoverageProvider(BibliographicCoverageProvider):
         info = self.api.metadata_lookup(identifier)
         error = None
         if info.error_code == "NotFound":
-            error = "ID not recognized by Overdrive: %s" % identifier.identifier
+            error = f"ID not recognized by Overdrive: {identifier.identifier}"
         elif info.error_code == "InvalidGuid":
-            error = "Invalid Overdrive ID: %s" % identifier.identifier
+            error = f"Invalid Overdrive ID: {identifier.identifier}"
 
         if error:
             return self.failure(identifier, error, transient=False)  # type: ignore[no-any-return]

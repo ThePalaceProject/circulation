@@ -397,6 +397,27 @@ class TestOverdriveClientRequests:
             "/v1/collections/a-collection-token/products/an-item-id/metadata"
         )
 
+    def test_metadata_error_envelope_is_returned_not_raised(
+        self, overdrive_client_requests: OverdriveClientRequestsFixture
+    ) -> None:
+        """An unknown title comes back as an envelope, whatever the status.
+
+        raw_get lets a 404 through rather than raising, and the caller
+        branches on error_code, so adding a status guard here the way the
+        book list page has one would break that quietly.
+        """
+        overdrive_client_requests.queue_access_token_response()
+        overdrive_client_requests.client.queue_response(
+            404,
+            content=json.dumps(
+                {"errorCode": "NotFound", "message": "Not found in collection."}
+            ),
+        )
+
+        response = overdrive_client_requests.requests.metadata("a-token", "an-item-id")
+
+        assert response.error_code == "NotFound"
+
     def test_metadata_unparseable_is_raised(
         self, overdrive_client_requests: OverdriveClientRequestsFixture
     ) -> None:
