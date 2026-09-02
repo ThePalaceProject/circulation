@@ -140,7 +140,9 @@ class Link(BaseOverdriveModel):
     """Link model."""
 
     href: str
-    type: str
+    # Optional because nothing reads it, and requiring it would let a field we
+    # ignore fail a whole document that is otherwise usable.
+    type: str | None = None
 
 
 class LinkTemplate(Link):

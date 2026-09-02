@@ -156,19 +156,46 @@ class BaseOverdriveRequests(LoggerMixin):
 
         return dict(cls.HOSTS[server_nickname])
 
-    def _parse_book_list_page(self, response: ResponseData) -> BookListPage:
+    def _parse_book_list_page(
+        self, status_code: int, url: str, headers: Any, content: bytes
+    ) -> BookListPage:
         """Turn a feed body into a page, or say why it could not be.
 
+        The pieces are taken apart rather than as a ResponseData because that
+        decodes the body to text, and these pages run to megabytes on a crawl
+        where neither of the failures below normally happens.
+
+        :raises BadResponseException: If Overdrive refused the request.
         :raises OverdriveValidationError: If the page is not a shape we know.
         """
+
+        def response_data() -> ResponseData:
+            return ResponseData(
+                status_code=status_code,
+                url=url,
+                headers=Headers(headers),
+                text=content.decode(errors="replace"),
+                content=content,
+                extensions={},
+            )
+
+        if status_code != 200:
+            # Both callers are handed a 404 rather than having it raised, and
+            # every field of a page is optional, so an error document would
+            # otherwise validate into a feed with no titles.
+            raise BadResponseException(
+                url,
+                f"Got status code {status_code} from Overdrive, expected 200.",
+                response_data(),
+            )
         try:
-            return BookListPage.model_validate_json(response.content)
+            return BookListPage.model_validate_json(content)
         except ValidationError as e:
             self.log.exception("Unable to validate Overdrive book list page. %s", e)
             raise OverdriveValidationError(
-                response.url,
+                url,
                 "Error validating Overdrive book list page",
-                response,
+                response_data(),
                 debug_message=str(e),
             ) from e
 
@@ -466,24 +493,7 @@ class OverdriveClientRequests(ClientCredentialsRequests):
         :raises OverdriveValidationError: If the page is not a shape we know.
         """
         status_code, headers, content = self.raw_get(url, {})
-        response = ResponseData(
-            status_code=status_code,
-            url=url,
-            headers=Headers(headers),
-            text=content.decode(errors="replace"),
-            content=content,
-            extensions={},
-        )
-        if status_code != 200:
-            # raw_get hands a 404 back rather than raising it, and every field
-            # of a page is optional, so an error document would otherwise
-            # validate into an empty page and read as a feed with no titles.
-            raise BadResponseException(
-                url,
-                f"Got status code {status_code} from Overdrive, expected 200.",
-                response,
-            )
-        return self._parse_book_list_page(response)
+        return self._parse_book_list_page(status_code, url, headers, content)
 
 
 class OverdriveClientAuth(httpx.Auth):
@@ -598,7 +608,12 @@ class OverdriveAsyncRequests(ClientCredentialsRequests):
             books: dict[str, Any] = {}
             req = client.get(endpoint.url)
             response = await req
-            page = self._parse_book_list_page(ResponseData.from_response(response))
+            page = self._parse_book_list_page(
+                response.status_code,
+                str(response.url),
+                response.headers,
+                response.content,
+            )
             next_url = page.link_safe(self.NEXT_REL)
             next_endpoint: BookInfoEndpoint | None = (
                 BookInfoEndpoint(next_url) if next_url else None

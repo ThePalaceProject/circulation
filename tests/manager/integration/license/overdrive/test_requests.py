@@ -397,10 +397,9 @@ class TestOverdriveClientRequests:
     ) -> None:
         """A page in a shape we do not know raises an Overdrive error."""
         overdrive_client_requests.queue_access_token_response()
-        # A link without a type, which the model requires.
+        # totalItems is a count, so a word for it is not a page we can read.
         overdrive_client_requests.client.queue_response(
-            200,
-            content=json.dumps({"links": {"next": {"href": "http://example.com/2"}}}),
+            200, content=json.dumps({"totalItems": "lots"})
         )
 
         with pytest.raises(OverdriveValidationError) as excinfo:
@@ -1071,6 +1070,25 @@ class TestOverdriveAsyncRequests:
         assert next_endpoint is None
         assert len(book_info_list) == 1
 
+    async def test_fetch_book_info_list_error_status(
+        self, overdrive_async_requests: OverdriveAsyncRequestsFixture
+    ) -> None:
+        """A 404 during an import says so, rather than blaming the products.
+
+        The async client allows a 404 through rather than raising it, and an
+        error document parses into a page with no products, so without the
+        status check the import would report a missing 'products' key.
+        """
+        overdrive_async_requests.seed_token()
+        overdrive_async_requests.client.queue_response(
+            404, content={"errorCode": "NotFound", "message": "no"}
+        )
+
+        with pytest.raises(BadResponseException, match="Got status code 404"):
+            await overdrive_async_requests.requests.fetch_book_info_list(
+                BookInfoEndpoint(url="/books")
+            )
+
     async def test_fetch_book_info_list_unparseable_page(
         self, overdrive_async_requests: OverdriveAsyncRequestsFixture
     ) -> None:
@@ -1080,10 +1098,9 @@ class TestOverdriveAsyncRequests:
         the same body should not get a bare pydantic error instead.
         """
         overdrive_async_requests.seed_token()
-        # A link without a type, which the model requires.
+        # totalItems is a count, so a word for it is not a page we can read.
         overdrive_async_requests.client.queue_response(
-            200,
-            content={"links": {"next": {"href": "http://example.com/2"}}},
+            200, content={"totalItems": "lots"}
         )
 
         with pytest.raises(OverdriveValidationError) as excinfo:
