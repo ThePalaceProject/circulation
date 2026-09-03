@@ -19,7 +19,6 @@ from palace.manager.api.circulation.exceptions import (
     NoAcceptableFormat,
     NoAvailableCopies,
     NotCheckedOut,
-    PatronAuthorizationFailedException,
     PatronHoldLimitReached,
 )
 from palace.manager.api.circulation.fulfillment import (
@@ -30,13 +29,9 @@ from palace.manager.api.circulation.fulfillment import (
 from palace.manager.api.config import Configuration
 from palace.manager.celery.tasks import overdrive as overdrive_celery
 from palace.manager.core.config import CannotLoadConfiguration
-from palace.manager.core.exceptions import IntegrationException
 from palace.manager.integration.license.overdrive.api import (
     OverdriveAPI,
     OverdriveToken,
-)
-from palace.manager.integration.license.overdrive.exception import (
-    OverdriveValidationError,
 )
 from palace.manager.integration.license.overdrive.fulfillment import (
     OverdriveManifestFulfillment,
@@ -52,7 +47,8 @@ from palace.manager.integration.license.overdrive.representation import (
     OverdriveRepresentationExtractor,
 )
 from palace.manager.integration.license.overdrive.requests import (
-    OverdriveClientRequests,
+    BaseOverdriveRequests,
+    OverdrivePatronRequests,
 )
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
@@ -105,14 +101,16 @@ class TestOverdriveAPI:
         collection = overdrive_api_fixture.collection
 
         exception_message = "This is a unit test, you can't make HTTP requests!"
+        # Both request contexts inherit these from the base class, so patching
+        # it once covers every context the API can reach.
         with (
             patch.object(
-                OverdriveClientRequests,
+                BaseOverdriveRequests,
                 "_do_get",
                 side_effect=Exception(exception_message),
             ),
             patch.object(
-                OverdriveClientRequests,
+                BaseOverdriveRequests,
                 "_do_post",
                 side_effect=Exception(exception_message),
             ),
@@ -231,63 +229,6 @@ class TestOverdriveAPI:
                 match="Overdrive credentials are valid but could not fetch library: Some message.",
             ):
                 api.collection_token
-
-    def test_patron_request_401_refreshes_bearer_token(
-        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
-    ):
-        http = overdrive_api_fixture.mock_http
-        api = overdrive_api_fixture.api
-        patron = db.patron()
-
-        # If we get a 401, we refresh the bearer token and try again.
-        overdrive_api_fixture.queue_access_token_response("bearer token")
-        http.queue_response(401)
-        overdrive_api_fixture.queue_access_token_response("new bearer token")
-        http.queue_response(200, content="at last, the content")
-        assert (
-            api.patron_request(patron, "pin", db.fresh_url()).text
-            == "at last, the content"
-        )
-
-        # The bearer token has been updated.
-        assert (
-            api._get_patron_oauth_credential(patron, "pin").credential
-            == "new bearer token"
-        )
-
-        # If we get two 401 in a row, we raise an error
-        http.queue_response(401)
-        overdrive_api_fixture.queue_access_token_response("new bearer token")
-        http.queue_response(401)
-        with pytest.raises(IntegrationException, match="patron OAuth Bearer Token"):
-            api.patron_request(patron, "pin", db.fresh_url())
-
-    def test_patron_request_raises_validation_error(
-        self,
-        overdrive_api_fixture: OverdriveAPIFixture,
-        db: DatabaseTransactionFixture,
-        caplog: pytest.LogCaptureFixture,
-    ):
-        """
-        If patron request can't validate the response, it raises a OverdriveValidationError.
-        """
-        http = overdrive_api_fixture.mock_http
-
-        overdrive_api_fixture.queue_access_token_response()
-        http.queue_response(200, content="not json")
-
-        with pytest.raises(OverdriveValidationError) as excinfo:
-            overdrive_api_fixture.api.patron_request(
-                db.patron(), "pin", db.fresh_url(), response_type=Checkout
-            )
-
-        assert (
-            excinfo.value.problem_detail.detail
-            == "The server made a request to url, and got an unexpected or invalid response."
-        )
-        assert excinfo.value.problem_detail.debug_message is not None
-        assert "Invalid JSON" in excinfo.value.problem_detail.debug_message
-        assert "1 validation error for Checkout" in caplog.text
 
     def test_advantage_differences(
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
@@ -1777,84 +1718,66 @@ class TestOverdriveAPI:
     def test__refresh_patron_oauth_token(
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
     ):
-        """Verify that patron information is included in the request
-        when refreshing a patron access token.
+        """The patron's library determines the scope, and the resulting token
+        is written to the patron's credential.
         """
         http = overdrive_api_fixture.mock_http
+        api = overdrive_api_fixture.api
         patron = db.patron()
         patron.authorization_identifier = "barcode"
         credential = db.credential(patron=patron)
 
-        overdrive_api_fixture.queue_access_token_response()
-        overdrive_api_fixture.queue_access_token_response()
+        overdrive_api_fixture.queue_access_token_response("a patron token")
 
-        # Try to refresh the patron access token with a PIN, and
-        # then without a PIN.
-        overdrive_api_fixture.api._refresh_patron_oauth_token(
-            credential, patron, "a pin"
-        )
+        api._refresh_patron_oauth_token(credential, patron, "a pin")
 
-        overdrive_api_fixture.api._refresh_patron_oauth_token(credential, patron, None)
+        assert http.requests == ["https://oauth-patron.overdrive.com/patrontoken"]
 
-        # Verify that the requests that were made correspond to what
-        # Overdrive is expecting.
-
-        expect_scope = "websiteid:{} authorizationname:{}".format(
-            overdrive_api_fixture.api.website_id(),
-            overdrive_api_fixture.api.ils_name(patron.library),
-        )
-
-        # Both requests went to the same patrontoken url
-        assert http.requests == [
-            "https://oauth-patron.overdrive.com/patrontoken",
-            "https://oauth-patron.overdrive.com/patrontoken",
-        ]
-
-        with_pin, without_pin = http.requests_args
-
-        payload = with_pin["data"]
+        # The scope is built from the collection's website ID and the
+        # patron library's ILS name.
+        payload = http.requests_args[0]["data"]
         assert isinstance(payload, dict)
         assert payload["username"] == "barcode"
-        assert payload["scope"] == expect_scope
         assert payload["password"] == "a pin"
-        assert "password_required" not in payload
+        assert (
+            payload["scope"]
+            == f"websiteid:{api.website_id()} authorizationname:{api.ils_name(patron.library)}"
+        )
 
-        payload = without_pin["data"]
-        assert isinstance(payload, dict)
-        assert payload["username"] == "barcode"
-        assert payload["scope"] == expect_scope
-        assert payload["password_required"] == "false"
-        assert payload["password"] == "[ignore]"
+        # The token Overdrive returned is now stored on the credential.
+        assert credential.credential == "a patron token"
+        assert credential.expires is not None
 
-    def test__refresh_patron_oauth_token_failure(
+    def test_patron_request_401_rewrites_credential(
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
-    ) -> None:
+    ):
+        """A 401 on a patron request rewrites the stored Credential.
+
+        The request layer only knows about the PatronTokenProvider callable,
+        so this is the one place the force_refresh path is joined up to the
+        database. The request-layer test for the same 401 uses an in-memory
+        provider and would stay green if this glue broke.
+        """
         http = overdrive_api_fixture.mock_http
+        api = overdrive_api_fixture.api
         patron = db.patron()
-        patron.authorization_identifier = "barcode"
-        credential = db.credential(patron=patron)
 
-        # Test with a real 400 response we've seen from overdrive
-        data, raw = overdrive_api_fixture.sample_json("patron_token_failed.json")
-        http.queue_response(400, content=raw)
-        with pytest.raises(
-            PatronAuthorizationFailedException, match="Invalid Library Card"
-        ):
-            overdrive_api_fixture.api._refresh_patron_oauth_token(
-                credential, patron, "a pin"
-            )
+        # The patron has no token yet, so one is fetched...
+        overdrive_api_fixture.queue_access_token_response("bearer token")
+        # ...and rejected.
+        http.queue_response(401)
+        # So the token is refreshed...
+        overdrive_api_fixture.queue_access_token_response("new bearer token")
+        # ...and the retry succeeds.
+        http.queue_response(200, content="at last, the content")
 
-        # Test with a fictional 403 response that doesn't contain valid json - we've never
-        # seen this come back from overdrive, this test is just to make sure we can handle
-        # unexpected responses back from OD API.
-        http.queue_response(403, content="garbage { json")
-        with pytest.raises(
-            PatronAuthorizationFailedException,
-            match="Failed to authenticate with Overdrive",
-        ):
-            overdrive_api_fixture.api._refresh_patron_oauth_token(
-                credential, patron, "a pin"
-            )
+        response = api.patron_request(patron, "pin", db.fresh_url())
+
+        assert response.text == "at last, the content"
+        assert (
+            api._get_patron_oauth_credential(patron, "pin").credential
+            == "new bearer token"
+        )
 
     def test_no_drm_fulfillment(
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
@@ -2059,7 +1982,14 @@ class TestOverdriveAPICredentials:
                 grant_type=_optional_value(payload, "grant_type"),
             )
             return MockRequestsResponse(
-                200, content=json.dumps({"access_token": token, "expires_in": 3600})
+                200,
+                content=json.dumps(
+                    {
+                        "access_token": token,
+                        "token_type": "bearer",
+                        "expires_in": 3600,
+                    }
+                ),
             )
 
         library = overdrive_api_fixture.library
@@ -2111,7 +2041,7 @@ class TestOverdriveAPICredentials:
             for props in library_collection_properties
         ]
 
-        with patch.object(OverdriveAPI, "_do_post", _do_post):
+        with patch.object(OverdrivePatronRequests, "_do_post", _do_post):
             od_apis = {
                 collection.name: OverdriveAPI(db.session, collection)
                 for collection in collections

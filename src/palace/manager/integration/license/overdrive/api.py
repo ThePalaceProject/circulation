@@ -12,7 +12,6 @@ from urllib.parse import urlsplit
 
 import flask
 from celery.canvas import Signature
-from pydantic import ValidationError
 from requests import Response
 from requests.structures import CaseInsensitiveDict
 from sqlalchemy.orm import Session
@@ -48,9 +47,9 @@ from palace.manager.api.circulation.fulfillment import (
     RedirectFulfillment,
     StreamingFulfillment,
 )
+from palace.manager.api.model.token import OAuthTokenResponse
 from palace.manager.api.selftest import HasCollectionSelfTests
-from palace.manager.core.config import CannotLoadConfiguration, Configuration
-from palace.manager.core.exceptions import IntegrationException
+from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.selftest import SelfTestResult
 from palace.manager.data_layer.format import FormatData
 from palace.manager.data_layer.policy.replacement import ReplacementPolicy
@@ -76,7 +75,6 @@ from palace.manager.integration.license.overdrive.exception import (
     InvalidFieldOptionError,
     OverdriveModelError,
     OverdriveResponseException,
-    OverdriveValidationError,
 )
 from palace.manager.integration.license.overdrive.fulfillment import (
     OverdriveManifestFulfillment,
@@ -86,7 +84,6 @@ from palace.manager.integration.license.overdrive.model import (
     BaseOverdriveModel,
     Checkout,
     Checkouts,
-    ErrorResponse,
     Format,
     Hold as HoldResponse,
     Holds as HoldsResponse,
@@ -100,6 +97,8 @@ from palace.manager.integration.license.overdrive.representation import (
 )
 from palace.manager.integration.license.overdrive.requests import (
     OverdriveClientRequests,
+    OverdrivePatronRequests,
+    PatronTokenProvider,
 )
 from palace.manager.integration.license.overdrive.settings import (
     OverdriveChildSettings,
@@ -123,10 +122,8 @@ from palace.manager.sqlalchemy.model.licensing import (
 from palace.manager.sqlalchemy.model.patron import Hold, Patron
 from palace.manager.sqlalchemy.model.resource import Representation
 from palace.manager.sqlalchemy.util import get_one
-from palace.manager.util import base64
 from palace.manager.util.http.async_http import WORKER_DEFAULT_BACKOFF, AsyncClient
 from palace.manager.util.http.exception import BadResponseException
-from palace.manager.util.http.http import HTTP, RequestKwargs
 
 
 class OverdriveToken(NamedTuple):
@@ -179,18 +176,6 @@ class OverdriveAPI(
     # TODO: This is a terrible choice but this URL should never be
     # displayed to a patron, so it doesn't matter much.
     DEFAULT_ERROR_URL = "http://thepalaceproject.org/"
-
-    # Patron-context endpoint URL templates. Each has a slot to plug in
-    # one of the appropriate servers, filled in by a call to the
-    # endpoint() method. The client-context templates live on
-    # OverdriveClientRequests.
-    PATRON_TOKEN_ENDPOINT = "%(oauth_patron_host)s/patrontoken"
-
-    PATRON_INFORMATION_ENDPOINT = "%(patron_host)s/v1/patrons/me"
-    CHECKOUTS_ENDPOINT = "%(patron_host)s/v1/patrons/me/checkouts"
-    CHECKOUT_ENDPOINT = "%(patron_host)s/v1/patrons/me/checkouts/%(overdrive_id)s"
-    HOLDS_ENDPOINT = "%(patron_host)s/v1/patrons/me/holds"
-    HOLD_ENDPOINT = "%(patron_host)s/v1/patrons/me/holds/%(product_id)s"
 
     MAX_CREDENTIAL_AGE = 50 * 60
 
@@ -255,6 +240,7 @@ class OverdriveAPI(
         _db: Session,
         collection: Collection,
         client_requests: OverdriveClientRequests | None = None,
+        patron_requests: OverdrivePatronRequests | None = None,
     ) -> None:
         super().__init__(_db, collection)
 
@@ -286,14 +272,17 @@ class OverdriveAPI(
         if not self._settings.overdrive_website_id:
             raise CannotLoadConfiguration("Overdrive website ID is not configured")
 
-        self._server_nickname = self._settings.overdrive_server_nickname
-
         self.client_requests = (
             OverdriveClientRequests(
                 self._settings, parent_library_id=self.parent_library_id
             )
             if client_requests is None
             else client_requests
+        )
+        self.patron_requests = (
+            OverdrivePatronRequests(self._settings)
+            if patron_requests is None
+            else patron_requests
         )
 
         # In-memory cache for the collectionToken extracted from the library
@@ -392,40 +381,11 @@ class OverdriveAPI(
         """Make an HTTP GET request using the active Bearer Token."""
         return self.client_requests.raw_get(url, extra_headers)
 
-    @property
-    def _palace_context_basic_auth_header(self) -> str:
-        """
-        Returns the Basic Auth header used to acquire an OAuth bearer token.
-
-        This header contains the Palace Project credentials passed into the
-        Circulation Manager via environment variables. This is used to acquire
-        a privileged token that has extra permissions for the Overdrive API.
-        """
-        is_test_mode = (
-            True
-            if self._server_nickname == OverdriveConstants.TESTING_SERVERS
-            else False
-        )
-        try:
-            client_credentials = Configuration.overdrive_fulfillment_keys(
-                testing=is_test_mode
-            )
-        except CannotLoadConfiguration as e:
-            raise CannotFulfill() from e
-
-        s = "{}:{}".format(
-            client_credentials["key"],
-            client_credentials["secret"],
-        )
-        return "Basic " + base64.standard_b64encode(s).strip()
-
     @staticmethod
-    def _update_credential(
-        credential: Credential, overdrive_data: dict[str, Any]
-    ) -> None:
+    def _update_credential(credential: Credential, token: OAuthTokenResponse) -> None:
         """Copy Overdrive OAuth data into a Credential object."""
-        credential.credential = overdrive_data["access_token"]
-        expires_in = overdrive_data["expires_in"] * 0.9
+        credential.credential = token.access_token
+        expires_in = token.expires_in * 0.9
         credential.expires = utc_now() + datetime.timedelta(seconds=expires_in)
 
     def get_library(self) -> LibraryResponse:
@@ -519,9 +479,6 @@ class OverdriveAPI(
         # this page.
         availability_queue = extractor_class.availability_link_list(content_dict)
         return availability_queue, next_link
-
-    def _get_headers(self, auth_token: str) -> dict[str, str]:
-        return {"Authorization": f"Bearer {auth_token}"}
 
     def book_info_initial_endpoint(
         self,
@@ -706,14 +663,6 @@ class OverdriveAPI(
         status_code, headers, content = self.get(url)
         return json.loads(content)  # type: ignore[no-any-return]
 
-    def _do_post(
-        self, url: str, payload: dict[str, str], headers: dict[str, str], **kwargs: Any
-    ) -> Response:
-        url = self.endpoint(url)
-        kwargs["max_retry_count"] = self.settings.max_retry_count
-        kwargs["timeout"] = 120
-        return HTTP.post_with_timeout(url, data=payload, headers=headers, **kwargs)
-
     def website_id(self) -> str:
         return self.settings.overdrive_website_id
 
@@ -775,7 +724,6 @@ class OverdriveAPI(
         data: str | None = ...,
         method: str | None = ...,
         response_type: None = ...,
-        exception_on_401: bool = ...,
     ) -> Response: ...
 
     @overload
@@ -788,7 +736,6 @@ class OverdriveAPI(
         data: str | None = ...,
         method: str | None = ...,
         response_type: type[TOverdriveModel] = ...,
-        exception_on_401: bool = ...,
     ) -> TOverdriveModel: ...
 
     def patron_request[TOverdriveModel: BaseOverdriveModel](
@@ -800,7 +747,6 @@ class OverdriveAPI(
         data: str | None = None,
         method: str | None = None,
         response_type: type[TOverdriveModel] | None = None,
-        exception_on_401: bool = False,
     ) -> Response | TOverdriveModel:
         """
         Make an HTTP request on behalf of a patron to Overdrive's API.
@@ -810,76 +756,37 @@ class OverdriveAPI(
         so that the patron can take actions that require extra api
         permissions.
         """
-        patron_credential = self._get_patron_oauth_credential(patron, pin)
-        assert patron_credential.credential
-        headers = self._get_headers(patron_credential.credential)
-        if extra_headers:
-            headers.update(extra_headers)
-        if method and method.lower() in ("get", "post", "put", "delete"):
-            method = method.lower()
-        else:
-            if data:
-                method = "post"
-            else:
-                method = "get"
-        url = self.endpoint(url)
-        try:
-            response = self._do_patron_request(
-                method,
-                url,
-                headers=headers,
-                data=data,
-                allowed_response_codes=["2xx", 401],
-            )
-        except BadResponseException as e:
-            ErrorResponse.raise_from_response_data(e.response, e.message)
-        if response.status_code == 401:
-            if exception_on_401:
-                # This is our second try. Give up.
-                raise IntegrationException(
-                    "Something's wrong with the patron OAuth Bearer Token!"
-                )
-            else:
-                # Refresh the token and try again.
-                self._refresh_patron_oauth_token(patron_credential, patron, pin)
-                return self.patron_request(
-                    patron,
-                    pin,
-                    url,
-                    extra_headers=extra_headers,
-                    data=data,
-                    method=method,
-                    exception_on_401=True,
-                )
-
-        if response_type is None:
-            return response
-        else:
-            try:
-                return response_type.model_validate_json(response.content)
-            except ValidationError as e:
-                # We were unable to validate the response as the expected type. Log some relevant details and
-                # raise a BadResponseException.
-                self.log.exception(
-                    "Unable to validate Overdrive response. %s",
-                    str(e),
-                )
-                raise OverdriveValidationError(
-                    response.url,
-                    "Error validating Overdrive response",
-                    response,
-                    debug_message=str(e),
-                ) from e
-
-    def _do_patron_request(
-        self, http_method: str, url: str, **kwargs: Unpack[RequestKwargs]
-    ) -> Response:
-        url = self.endpoint(url)
-        return HTTP.request_with_timeout(
-            http_method,
+        return self.patron_requests.patron_request(
+            self._patron_token_provider(patron, pin),
             url,
-            **kwargs,
+            extra_headers=extra_headers,
+            data=data,
+            method=method,
+            response_type=response_type,
         )
+
+    def _patron_token_provider(
+        self, patron: Patron, pin: str | None
+    ) -> PatronTokenProvider:
+        """Build the callable the request layer uses to get a patron's token.
+
+        The token lives in the Credential table, so the request layer reaches
+        it through this closure rather than holding a database session. The
+        credential is looked up once and held for the life of the callable,
+        which spans a single logical request and its retry.
+        """
+        credential: Credential | None = None
+
+        def provider(*, force_refresh: bool = False) -> str:
+            nonlocal credential
+            if credential is None:
+                credential = self._get_patron_oauth_credential(patron, pin)
+            if force_refresh:
+                self._refresh_patron_oauth_token(credential, patron, pin)
+            assert credential.credential
+            return credential.credential
+
+        return provider
 
     def _get_patron_oauth_credential(
         self, patron: Patron, pin: str | None
@@ -914,9 +821,9 @@ class OverdriveAPI(
         generating the X-Overdrive-Scope header used by apps to set up
         their own Patron Authentication.
         """
-        return "websiteid:{} authorizationname:{}".format(
-            self.settings.overdrive_website_id,
-            self.ils_name(library),
+        return (
+            f"websiteid:{self.settings.overdrive_website_id} "
+            f"authorizationname:{self.ils_name(library)}"
         )
 
     def _refresh_patron_oauth_token(
@@ -925,49 +832,13 @@ class OverdriveAPI(
         patron: Patron,
         pin: str | None,
     ) -> Credential:
-        """Request an OAuth bearer token that allows us to act on
-        behalf of a specific patron.
-
-        Documentation: https://developer.overdrive.com/apis/patron-auth
-        """
-        payload = dict(
-            grant_type="password",
+        """Fetch a fresh patron bearer token and store it in the credential."""
+        token = self.patron_requests.refresh_patron_oauth_token(
+            username=patron.authorization_identifier,
+            password=pin,
             scope=self.scope_string(patron.library),
         )
-        if patron.authorization_identifier:
-            payload["username"] = patron.authorization_identifier
-        if pin:
-            # A PIN was provided.
-            payload["password"] = pin
-        else:
-            # No PIN was provided. Depending on the library,
-            # this might be fine. If it's not fine, Overdrive will
-            # refuse to issue a token.
-            payload["password_required"] = "false"
-            payload["password"] = "[ignore]"
-        try:
-            response = self._do_post(
-                self.PATRON_TOKEN_ENDPOINT,
-                payload,
-                {"Authorization": self._palace_context_basic_auth_header},
-                allowed_response_codes=["2xx"],
-            )
-        except BadResponseException as e:
-            error = ErrorResponse.from_response_data(e.response)
-            error_code = error.error_code if error and error.error_code else "Unknown"
-            description = (
-                error.message
-                if error and error.message
-                else "Failed to authenticate with Overdrive"
-            )
-            debug_message = (
-                f"_refresh_patron_oauth_token failed. Status code: '{e.response.status_code}'. "
-                f"Error: '{error_code}'. Description: '{description}'."
-            )
-            self.log.info(debug_message + f" Response: '{e.response.text}'")
-            raise PatronAuthorizationFailedException(description, debug_message) from e
-
-        self._update_credential(credential, response.json())
+        self._update_credential(credential, token)
         return credential
 
     def checkout(
@@ -1001,7 +872,9 @@ class OverdriveAPI(
                 self.patron_request, patron, pin, response_type=Checkout
             )
             checkout = _overdrive_field_request(
-                make_request, self.CHECKOUTS_ENDPOINT, {"reserveId": overdrive_id}
+                make_request,
+                self.patron_requests.CHECKOUTS_ENDPOINT,
+                {"reserveId": overdrive_id},
             )
         except OverdriveResponseException as e:
             code = e.error_message
@@ -1131,7 +1004,7 @@ class OverdriveAPI(
         :param overdrive_id: The OverDrive identifier for an item.
         :return: Information about the loan.
         """
-        url = f"{self.CHECKOUTS_ENDPOINT}/{overdrive_id.upper()}"
+        url = f"{self.patron_requests.CHECKOUTS_ENDPOINT}/{overdrive_id.upper()}"
         return self.patron_request(patron, pin, url, response_type=Checkout)
 
     def fulfill(
@@ -1279,13 +1152,16 @@ class OverdriveAPI(
         return self.patron_request(
             patron,
             pin,
-            self.CHECKOUTS_ENDPOINT,
+            self.patron_requests.CHECKOUTS_ENDPOINT,
             response_type=Checkouts,
         )
 
     def get_patron_holds(self, patron: Patron, pin: str | None) -> HoldsResponse:
         return self.patron_request(
-            patron, pin, self.HOLDS_ENDPOINT, response_type=HoldsResponse
+            patron,
+            pin,
+            self.patron_requests.HOLDS_ENDPOINT,
+            response_type=HoldsResponse,
         )
 
     def patron_activity(
@@ -1452,7 +1328,7 @@ class OverdriveAPI(
             patron_information = self.patron_request(
                 patron,
                 pin,
-                self.PATRON_INFORMATION_ENDPOINT,
+                self.patron_requests.PATRON_INFORMATION_ENDPOINT,
                 response_type=PatronInformation,
             )
             address = patron_information.last_hold_email
@@ -1501,7 +1377,7 @@ class OverdriveAPI(
             )
             hold = _overdrive_field_request(
                 make_request,
-                self.HOLDS_ENDPOINT,
+                self.patron_requests.HOLDS_ENDPOINT,
                 form_fields,
             )
         except OverdriveResponseException as e:
@@ -1521,8 +1397,9 @@ class OverdriveAPI(
             with Overdrive, or Overdrive refuses to release the hold for
             any reason.
         """
-        url = self.endpoint(
-            self.HOLD_ENDPOINT, product_id=licensepool.identifier.identifier
+        url = self.patron_requests.endpoint(
+            self.patron_requests.HOLD_ENDPOINT,
+            product_id=licensepool.identifier.identifier,
         )
         try:
             self.patron_request(patron, pin, url, method="DELETE")
