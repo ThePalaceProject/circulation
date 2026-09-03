@@ -14,10 +14,7 @@ from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.data_layer.policy.replacement import ReplacementPolicy
-from palace.manager.integration.license.overdrive.api import (
-    BookInfoEndpoint,
-    OverdriveAPI,
-)
+from palace.manager.integration.license.overdrive.api import OverdriveAPI
 from palace.manager.integration.license.overdrive.importer import (
     FeedImportResult,
     OverdriveImporter,
@@ -25,6 +22,7 @@ from palace.manager.integration.license.overdrive.importer import (
 from palace.manager.integration.license.overdrive.representation import (
     OverdriveRepresentationExtractor,
 )
+from palace.manager.integration.license.overdrive.requests import BookInfoEndpoint
 from palace.manager.service.redis.models.set import IdentifierSet
 from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.sqlalchemy.model.identifier import Identifier
@@ -266,7 +264,7 @@ class TestOverdriveImporter:
 
         mock_next_endpoint = BookInfoEndpoint(url="http://next.page")
 
-        api.fetch_book_info_list = AsyncMock(
+        api.async_requests.fetch_book_info_list = AsyncMock(
             return_value=(mock_book_data, mock_next_endpoint)
         )
 
@@ -331,7 +329,7 @@ class TestOverdriveImporter:
         custom_endpoint = BookInfoEndpoint(url="http://custom.endpoint")
 
         # Mock empty book data
-        api.fetch_book_info_list = AsyncMock(return_value=([], None))
+        api.async_requests.fetch_book_info_list = AsyncMock(return_value=([], None))
 
         # Run import with custom endpoint
         result = importer.import_collection(
@@ -376,7 +374,9 @@ class TestOverdriveImporter:
                 "availabilityV2": {"copiesOwned": 1},
             }
         ]
-        api.fetch_book_info_list = AsyncMock(return_value=(mock_book_data, None))
+        api.async_requests.fetch_book_info_list = AsyncMock(
+            return_value=(mock_book_data, None)
+        )
 
         # Mock extractor
         mock_bibliographic = Mock(spec=BibliographicData)
@@ -430,7 +430,9 @@ class TestOverdriveImporter:
                 "availabilityV2": {"copiesOwned": 1},
             }
         ]
-        api.fetch_book_info_list = AsyncMock(return_value=(mock_book_data, None))
+        api.async_requests.fetch_book_info_list = AsyncMock(
+            return_value=(mock_book_data, None)
+        )
 
         # Mock extractor - bibliographic hasn't changed
         mock_bibliographic = Mock(spec=BibliographicData)
@@ -488,7 +490,9 @@ class TestOverdriveImporter:
             }
         ]
 
-        api.fetch_book_info_list = AsyncMock(return_value=(mock_book_data, None))
+        api.async_requests.fetch_book_info_list = AsyncMock(
+            return_value=(mock_book_data, None)
+        )
 
         mock_circulation = Mock(spec=CirculationData)
         mock_circulation.needs_apply.return_value = True
@@ -542,7 +546,9 @@ class TestOverdriveImporter:
             }
         ]
 
-        api.fetch_book_info_list = AsyncMock(return_value=(mock_book_data, None))
+        api.async_requests.fetch_book_info_list = AsyncMock(
+            return_value=(mock_book_data, None)
+        )
         api.metadata_lookup = Mock(return_value={"title": "New Book"})
         # Mock extractor
         mock_bibliographic = Mock(spec=BibliographicData)
@@ -565,8 +571,8 @@ class TestOverdriveImporter:
         )
 
         # Verify fetch_book_info_list was called with fetch_metadata=True
-        api.fetch_book_info_list.assert_called_once()
-        call_kwargs = api.fetch_book_info_list.call_args.kwargs
+        api.async_requests.fetch_book_info_list.assert_called_once()
+        call_kwargs = api.async_requests.fetch_book_info_list.call_args.kwargs
         assert call_kwargs["fetch_metadata"] is True
         assert call_kwargs["fetch_availability"] is True
 
@@ -624,7 +630,9 @@ class TestOverdriveImporter:
             },
         ]
 
-        api.fetch_book_info_list = AsyncMock(return_value=(mock_book_data, None))
+        api.async_requests.fetch_book_info_list = AsyncMock(
+            return_value=(mock_book_data, None)
+        )
 
         # Mock metadata_lookup to return metadata for the book not in parent set
         api.metadata_lookup = Mock(return_value={"title": "New Book"})
@@ -650,8 +658,8 @@ class TestOverdriveImporter:
         )
 
         # Verify fetch_book_info_list was called with fetch_metadata=False
-        api.fetch_book_info_list.assert_called_once()
-        call_kwargs = api.fetch_book_info_list.call_args.kwargs
+        api.async_requests.fetch_book_info_list.assert_called_once()
+        call_kwargs = api.async_requests.fetch_book_info_list.call_args.kwargs
         assert call_kwargs["fetch_metadata"] is False
         assert call_kwargs["fetch_availability"] is True
 

@@ -8,6 +8,8 @@ and 401 retry behavior -- from the business logic in
 
 from __future__ import annotations
 
+import asyncio
+from dataclasses import dataclass
 from threading import Lock
 from typing import Any, Protocol, Unpack, overload
 
@@ -34,7 +36,9 @@ from palace.manager.integration.license.overdrive.model import (
     ErrorResponse,
 )
 from palace.manager.integration.license.overdrive.settings import OverdriveSettings
+from palace.manager.integration.license.overdrive.util import _make_link_safe
 from palace.manager.util import base64
+from palace.manager.util.http.async_http import WORKER_DEFAULT_BACKOFF, AsyncClient
 from palace.manager.util.http.exception import BadResponseException
 from palace.manager.util.http.http import HTTP, RequestKwargs
 
@@ -51,6 +55,17 @@ class PatronTokenProvider(Protocol):
     """
 
     def __call__(self, *, force_refresh: bool = False) -> str: ...
+
+
+# The host portion of every client-context URL template. Module level because
+# OverdriveClientRequests builds its templates in its own class body, where a
+# class attribute inherited from the base would not be visible.
+HOST_ENDPOINT_BASE = "%(host)s"
+
+
+@dataclass
+class BookInfoEndpoint:
+    url: str
 
 
 class BaseOverdriveRequests(LoggerMixin):
@@ -149,7 +164,6 @@ class OverdriveClientRequests(BaseOverdriveRequests):
     # variables).
     TOKEN_ENDPOINT = "%(oauth_host)s/token"
 
-    HOST_ENDPOINT_BASE = "%(host)s"
     LIBRARY_ENDPOINT = "%(host)s/v1/libraries/%(library_id)s"
     ADVANTAGE_LIBRARY_ENDPOINT = (
         "%(host)s/v1/libraries/%(parent_library_id)s/advantageAccounts/%(library_id)s"
@@ -323,6 +337,146 @@ class OverdriveClientRequests(BaseOverdriveRequests):
                 return self.raw_get(url, extra_headers, True)
         else:
             return status_code, headers, content
+
+
+class OverdriveAsyncRequests(BaseOverdriveRequests):
+    """The client-context requests made concurrently by import workers.
+
+    Separate from :class:`OverdriveClientRequests` because it shares none of
+    that class's request machinery: it runs on httpx rather than requests,
+    with its own retry and backoff policy, and holds one client open across a
+    whole page of products. It does share that class's bearer token, which it
+    reaches through the object it is given, so a collection still only ever
+    holds one.
+    """
+
+    NEXT_REL = "next"
+
+    def __init__(
+        self,
+        settings: OverdriveSettings,
+        client_requests: OverdriveClientRequests,
+    ) -> None:
+        super().__init__(settings)
+        self._client_requests = client_requests
+
+    @staticmethod
+    def _page_link(page: dict[str, Any], rel: str) -> str | None:
+        """The href of the given link relation on a book list page, if present."""
+        if "links" in page and rel in page["links"]:
+            return _make_link_safe(page["links"][rel]["href"])
+        return None
+
+    async def fetch_book_info_list(
+        self,
+        endpoint: BookInfoEndpoint,
+        fetch_metadata: bool = False,
+        fetch_availability: bool = False,
+    ) -> tuple[list[dict[str, Any]], BookInfoEndpoint | None]:
+        """
+        This method is used to fetch a "page" of book data. Users can optionally fetch metadata and availability info
+        by using the fetch_metadata and fetch_availability parameters. Internally, an async http client is used to
+        parallelize the retrieval of the metadata and availability.  A list of book data is returned which can be
+        parsed or converted according to the needs of the client.  Additionally, we return the link to the next page
+        of book data. In this way, "page" retrievals are accelerated while allowing the client to retrieve chunks
+        in a deterministic and therefore retriable manner.
+        """
+        base_url = self.endpoint(HOST_ENDPOINT_BASE)
+        async with self._create_configured_async_client(base_url=base_url) as client:
+            books: dict[str, Any] = {}
+            req = client.get(endpoint.url)
+            response = await req
+            data = response.json()
+            next_url = self._page_link(data, self.NEXT_REL)
+            next_endpoint: BookInfoEndpoint | None = (
+                BookInfoEndpoint(next_url) if next_url else None
+            )
+            async_task_list = list()
+            response_products = data.get("products")
+            if response_products is None:
+                # Overdrive omits the 'products' key entirely when a collection
+                # (or page) contains no titles. In that case 'totalItems' is 0
+                # and there is simply nothing to import, so we treat it as an
+                # empty page rather than an error.
+                if data.get("totalItems") == 0:
+                    return [], next_endpoint
+
+                self.log.warning(
+                    f"Overdrive response missing 'products' key for endpoint {endpoint.url}.",
+                    extra={
+                        "palace_response_data": data,
+                        "palace_response_status_code": response.status_code,
+                    },
+                )
+                raise BadResponseException(
+                    endpoint.url,
+                    f"Overdrive response missing 'products' key. Response data: {data}",
+                    response,
+                )
+            for product in response_products:
+                identifier = product["id"].lower()
+                books[identifier] = product
+                if fetch_metadata:
+                    async_task_list.append(
+                        self._get_metadata_async(base_url, product, client)
+                    )
+
+                if fetch_availability:
+                    async_task_list.append(
+                        self._get_availability_async(
+                            base_url,
+                            product,
+                            client,
+                        )
+                    )
+
+            await asyncio.gather(*async_task_list)
+
+            return list(books.values()), next_endpoint
+
+    async def _get_availability_async(
+        self, base_url: str, book_info: dict[str, Any], client: AsyncClient
+    ) -> None:
+        url = book_info["links"]["availabilityV2"]["href"].removeprefix(base_url)
+        data = await self._get_product_relation(client, url)
+        if data:
+            book_info["availabilityV2"] = data
+
+    async def _get_metadata_async(
+        self, base_url: str, book_info: dict[str, Any], client: AsyncClient
+    ) -> None:
+        url = book_info["links"]["metadata"]["href"].removeprefix(base_url)
+        data = await self._get_product_relation(client, url)
+        if data:
+            book_info["metadata"] = data
+
+    async def _get_product_relation(
+        self, client: AsyncClient, url: str
+    ) -> dict[str, Any] | None:
+        req = client.get(url)
+        response = await req
+        # We allow a 404 response code for availability or metadata since those links may not exist for a given
+        # identifier.
+        if response.status_code == 404:
+            self.log.warning(
+                f"The following URL unexpectedly returned a 404: {url}. "
+                f'Response text: "{response.text}" -> Skipping...'
+            )
+            return None
+        else:
+            data: dict[str, Any] = response.json()
+            return data
+
+    def _create_configured_async_client(
+        self,
+        base_url: str,
+    ) -> AsyncClient:
+        return AsyncClient.for_worker(
+            base_url=base_url,
+            headers=self._client_requests.auth_headers(),
+            allowed_response_codes=[200, 404],
+            backoff=WORKER_DEFAULT_BACKOFF,
+        )
 
 
 class OverdrivePatronRequests(BaseOverdriveRequests):

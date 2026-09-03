@@ -17,11 +17,9 @@ from palace.manager.celery.importer import (
 from palace.manager.celery.task import Task
 from palace.manager.celery.tasks import apply
 from palace.manager.celery.utils import load_from_id, signature_with
-from palace.manager.integration.license.overdrive.api import (
-    BookInfoEndpoint,
-    OverdriveAPI,
-)
+from palace.manager.integration.license.overdrive.api import OverdriveAPI
 from palace.manager.integration.license.overdrive.importer import OverdriveImporter
+from palace.manager.integration.license.overdrive.requests import BookInfoEndpoint
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.set import IdentifierSet
 from palace.manager.sqlalchemy.model.collection import Collection
