@@ -6,7 +6,7 @@ import json
 from collections.abc import Generator, Iterable
 from dataclasses import dataclass
 from functools import partial
-from threading import RLock
+from threading import Lock
 from typing import Any, NamedTuple, Unpack, overload
 from urllib.parse import urlsplit
 
@@ -98,6 +98,9 @@ from palace.manager.integration.license.overdrive.model import (
 from palace.manager.integration.license.overdrive.representation import (
     OverdriveRepresentationExtractor,
 )
+from palace.manager.integration.license.overdrive.requests import (
+    OverdriveClientRequests,
+)
 from palace.manager.integration.license.overdrive.settings import (
     OverdriveChildSettings,
     OverdriveLibrarySettings,
@@ -177,62 +180,11 @@ class OverdriveAPI(
     # displayed to a patron, so it doesn't matter much.
     DEFAULT_ERROR_URL = "http://thepalaceproject.org/"
 
-    # A lock for threaded usage.
-    lock = RLock()
-
-    # Production and testing have different host names for some of the
-    # API endpoints. This is configurable on the collection level.
-    # Production and testing setups use the same URLs for Client
-    # Authentication and Patron Authentication, but we use the same
-    # system as for other hostnames to give a consistent look to the
-    # templates.
-    HOSTS = {
-        OverdriveConstants.PRODUCTION_SERVERS: dict(
-            host="https://api.overdrive.com",
-            patron_host="https://patron.api.overdrive.com",
-            oauth_patron_host="https://oauth-patron.overdrive.com",
-            oauth_host="https://oauth.overdrive.com",
-        ),
-        OverdriveConstants.TESTING_SERVERS: dict(
-            host="https://integration.api.overdrive.com",
-            patron_host="https://integration-patron.api.overdrive.com",
-            oauth_patron_host="https://oauth-patron.overdrive.com",
-            oauth_host="https://oauth.overdrive.com",
-        ),
-    }
-
-    # Each of these endpoint URLs has a slot to plug in one of the
-    # appropriate servers. This will be filled in either by a call to
-    # the endpoint() method (if there are other variables in the
-    # template), or by the _do_get or _do_post methods (if there are
-    # no other variables).
-    TOKEN_ENDPOINT = "%(oauth_host)s/token"
+    # Patron-context endpoint URL templates. Each has a slot to plug in
+    # one of the appropriate servers, filled in by a call to the
+    # endpoint() method. The client-context templates live on
+    # OverdriveClientRequests.
     PATRON_TOKEN_ENDPOINT = "%(oauth_patron_host)s/patrontoken"
-
-    HOST_ENDPOINT_BASE = "%(host)s"
-    LIBRARY_ENDPOINT = "%(host)s/v1/libraries/%(library_id)s"
-    ADVANTAGE_LIBRARY_ENDPOINT = (
-        "%(host)s/v1/libraries/%(parent_library_id)s/advantageAccounts/%(library_id)s"
-    )
-    ALL_PRODUCTS_ENDPOINT = f"{HOST_ENDPOINT_BASE}/v1/collections/%(collection_token)s/products?sort=%(sort)s"
-
-    METADATA_ENDPOINT_BASE = "/v1/collections/%(collection_token)s/products"
-
-    METADATA_ENDPOINT = (
-        f"{HOST_ENDPOINT_BASE}{METADATA_ENDPOINT_BASE}/%(item_id)s/metadata"
-    )
-
-    EVENTS_ENDPOINT_BASE = "/v1/collections/%(collection_token)s/products"
-    EVENTS_ENDPOINT = (
-        "%(host)s"
-        + EVENTS_ENDPOINT_BASE
-        + "?lastUpdateTime=%(lastupdatetime)s&limit=%(limit)s"
-    )
-
-    AVAILABILITY_ENDPOINT_BASE = "/v2/collections/%(collection_token)s/products"
-    AVAILABILITY_ENDPOINT = (
-        f"{HOST_ENDPOINT_BASE}{AVAILABILITY_ENDPOINT_BASE}/%(product_id)s/availability"
-    )
 
     PATRON_INFORMATION_ENDPOINT = "%(patron_host)s/v1/patrons/me"
     CHECKOUTS_ENDPOINT = "%(patron_host)s/v1/patrons/me/checkouts"
@@ -259,6 +211,12 @@ class OverdriveAPI(
     # collection for the process lifetime) pick up rotated tokens within a
     # reasonable window without hitting the DB on every request.
     COLLECTION_TOKEN_MAX_AGE: datetime.timedelta = datetime.timedelta(minutes=5)
+
+    # Serializes fetches of the library document across every instance in the
+    # process. The document is cached in the representations table, where
+    # (url, media_type) is unique, so two instances for the same collection
+    # racing past LIBRARY_MAX_AGE would otherwise both try to write the row.
+    _library_lock = Lock()
 
     TIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
@@ -292,7 +250,12 @@ class OverdriveAPI(
 
         return reap_collection.s(collection_id)
 
-    def __init__(self, _db: Session, collection: Collection) -> None:
+    def __init__(
+        self,
+        _db: Session,
+        collection: Collection,
+        client_requests: OverdriveClientRequests | None = None,
+    ) -> None:
         super().__init__(_db, collection)
 
         if collection.parent:
@@ -320,21 +283,18 @@ class OverdriveAPI(
             )
         self._library_id = library_id
 
-        if not self._settings.overdrive_client_key:
-            raise CannotLoadConfiguration("Overdrive client key is not configured")
-        if not self._settings.overdrive_client_secret:
-            raise CannotLoadConfiguration(
-                "Overdrive client password/secret is not configured"
-            )
         if not self._settings.overdrive_website_id:
             raise CannotLoadConfiguration("Overdrive website ID is not configured")
 
         self._server_nickname = self._settings.overdrive_server_nickname
 
-        self._hosts = self._determine_hosts(server_nickname=self._server_nickname)
-
-        # This is set by access to ._client_oauth_token
-        self._cached_client_oauth_token: OverdriveToken | None = None
+        self.client_requests = (
+            OverdriveClientRequests(
+                self._settings, parent_library_id=self.parent_library_id
+            )
+            if client_requests is None
+            else client_requests
+        )
 
         # In-memory cache for the collectionToken extracted from the library
         # document. Expires after COLLECTION_TOKEN_MAX_AGE so that long-lived
@@ -349,14 +309,6 @@ class OverdriveAPI(
     def settings(self) -> OverdriveSettings:
         return self._settings
 
-    def _determine_hosts(self, *, server_nickname: str) -> dict[str, str]:
-        # Figure out which hostnames we'll be using when constructing
-        # endpoint URLs.
-        if server_nickname not in self.HOSTS:
-            server_nickname = OverdriveConstants.PRODUCTION_SERVERS
-
-        return dict(self.HOSTS[server_nickname])
-
     def endpoint(self, url: str, **kwargs: str) -> str:
         """Create the URL to an Overdrive API endpoint.
 
@@ -365,47 +317,7 @@ class OverdriveAPI(
            The server hostname will be interpolated automatically; you
            don't have to pass it in.
         """
-        if not "%(" in url:
-            # Nothing to interpolate.
-            return url
-        kwargs.update(self._hosts)
-        return url % kwargs
-
-    @property
-    def _client_oauth_token(self) -> str:
-        """
-        The client oauth bearer token used for authentication with
-        Overdrive for this collection.
-
-        This token is refreshed as needed and cached for reuse
-        by this property.
-
-        See: https://developer.overdrive.com/docs/api-security
-             https://developer.overdrive.com/apis/client-auth
-        """
-        if (
-            token := self._cached_client_oauth_token
-        ) is not None and utc_now() < token.expires:
-            return token.token
-
-        return self._refresh_client_oauth_token().token
-
-    def _refresh_client_oauth_token(self) -> OverdriveToken:
-        with self.lock:
-            response = self._do_post(
-                self.TOKEN_ENDPOINT,
-                dict(grant_type="client_credentials"),
-                {"Authorization": self._collection_context_basic_auth_header},
-                allowed_response_codes=[200],
-            )
-            data = response.json()
-            access_token = data["access_token"]
-            expires_in = data["expires_in"] * 0.9
-            expires = utc_now() + datetime.timedelta(seconds=expires_in)
-            self._cached_client_oauth_token = OverdriveToken(
-                token=access_token, expires=expires
-            )
-            return self._cached_client_oauth_token
+        return self.client_requests.endpoint(url, **kwargs)
 
     @property
     def collection_token(self) -> str:
@@ -476,45 +388,9 @@ class OverdriveAPI(
         self,
         url: str,
         extra_headers: dict[str, str] | None = None,
-        exception_on_401: bool = False,
     ) -> tuple[int, CaseInsensitiveDict[str], bytes]:
         """Make an HTTP GET request using the active Bearer Token."""
-        request_headers = self._get_headers(self._client_oauth_token)
-        if extra_headers:
-            request_headers.update(extra_headers)
-
-        response: Response = self._do_get(
-            url, request_headers, allowed_response_codes=["2xx", "3xx", "401", "404"]
-        )
-        status_code = response.status_code
-        headers = response.headers
-        content = response.content
-
-        if status_code == 401:
-            if exception_on_401:
-                # This is our second try. Give up.
-                raise BadResponseException(
-                    url,
-                    "Something's wrong with the Overdrive OAuth Bearer Token!",
-                    response,
-                )
-            else:
-                # Force a refresh of the token and try again.
-                self._refresh_client_oauth_token()
-                return self.get(url, extra_headers, True)
-        else:
-            return status_code, headers, content
-
-    @property
-    def _collection_context_basic_auth_header(self) -> str:
-        """
-        Returns the Basic Auth header used to acquire an OAuth bearer token.
-
-        This header contains the collection's credentials that were configured
-        through the admin interface for this specific collection.
-        """
-        credentials = f"{self.client_key()}:{self.client_secret()}"
-        return "Basic " + base64.standard_b64encode(credentials).strip()
+        return self.client_requests.raw_get(url, extra_headers)
 
     @property
     def _palace_context_basic_auth_header(self) -> str:
@@ -552,25 +428,6 @@ class OverdriveAPI(
         expires_in = overdrive_data["expires_in"] * 0.9
         credential.expires = utc_now() + datetime.timedelta(seconds=expires_in)
 
-    @property
-    def _library_endpoint(self) -> str:
-        """Which URL should we go to to get information about this collection?
-
-        If this is an ordinary Overdrive account, we get information
-        from LIBRARY_ENDPOINT.
-
-        If this is an Overdrive Advantage account, we get information
-        from LIBRARY_ADVANTAGE_ENDPOINT.
-        """
-        args = dict(library_id=self._library_id)
-        if self.parent_library_id:
-            # This is an Overdrive advantage account.
-            args["parent_library_id"] = self.parent_library_id
-            endpoint = self.ADVANTAGE_LIBRARY_ENDPOINT
-        else:
-            endpoint = self.LIBRARY_ENDPOINT
-        return self.endpoint(endpoint, **args)
-
     def get_library(self) -> LibraryResponse:
         """Get basic information about the collection, including
         a link to the titles in the collection.
@@ -580,12 +437,12 @@ class OverdriveAPI(
         ``collectionToken`` embedded in the response stays current, since
         OverDrive periodically rotates collection tokens.
         """
-        url = self._library_endpoint
-        with self.lock:
+        url = self.client_requests.library_endpoint_url
+        with self._library_lock:
             representation, cached = Representation.get(
                 self._db,
                 url,
-                self.get,
+                self.client_requests.raw_get,
                 exception_handler=Representation.reraise_exception,
                 max_age=self.LIBRARY_MAX_AGE,
             )
@@ -608,7 +465,7 @@ class OverdriveAPI(
             representation, cached = Representation.get(
                 self._db,
                 advantage_url,
-                self.get,
+                self.client_requests.raw_get,
                 exception_handler=Representation.reraise_exception,
                 max_age=self.LIBRARY_MAX_AGE,
             )
@@ -630,7 +487,7 @@ class OverdriveAPI(
     @property
     def _all_products_link(self) -> str:
         url = self.endpoint(
-            self.ALL_PRODUCTS_ENDPOINT,
+            self.client_requests.ALL_PRODUCTS_ENDPOINT,
             collection_token=self.collection_token,
             sort="dateAdded:desc",
         )
@@ -681,7 +538,7 @@ class OverdriveAPI(
         last_update = last_update_time.strftime(self.TIME_FORMAT)
 
         book_info_initial_endpoint = self.endpoint(
-            self.EVENTS_ENDPOINT,
+            self.client_requests.EVENTS_ENDPOINT,
             # From https://developer.overdrive.com/apis/search:
             # "**Note: When you search using the lastTitleUpdateTime or
             # lastUpdateTime parameters, your results will be automatically
@@ -709,7 +566,7 @@ class OverdriveAPI(
         of book data. In this way, "page" retrievals are accelerated while allowing the client to retrieve chunks
         in a deterministic and therefore retriable manner.
         """
-        base_url = self.endpoint(self.HOST_ENDPOINT_BASE)
+        base_url = self.endpoint(self.client_requests.HOST_ENDPOINT_BASE)
         async with self._create_configured_async_client(base_url=base_url) as client:
             books: dict[str, Any] = {}
             extractor_class = extractor_class or OverdriveRepresentationExtractor
@@ -802,7 +659,7 @@ class OverdriveAPI(
     ) -> AsyncClient:
         return AsyncClient.for_worker(
             base_url=base_url,
-            headers=self._get_headers(self._client_oauth_token),
+            headers=self.client_requests.auth_headers(),
             allowed_response_codes=[200, 404],
             backoff=WORKER_DEFAULT_BACKOFF,
         )
@@ -821,7 +678,7 @@ class OverdriveAPI(
         last_update = last_update_time.strftime(self.TIME_FORMAT)
 
         initial_next_link = self.endpoint(
-            self.EVENTS_ENDPOINT,
+            self.client_requests.EVENTS_ENDPOINT,
             # From https://developer.overdrive.com/apis/search:
             # "**Note: When you search using the lastTitleUpdateTime or
             # lastUpdateTime parameters, your results will be automatically
@@ -842,18 +699,12 @@ class OverdriveAPI(
     def metadata_lookup(self, identifier: Identifier) -> dict[str, Any]:
         """Look up metadata for an Overdrive identifier."""
         url = self.endpoint(
-            self.METADATA_ENDPOINT,
+            self.client_requests.METADATA_ENDPOINT,
             collection_token=self.collection_token,
             item_id=identifier.identifier,
         )
         status_code, headers, content = self.get(url)
         return json.loads(content)  # type: ignore[no-any-return]
-
-    def _do_get(self, url: str, headers: dict[str, str], **kwargs: Any) -> Response:
-        url = self.endpoint(url)
-        kwargs["max_retry_count"] = self.settings.max_retry_count
-        kwargs["timeout"] = 120
-        return HTTP.get_with_timeout(url, headers=headers, **kwargs)
 
     def _do_post(
         self, url: str, payload: dict[str, str], headers: dict[str, str], **kwargs: Any
@@ -875,13 +726,10 @@ class OverdriveAPI(
     def library_id(self) -> str:
         return self._library_id
 
-    def hosts(self) -> dict[str, str]:
-        return dict(self._hosts)
-
     def _run_self_tests(self, _db: Session) -> Generator[SelfTestResult]:
         result = self.run_test(
             "Checking global Client Authentication privileges",
-            self._refresh_client_oauth_token,
+            self.client_requests.refresh_client_oauth_token,
         )
         yield result
         if not result.success:
@@ -1694,7 +1542,7 @@ class OverdriveAPI(
         if isinstance(book, str):
             book_id = book
             circulation_link = self.endpoint(
-                self.AVAILABILITY_ENDPOINT,
+                self.client_requests.AVAILABILITY_ENDPOINT,
                 collection_token=self.collection_token,
                 product_id=book_id,
             )

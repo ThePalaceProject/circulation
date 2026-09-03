@@ -35,7 +35,6 @@ from palace.manager.integration.license.overdrive.api import (
     OverdriveAPI,
     OverdriveToken,
 )
-from palace.manager.integration.license.overdrive.constants import OverdriveConstants
 from palace.manager.integration.license.overdrive.exception import (
     OverdriveValidationError,
 )
@@ -52,6 +51,9 @@ from palace.manager.integration.license.overdrive.model import (
 from palace.manager.integration.license.overdrive.representation import (
     OverdriveRepresentationExtractor,
 )
+from palace.manager.integration.license.overdrive.requests import (
+    OverdriveClientRequests,
+)
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.datasource import DataSource
@@ -64,13 +66,11 @@ from palace.manager.sqlalchemy.model.licensing import (
 )
 from palace.manager.sqlalchemy.model.patron import Hold
 from palace.manager.sqlalchemy.model.resource import Representation
-from palace.manager.util import base64
 from palace.manager.util.http.exception import BadResponseException
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
 from tests.fixtures.overdrive import OverdriveAPIFixture
 from tests.fixtures.services import ServicesFixture
-from tests.fixtures.webserver import MockAPIServer, MockAPIServerResponse
 from tests.mocks.mock import MockRequestsResponse
 
 
@@ -97,53 +97,6 @@ class TestOverdriveAPI:
         ):
             api.sync_patron_activity(patron, "pin")
 
-    def test_errors_not_retried(
-        self,
-        db: DatabaseTransactionFixture,
-        overdrive_api_fixture: OverdriveAPIFixture,
-        mock_web_server: MockAPIServer,
-    ):
-        overdrive_api_fixture.mock_http.stop_patch()
-        collection = overdrive_api_fixture.collection
-
-        # Enqueue a response for the request that the server will make for a token.
-        _r = MockAPIServerResponse()
-        _r.status_code = 200
-        _r.set_content(
-            b"""{
-            "access_token": "x",
-            "expires_in": 23
-        }
-        """
-        )
-        mock_web_server.enqueue_response("POST", "/oauth/token", _r)
-
-        api = OverdriveAPI(db.session, collection)
-        api._hosts["oauth_host"] = mock_web_server.url("/oauth")
-
-        # Try a get() call for each error code
-        for code in [404]:
-            _r = MockAPIServerResponse()
-            _r.status_code = code
-            mock_web_server.enqueue_response("GET", "/a/b/c", _r)
-            _status, _, _ = api.get(mock_web_server.url("/a/b/c"))
-            assert _status == code
-
-        for code in [400, 403, 500, 501, 502, 503]:
-            _r = MockAPIServerResponse()
-            _r.status_code = code
-
-            # The default is to retry 5 times, so enqueue 5 responses.
-            for i in range(0, 6):
-                mock_web_server.enqueue_response("GET", "/a/b/c", _r)
-            try:
-                api.get(mock_web_server.url("/a/b/c"))
-            except BadResponseException:
-                pass
-
-        # Exactly one request was made for each error code, plus one for a token
-        assert len(mock_web_server.requests()) == 8
-
     def test_constructor_makes_no_requests(
         self,
         db: DatabaseTransactionFixture,
@@ -154,23 +107,27 @@ class TestOverdriveAPI:
         exception_message = "This is a unit test, you can't make HTTP requests!"
         with (
             patch.object(
-                OverdriveAPI, "_do_get", side_effect=Exception(exception_message)
+                OverdriveClientRequests,
+                "_do_get",
+                side_effect=Exception(exception_message),
             ),
             patch.object(
-                OverdriveAPI, "_do_post", side_effect=Exception(exception_message)
+                OverdriveClientRequests,
+                "_do_post",
+                side_effect=Exception(exception_message),
             ),
         ):
             # Invoking the OverdriveAPI constructor does not, by itself,
             # make any HTTP requests.
             api = OverdriveAPI(db.session, collection)
 
-            # Attempting to access ._client_oauth_token or .collection_token _will_
+            # Attempting to access the client token or .collection_token _will_
             # try to make an HTTP request.
             with pytest.raises(Exception, match=exception_message):
                 api.collection_token
 
             with pytest.raises(Exception, match=exception_message):
-                api._client_oauth_token
+                api.client_requests._client_oauth_token
 
     def test_ils_name(
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
@@ -186,74 +143,6 @@ class TestOverdriveAPI:
         l2 = db.library()
         assert api.ils_name(l2) == "default"
 
-    def test_hosts(self, db: DatabaseTransactionFixture):
-        # By default, OverdriveAPI is initialized with the production
-        # set of hostnames.
-        collection = db.collection(
-            protocol=OverdriveAPI,
-            settings=db.overdrive_settings(),
-        )
-        testing = OverdriveAPI(db.session, collection)
-        assert (
-            testing.hosts() == OverdriveAPI.HOSTS[OverdriveConstants.PRODUCTION_SERVERS]
-        )
-
-        collection = db.collection(
-            protocol=OverdriveAPI,
-            settings=db.overdrive_settings(
-                overdrive_server_nickname=OverdriveConstants.TESTING_SERVERS
-            ),
-        )
-        testing = OverdriveAPI(db.session, collection)
-        assert testing.hosts() == OverdriveAPI.HOSTS[OverdriveConstants.TESTING_SERVERS]
-
-        # If the setting doesn't make sense, we default to production
-        # hostnames.
-        collection = db.collection(
-            protocol=OverdriveAPI,
-            settings=db.overdrive_settings(overdrive_server_nickname="nonsensical"),
-        )
-        bad = OverdriveAPI(db.session, collection)
-        assert bad.hosts() == OverdriveAPI.HOSTS[OverdriveConstants.PRODUCTION_SERVERS]
-
-    def test_endpoint(self, overdrive_api_fixture: OverdriveAPIFixture):
-        # The .endpoint() method performs string interpolation, including
-        # the names of servers.
-        api = overdrive_api_fixture.api
-        template = (
-            "%(host)s %(patron_host)s %(oauth_host)s %(oauth_patron_host)s %(extra)s"
-        )
-        result = api.endpoint(template, extra="val")
-
-        # The host names and the 'extra' argument have been used to
-        # fill in the string interpolations.
-        expect_args = dict(api.hosts())
-        expect_args["extra"] = "val"
-        assert template % expect_args == result
-
-        # The string has been completely interpolated.
-        assert "%" not in result
-
-        # Once interpolation has happened, doing it again has no effect.
-        assert api.endpoint(result, extra="something else") == result
-
-        # This is important because an interpolated URL may superficially
-        # appear to contain extra formatting characters.
-        assert api.endpoint(result + "%3A", extra="something else") == result + "%3A"
-
-    def test__collection_context_basic_auth_header(
-        self, overdrive_api_fixture: OverdriveAPIFixture
-    ):
-        # Verify that the Authorization header needed to get an access
-        # token for a given collection is encoded properly.
-        api = overdrive_api_fixture.api
-        assert api._collection_context_basic_auth_header == "Basic YTpi"
-        assert (
-            api._collection_context_basic_auth_header
-            == "Basic "
-            + base64.standard_b64encode(f"{api.client_key()}:{api.client_secret()}")
-        )
-
     def test_get_success(
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
     ):
@@ -263,6 +152,51 @@ class TestOverdriveAPI:
         status_code, headers, content = api.get(db.fresh_url(), {})
         assert 200 == status_code
         assert b"some content" == content
+
+    def test_get_library_refreshes_expired_token(
+        self, overdrive_api_fixture: OverdriveAPIFixture
+    ):
+        """A token refresh can happen while the library document is being
+        fetched.
+
+        This is the one path that takes the API's library lock and the
+        request layer's token lock at the same time, so it is worth covering
+        here as well as at the request layer: if those two locks were ever
+        collapsed into one non-reentrant lock, this test would hang while the
+        request-layer tests stayed green.
+        """
+        http = overdrive_api_fixture.mock_http
+
+        # The library document is requested and the token is rejected.
+        http.queue_response(401)
+        # So the token is refreshed...
+        overdrive_api_fixture.queue_access_token_response("new bearer token")
+        # ...and the retry succeeds.
+        overdrive_api_fixture.queue_collection_token("a collection token")
+
+        library = overdrive_api_fixture.api.get_library()
+
+        assert library.collection_token == "a collection token"
+        assert (
+            overdrive_api_fixture.api.client_requests._client_oauth_token
+            == "new bearer token"
+        )
+
+    def test_library_lock_is_shared_across_instances(
+        self, overdrive_api_fixture: OverdriveAPIFixture
+    ):
+        """The library document fetch is serialized process-wide.
+
+        Instances are built per configuration load and directly by scripts
+        and Celery tasks, so more than one can exist for a collection at a
+        time. The fetch writes to the representations table, where
+        (url, media_type) is unique, so a per-instance lock would let two of
+        them race to insert the same row.
+        """
+        other = overdrive_api_fixture.create_api(overdrive_api_fixture.collection)
+
+        assert other is not overdrive_api_fixture.api
+        assert other._library_lock is overdrive_api_fixture.api._library_lock
 
     def test_failure_to_get_library_is_fatal(
         self, overdrive_api_fixture: OverdriveAPIFixture
@@ -297,108 +231,6 @@ class TestOverdriveAPI:
                 match="Overdrive credentials are valid but could not fetch library: Some message.",
             ):
                 api.collection_token
-
-    def test_401_on_get_refreshes_bearer_token(
-        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
-    ):
-        http = overdrive_api_fixture.mock_http
-
-        # We have a token.
-        assert (
-            overdrive_api_fixture.api._client_oauth_token == "fake client oauth token"
-        )
-
-        # But then we try to GET, and receive a 401.
-        http.queue_response(401)
-
-        # We refresh the bearer token.
-        overdrive_api_fixture.queue_access_token_response("new bearer token")
-
-        # Then we retry the GET and it succeeds this time.
-        http.queue_response(200, content="at last, the content")
-
-        assert overdrive_api_fixture.api.get(db.fresh_url(), {}) == (
-            200,
-            {},
-            b"at last, the content",
-        )
-
-        # The bearer token has been updated.
-        assert overdrive_api_fixture.api._client_oauth_token == "new bearer token"
-
-    def test__client_oauth_token(self, overdrive_api_fixture: OverdriveAPIFixture):
-        """Verify the process of refreshing the Overdrive bearer token."""
-        api = overdrive_api_fixture.api
-        http = overdrive_api_fixture.mock_http
-
-        # Initially the cached token is None
-        api._cached_client_oauth_token = None
-
-        # Accessing the token triggers a refresh
-        overdrive_api_fixture.queue_access_token_response("bearer token")
-        assert api._client_oauth_token == "bearer token"
-        assert len(http.requests) == 1
-
-        # Queue up another bearer token response
-        overdrive_api_fixture.queue_access_token_response("new bearer token")
-
-        # Accessing the token again won't refresh, because the old token is still valid
-        assert api._client_oauth_token == "bearer token"
-        assert len(http.requests) == 1
-
-        # However if the token expires we will get a new one
-        assert api._cached_client_oauth_token is not None
-        api._cached_client_oauth_token = api._cached_client_oauth_token._replace(
-            expires=utc_now() - timedelta(seconds=1)
-        )
-
-        assert api._client_oauth_token == "new bearer token"
-        assert len(http.requests) == 2
-
-    def test_401_after__refresh_client_oauth_token_raises_error(
-        self, overdrive_api_fixture: OverdriveAPIFixture
-    ):
-        api = overdrive_api_fixture.api
-        http = overdrive_api_fixture.mock_http
-
-        # We try to GET and receive a 401.
-        http.queue_response(401)
-
-        # We refresh the bearer token.
-        overdrive_api_fixture.queue_access_token_response("new bearer token")
-
-        # Then we retry the GET but we get another 401.
-        http.queue_response(401)
-
-        # That raises a BadResponseException
-        with pytest.raises(
-            BadResponseException,
-            match="Bad response from .*: Something's wrong with the Overdrive OAuth Bearer Token",
-        ):
-            api.get_library()
-
-        # We refreshed the token in the process.
-        assert overdrive_api_fixture.api._client_oauth_token == "new bearer token"
-
-        # We made three requests, one for the original GET, one for the token refresh,
-        # and one for the retry.
-        assert len(http.requests) == 3
-
-    def test_401_during__refresh_client_oauth_token_raises_error(
-        self, overdrive_api_fixture: OverdriveAPIFixture
-    ):
-        """If we fail to refresh the OAuth bearer token, an exception is
-        raised.
-        """
-        api = overdrive_api_fixture.api
-        http = overdrive_api_fixture.mock_http
-
-        http.queue_response(401)
-        with pytest.raises(
-            BadResponseException,
-            match="Got status code 401 .* can only continue on: 200.",
-        ):
-            api._refresh_client_oauth_token()
 
     def test_patron_request_401_refreshes_bearer_token(
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
@@ -480,7 +312,7 @@ class TestOverdriveAPI:
 
         # Note the "library" endpoint.
         assert (
-            overdrive_main._library_endpoint
+            overdrive_main.client_requests.library_endpoint_url
             == "https://api.overdrive.com/v1/libraries/1"
         )
 
@@ -502,7 +334,7 @@ class TestOverdriveAPI:
         # collection is beneath the the parent collection's "library"
         # endpoint.
         assert (
-            overdrive_child._library_endpoint
+            overdrive_child.client_requests.library_endpoint_url
             == "https://api.overdrive.com/v1/libraries/1/advantageAccounts/2"
         )
 
@@ -570,8 +402,10 @@ class TestOverdriveAPI:
         api = overdrive_api_fixture.api
 
         # First we will call _refresh_collection_oauth_token
-        mock_refresh_token = create_autospec(api._refresh_client_oauth_token)
-        api._refresh_client_oauth_token = mock_refresh_token
+        mock_refresh_token = create_autospec(
+            api.client_requests.refresh_client_oauth_token
+        )
+        api.client_requests.refresh_client_oauth_token = mock_refresh_token
 
         # Then we will call get_advantage_accounts().
         mock_get_advantage_accounts = create_autospec(
@@ -666,8 +500,9 @@ class TestOverdriveAPI:
         """
 
         api = overdrive_api_fixture.api
-        api._refresh_client_oauth_token = create_autospec(
-            api._refresh_client_oauth_token, side_effect=Exception("Failure!")
+        api.client_requests.refresh_client_oauth_token = create_autospec(
+            api.client_requests.refresh_client_oauth_token,
+            side_effect=Exception("Failure!"),
         )
 
         # Only one test will be run.
@@ -1645,7 +1480,7 @@ class TestOverdriveAPI:
 
         request_url = http.requests.pop()
         expect_url = api.endpoint(
-            api.AVAILABILITY_ENDPOINT,
+            api.client_requests.AVAILABILITY_ENDPOINT,
             collection_token=api.collection_token,
             product_id="an-identifier",
         )

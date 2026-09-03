@@ -10,6 +10,7 @@ from palace.util.datetime_helpers import utc_now
 
 from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
 from palace.manager.api.config import Configuration
+from palace.manager.api.model.token import OAuthTokenResponse
 from palace.manager.integration.license.overdrive.api import (
     OverdriveAPI,
     OverdriveToken,
@@ -69,9 +70,10 @@ class OverdriveAPIFixture:
             token="fake collection token",
             expires=utc_now() + timedelta(hours=1),
         )
-        api._cached_client_oauth_token = OverdriveToken(
-            token="fake client oauth token",
-            expires=utc_now() + timedelta(hours=1),
+        api.client_requests._cached_token = OAuthTokenResponse(
+            access_token="fake client oauth token",
+            token_type="Bearer",
+            expires_in=3600,
         )
 
     def create_api(self, collection: Collection) -> OverdriveAPI:
@@ -133,7 +135,7 @@ class OverdriveAPIFixture:
         return collection
 
     def queue_access_token_response(self, credential: str = "token") -> None:
-        token = dict(access_token=credential, expires_in=3600)
+        token = dict(access_token=credential, token_type="bearer", expires_in=3600)
         self.mock_http.queue_response(200, content=json.dumps(token))
 
     def queue_collection_token(self, token: str = "collection token") -> None:
