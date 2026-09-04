@@ -87,8 +87,8 @@ from palace.manager.integration.license.overdrive.model import (
     Holds as HoldsResponse,
     LibraryResponse,
     PatronInformation,
-    PatronRequestCallable,
-    _overdrive_field_request,
+    RequestSpec,
+    build_field_request,
 )
 from palace.manager.integration.license.overdrive.representation import (
     OverdriveRepresentationExtractor,
@@ -605,10 +605,7 @@ class OverdriveAPI(
         self,
         patron: Patron,
         pin: str | None,
-        url: str,
-        extra_headers: dict[str, str] | None = ...,
-        data: str | None = ...,
-        method: str | None = ...,
+        request: RequestSpec,
         response_type: None = ...,
     ) -> Response: ...
 
@@ -617,10 +614,7 @@ class OverdriveAPI(
         self,
         patron: Patron,
         pin: str | None,
-        url: str,
-        extra_headers: dict[str, str] | None = ...,
-        data: str | None = ...,
-        method: str | None = ...,
+        request: RequestSpec,
         response_type: type[TOverdriveModel] = ...,
     ) -> TOverdriveModel: ...
 
@@ -628,10 +622,7 @@ class OverdriveAPI(
         self,
         patron: Patron,
         pin: str | None,
-        url: str,
-        extra_headers: dict[str, str] | None = None,
-        data: str | None = None,
-        method: str | None = None,
+        request: RequestSpec,
         response_type: type[TOverdriveModel] | None = None,
     ) -> Response | TOverdriveModel:
         """
@@ -644,10 +635,7 @@ class OverdriveAPI(
         """
         return self.patron_requests.patron_request(
             self._patron_token_provider(patron, pin),
-            url,
-            extra_headers=extra_headers,
-            data=data,
-            method=method,
+            request,
             response_type=response_type,
         )
 
@@ -754,13 +742,14 @@ class OverdriveAPI(
 
         already_checked_out = False
         try:
-            make_request: PatronRequestCallable[Checkout] = partial(
-                self.patron_request, patron, pin, response_type=Checkout
-            )
-            checkout = _overdrive_field_request(
-                make_request,
-                self.patron_requests.CHECKOUTS_ENDPOINT,
-                {"reserveId": overdrive_id},
+            checkout = self.patron_request(
+                patron,
+                pin,
+                build_field_request(
+                    self.patron_requests.CHECKOUTS_ENDPOINT,
+                    {"reserveId": overdrive_id},
+                ),
+                response_type=Checkout,
             )
         except OverdriveResponseException as e:
             code = e.error_message
@@ -819,8 +808,9 @@ class OverdriveAPI(
                 do_early_return = not already_checked_out and existing_hold is None
 
                 if do_early_return:
-                    make_request = partial(self.patron_request, patron, pin)
-                    checkout.action("early_return", make_request)
+                    self.patron_request(
+                        patron, pin, checkout.build_action_request("early_return")
+                    )
 
                 # If this was a hold, we remove the hold record from the database before
                 # we raise the exception, since the hold has been converted to a checkout.
@@ -865,8 +855,7 @@ class OverdriveAPI(
         # First we get the loan for this patron.
         try:
             loan = self.get_loan(patron, pin, licensepool.identifier.identifier)
-            make_request = partial(self.patron_request, patron, pin)
-            loan.action("early_return", make_request)
+            self.patron_request(patron, pin, loan.build_action_request("early_return"))
         except NoActiveLoan:
             # The loan is already gone, no need to return it. This exception gets
             # handled higher up the stack.
@@ -891,7 +880,9 @@ class OverdriveAPI(
         :return: Information about the loan.
         """
         url = f"{self.patron_requests.CHECKOUTS_ENDPOINT}/{overdrive_id.upper()}"
-        return self.patron_request(patron, pin, url, response_type=Checkout)
+        return self.patron_request(
+            patron, pin, RequestSpec.get(url), response_type=Checkout
+        )
 
     def fulfill(
         self,
@@ -930,7 +921,7 @@ class OverdriveAPI(
             odreadauthurl=fulfill_url,
         )
         download_response = self.patron_request(
-            patron, pin, download_link, response_type=Format
+            patron, pin, RequestSpec.get(download_link), response_type=Format
         )
         result = download_response.links["contentlink"]
         url = result.href
@@ -1012,11 +1003,13 @@ class OverdriveAPI(
     def _lock_in_format(
         self, patron: Patron, pin: str | None, format_type: str, loan: Checkout
     ) -> Format:
-        make_request: PatronRequestCallable[Format] = partial(
-            self.patron_request, patron, pin, response_type=Format
-        )
         try:
-            format_data = loan.action("format", make_request, format_type=format_type)
+            format_data = self.patron_request(
+                patron,
+                pin,
+                loan.build_action_request("format", format_type=format_type),
+                response_type=Format,
+            )
         except InvalidFieldOptionError:
             raise FormatNotAvailable(
                 "This book is not available in the format you requested."
@@ -1038,7 +1031,7 @@ class OverdriveAPI(
         return self.patron_request(
             patron,
             pin,
-            self.patron_requests.CHECKOUTS_ENDPOINT,
+            RequestSpec.get(self.patron_requests.CHECKOUTS_ENDPOINT),
             response_type=Checkouts,
         )
 
@@ -1046,7 +1039,7 @@ class OverdriveAPI(
         return self.patron_request(
             patron,
             pin,
-            self.patron_requests.HOLDS_ENDPOINT,
+            RequestSpec.get(self.patron_requests.HOLDS_ENDPOINT),
             response_type=HoldsResponse,
         )
 
@@ -1214,7 +1207,7 @@ class OverdriveAPI(
             patron_information = self.patron_request(
                 patron,
                 pin,
-                self.patron_requests.PATRON_INFORMATION_ENDPOINT,
+                RequestSpec.get(self.patron_requests.PATRON_INFORMATION_ENDPOINT),
                 response_type=PatronInformation,
             )
             address = patron_information.last_hold_email
@@ -1258,13 +1251,11 @@ class OverdriveAPI(
             form_fields["ignoreHoldEmail"] = True
 
         try:
-            make_request: PatronRequestCallable[HoldResponse] = partial(
-                self.patron_request, patron, pin, response_type=HoldResponse
-            )
-            hold = _overdrive_field_request(
-                make_request,
-                self.patron_requests.HOLDS_ENDPOINT,
-                form_fields,
+            hold = self.patron_request(
+                patron,
+                pin,
+                build_field_request(self.patron_requests.HOLDS_ENDPOINT, form_fields),
+                response_type=HoldResponse,
             )
         except OverdriveResponseException as e:
             raise CannotHold(e.error_code) from e
@@ -1288,7 +1279,7 @@ class OverdriveAPI(
             product_id=licensepool.identifier.identifier,
         )
         try:
-            self.patron_request(patron, pin, url, method="DELETE")
+            self.patron_request(patron, pin, RequestSpec("DELETE", url))
         except OverdriveResponseException as e:
             response = e.response
             if (

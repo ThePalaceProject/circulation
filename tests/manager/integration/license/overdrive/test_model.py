@@ -1,10 +1,10 @@
 import json
 from datetime import datetime
 from functools import partial
-from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
+from frozendict import frozendict
 from httpx import Headers
 
 from palace.util.datetime_helpers import utc_now
@@ -42,6 +42,8 @@ from palace.manager.integration.license.overdrive.model import (
     LibraryResponse,
     LinkTemplate,
     PatronInformation,
+    RequestSpec,
+    build_field_request,
 )
 from palace.manager.util.http.exception import ResponseData
 from tests.fixtures.files import OverdriveFilesFixture
@@ -235,6 +237,43 @@ class TestLinkTemplate:
         )
 
 
+class TestRequestSpec:
+    def test_headers_are_frozen(self) -> None:
+        """A prepared request cannot be altered after it is described.
+
+        The retry path reuses the same spec, so headers handed in by a caller
+        have to be frozen rather than merely held on a frozen field.
+        """
+        spec = RequestSpec("POST", "http://example.com/", headers={"A": "b"})
+
+        assert isinstance(spec.headers, frozendict)
+        with pytest.raises(TypeError):
+            spec.headers["C"] = "d"  # type: ignore[index]  # the point of the test
+
+        # Freezing the headers is what makes the spec hashable.
+        assert hash(spec) == hash(
+            RequestSpec("POST", "http://example.com/", headers={"A": "b"})
+        )
+
+    def test_method_is_normalized(self) -> None:
+        """Specs describing the same wire request compare equal.
+
+        requests uppercases the verb before sending either way, so the casing
+        a caller happens to use must not make two specs differ.
+        """
+        assert RequestSpec("get", "http://example.com/") == RequestSpec(
+            "GET", "http://example.com/"
+        )
+        assert hash(RequestSpec("delete", "http://example.com/")) == hash(
+            RequestSpec("DELETE", "http://example.com/")
+        )
+        assert RequestSpec("get", "http://example.com/").method == "GET"
+
+    def test_build_field_request_headers_are_frozen(self) -> None:
+        spec = build_field_request("http://example.com/", {"reserveId": "1"})
+        assert isinstance(spec.headers, frozendict)
+
+
 class TestAction:
     def test_get_field(self) -> None:
         action = Action(
@@ -259,7 +298,7 @@ class TestAction:
         ):
             action.get_field("not_found", raising=True)
 
-    def test_request(self) -> None:
+    def test_build_request(self) -> None:
         action = Action(
             href="http://example.com/action",
             method="put",
@@ -271,11 +310,8 @@ class TestAction:
             ],
         )
 
-        make_request = MagicMock()
-        result: MagicMock = action.request(
-            make_request, testField1="value1", testField3="option1"
-        )
-        make_request.assert_called_once_with(
+        request = action.build_request(testField1="value1", testField3="option1")
+        assert request == RequestSpec(
             method="PUT",
             url="http://example.com/action",
             data=json.dumps(
@@ -287,20 +323,17 @@ class TestAction:
                     ]
                 }
             ),
-            extra_headers={"Content-Type": "application/json"},
+            headers={"Content-Type": "application/json"},
         )
-        assert result == make_request.return_value
 
         # You can provide values in snake_case, and override default values
-        make_request.reset_mock()
-        result = action.request(
-            make_request,
+        request = action.build_request(
             test_field1="value2",
             test_field2="value3",
             test_field3="option2",
             test_field4="value4",
         )
-        make_request.assert_called_once_with(
+        assert request == RequestSpec(
             method="PUT",
             url="http://example.com/action",
             data=json.dumps(
@@ -313,9 +346,8 @@ class TestAction:
                     ]
                 }
             ),
-            extra_headers={"Content-Type": "application/json"},
+            headers={"Content-Type": "application/json"},
         )
-        assert result == make_request.return_value
 
         # Test error handling
 
@@ -323,14 +355,14 @@ class TestAction:
         with pytest.raises(
             MissingRequiredFieldError, match="Action missing required field: testField1"
         ):
-            action.request(make_request)
+            action.build_request()
 
         # Invalid field option
         with pytest.raises(
             InvalidFieldOptionError,
             match="Invalid value for action field testField3: invalid. Valid options: option1, option2",
         ):
-            action.request(make_request, test_field1="value1", test_field3="invalid")
+            action.build_request(test_field1="value1", test_field3="invalid")
 
         # Extra fields
         action = Action(
@@ -342,7 +374,7 @@ class TestAction:
             ExtraFieldsError,
             match="Extra fields for action: extraField, otherUnexpected",
         ):
-            action.request(make_request, extra_field="value1", other_unexpected="extra")
+            action.build_request(extra_field="value1", other_unexpected="extra")
 
 
 class TestFormat:
@@ -494,21 +526,18 @@ class TestCheckout:
                 "checkout_response_no_format_locked_in.json"
             )
         )
-        make_request = MagicMock()
-        action: MagicMock = checkout.action("early_return", make_request)
-        assert action == make_request.return_value
-        make_request.assert_called_once_with(
+        assert checkout.build_action_request("early_return") == RequestSpec(
             method="DELETE",
             url="http://patron.api.overdrive.com/v1/patrons/me/checkouts/8B0F1552-4677-4FEC-8CE4-8466CFD47E17",
             data=None,
-            extra_headers={"Content-Type": "application/json"},
+            headers={"Content-Type": "application/json"},
         )
 
         with pytest.raises(
             NotFoundError,
             match="Action not found: unknownAction. Available actions: earlyReturn, format",
         ):
-            checkout.action("unknown_action", make_request)
+            checkout.build_action_request("unknown_action")
 
 
 class TestCheckouts:

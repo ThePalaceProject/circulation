@@ -34,6 +34,7 @@ from palace.manager.integration.license.overdrive.exception import (
 from palace.manager.integration.license.overdrive.model import (
     BaseOverdriveModel,
     ErrorResponse,
+    RequestSpec,
 )
 from palace.manager.integration.license.overdrive.settings import OverdriveSettings
 from palace.manager.integration.license.overdrive.util import _make_link_safe
@@ -608,10 +609,7 @@ class OverdrivePatronRequests(BaseOverdriveRequests):
     def patron_request(
         self,
         token: PatronTokenProvider,
-        url: str,
-        extra_headers: dict[str, str] | None = ...,
-        data: str | None = ...,
-        method: str | None = ...,
+        request: RequestSpec,
         response_type: None = ...,
     ) -> Response: ...
 
@@ -619,20 +617,14 @@ class OverdrivePatronRequests(BaseOverdriveRequests):
     def patron_request[TOverdriveModel: BaseOverdriveModel](
         self,
         token: PatronTokenProvider,
-        url: str,
-        extra_headers: dict[str, str] | None = ...,
-        data: str | None = ...,
-        method: str | None = ...,
+        request: RequestSpec,
         response_type: type[TOverdriveModel] = ...,
     ) -> TOverdriveModel: ...
 
     def patron_request[TOverdriveModel: BaseOverdriveModel](
         self,
         token: PatronTokenProvider,
-        url: str,
-        extra_headers: dict[str, str] | None = None,
-        data: str | None = None,
-        method: str | None = None,
+        request: RequestSpec,
         response_type: type[TOverdriveModel] | None = None,
     ) -> Response | TOverdriveModel:
         """
@@ -640,27 +632,22 @@ class OverdrivePatronRequests(BaseOverdriveRequests):
 
         A 401 response triggers a single token refresh and retry; a second
         401 raises an IntegrationException.
+
+        :param token: Supplies (and refreshes) the patron's bearer token.
+        :param request: The request to make, as described by a model or caller.
+        :param response_type: If given, the model to validate the response into.
         """
-        if method and method.lower() in ("get", "post", "put", "delete"):
-            method = method.lower()
-        else:
-            if data:
-                method = "post"
-            else:
-                method = "get"
-        url = self.endpoint(url)
+        url = self.endpoint(request.url)
 
         bearer = token()
         for last_attempt in (False, True):
-            headers = {"Authorization": f"Bearer {bearer}"}
-            if extra_headers:
-                headers.update(extra_headers)
+            headers = {"Authorization": f"Bearer {bearer}", **request.headers}
             try:
                 response = self._do_request(
-                    method,
+                    request.method,
                     url,
                     headers=headers,
-                    data=data,
+                    data=request.data,
                     allowed_response_codes=["2xx", 401],
                 )
             except BadResponseException as e:
