@@ -20,7 +20,14 @@ from palace.manager.integration.license.overdrive.exception import (
     OverdriveResponseException,
     OverdriveValidationError,
 )
-from palace.manager.integration.license.overdrive.model import Checkout, RequestSpec
+from palace.manager.integration.license.overdrive.model import (
+    Checkout,
+    Checkouts,
+    Format,
+    Holds,
+    PatronInformation,
+    RequestSpec,
+)
 from palace.manager.integration.license.overdrive.requests import (
     BookInfoEndpoint,
     OverdriveClientRequests,
@@ -658,6 +665,179 @@ class TestOverdrivePatronRequests:
         assert headers["Content-Type"] == "application/json"
         # The Authorization header is added on top of the spec's headers.
         assert headers["Authorization"] == "Bearer patron token"
+
+    def test_get_checkouts(
+        self,
+        overdrive_patron_requests: OverdrivePatronRequestsFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
+    ) -> None:
+        client = overdrive_patron_requests.client
+        client.queue_response(
+            200, content=overdrive_files_fixture.sample_data("no_loans.json")
+        )
+
+        checkouts = overdrive_patron_requests.requests.get_checkouts(
+            overdrive_patron_requests.token_provider
+        )
+
+        assert isinstance(checkouts, Checkouts)
+        assert client.requests_methods == ["GET"]
+        assert (
+            client.requests[0]
+            == "https://integration-patron.api.overdrive.com/v1/patrons/me/checkouts"
+        )
+
+    def test_get_checkout(
+        self,
+        overdrive_patron_requests: OverdrivePatronRequestsFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
+    ) -> None:
+        client = overdrive_patron_requests.client
+        client.queue_response(
+            200, content=overdrive_files_fixture.sample_data("single_loan.json")
+        )
+
+        checkout = overdrive_patron_requests.requests.get_checkout(
+            overdrive_patron_requests.token_provider, "an-identifier"
+        )
+
+        assert isinstance(checkout, Checkout)
+        # The identifier is upper-cased in the URL.
+        assert client.requests_methods == ["GET"]
+        assert client.requests[0].endswith("/v1/patrons/me/checkouts/AN-IDENTIFIER")
+
+    def test_create_checkout(
+        self,
+        overdrive_patron_requests: OverdrivePatronRequestsFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
+    ) -> None:
+        client = overdrive_patron_requests.client
+        client.queue_response(
+            200, content=overdrive_files_fixture.sample_data("single_loan.json")
+        )
+
+        overdrive_patron_requests.requests.create_checkout(
+            overdrive_patron_requests.token_provider, "an-identifier"
+        )
+
+        assert client.requests_methods == ["POST"]
+        assert client.requests[0].endswith("/v1/patrons/me/checkouts")
+        assert client.requests_args[0]["data"] == json.dumps(
+            {"fields": [{"name": "reserveId", "value": "an-identifier"}]}
+        )
+
+    def test_get_holds(
+        self,
+        overdrive_patron_requests: OverdrivePatronRequestsFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
+    ) -> None:
+        client = overdrive_patron_requests.client
+        client.queue_response(
+            200, content=overdrive_files_fixture.sample_data("no_holds.json")
+        )
+
+        holds = overdrive_patron_requests.requests.get_holds(
+            overdrive_patron_requests.token_provider
+        )
+
+        assert isinstance(holds, Holds)
+        assert client.requests_methods == ["GET"]
+        assert client.requests[0].endswith("/v1/patrons/me/holds")
+
+    @pytest.mark.parametrize(
+        "email,expected_field",
+        [
+            pytest.param(
+                "patron@example.com",
+                {"name": "emailAddress", "value": "patron@example.com"},
+                id="with_email",
+            ),
+            pytest.param(
+                None, {"name": "ignoreHoldEmail", "value": True}, id="without_email"
+            ),
+            # Overdrive can report the patron's address as an empty string,
+            # which suppresses the notice the same way a missing one does.
+            pytest.param(
+                "", {"name": "ignoreHoldEmail", "value": True}, id="empty_email"
+            ),
+        ],
+    )
+    def test_create_hold(
+        self,
+        overdrive_patron_requests: OverdrivePatronRequestsFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
+        email: str | None,
+        expected_field: dict[str, object],
+    ) -> None:
+        client = overdrive_patron_requests.client
+        client.queue_response(
+            200, content=overdrive_files_fixture.sample_data("successful_hold.json")
+        )
+
+        overdrive_patron_requests.requests.create_hold(
+            overdrive_patron_requests.token_provider, "an-identifier", email
+        )
+
+        assert client.requests_methods == ["POST"]
+        assert client.requests[0].endswith("/v1/patrons/me/holds")
+        assert client.requests_args[0]["data"] == json.dumps(
+            {
+                "fields": [
+                    {"name": "reserveId", "value": "an-identifier"},
+                    expected_field,
+                ]
+            }
+        )
+
+    def test_delete_hold(
+        self, overdrive_patron_requests: OverdrivePatronRequestsFixture
+    ) -> None:
+        client = overdrive_patron_requests.client
+        client.queue_response(204)
+
+        overdrive_patron_requests.requests.delete_hold(
+            overdrive_patron_requests.token_provider, "an-identifier"
+        )
+
+        assert client.requests_methods == ["DELETE"]
+        assert client.requests[0].endswith("/v1/patrons/me/holds/an-identifier")
+
+    def test_get_patron_information(
+        self,
+        overdrive_patron_requests: OverdrivePatronRequestsFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
+    ) -> None:
+        client = overdrive_patron_requests.client
+        client.queue_response(
+            200, content=overdrive_files_fixture.sample_data("patron_info.json")
+        )
+
+        information = overdrive_patron_requests.requests.get_patron_information(
+            overdrive_patron_requests.token_provider
+        )
+
+        assert isinstance(information, PatronInformation)
+        assert client.requests_methods == ["GET"]
+        assert client.requests[0].endswith("/v1/patrons/me")
+
+    def test_follow_download_link(
+        self,
+        overdrive_patron_requests: OverdrivePatronRequestsFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
+    ) -> None:
+        client = overdrive_patron_requests.client
+        client.queue_response(
+            200,
+            content=overdrive_files_fixture.sample_data("format_response_no_drm.json"),
+        )
+
+        format_data = overdrive_patron_requests.requests.follow_download_link(
+            overdrive_patron_requests.token_provider, "http://example.com/format"
+        )
+
+        assert isinstance(format_data, Format)
+        assert client.requests_methods == ["GET"]
+        assert client.requests[0] == "http://example.com/format"
 
 
 class TestOverdriveAsyncRequests:
