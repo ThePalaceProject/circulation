@@ -9,6 +9,7 @@ from palace.manager.api.config import Configuration
 from palace.manager.api.model.token import OAuthTokenResponse
 from palace.manager.integration.license.overdrive.constants import OverdriveConstants
 from palace.manager.integration.license.overdrive.requests import (
+    ClientTokenCache,
     OverdriveAsyncRequests,
     OverdriveClientRequests,
     OverdrivePatronRequests,
@@ -49,28 +50,33 @@ def overdrive_client_requests(
 
 
 class OverdriveAsyncRequestsFixture:
-    """An OverdriveAsyncRequests and the client context it takes its token from."""
+    """An OverdriveAsyncRequests built from settings alone, with no database."""
 
-    def __init__(self, client: MockAsyncClientFixture) -> None:
-        self.client = client
+    def __init__(self, async_client: MockAsyncClientFixture) -> None:
+        self.client = async_client
         self.settings = create_settings()
-        self.client_requests = OverdriveClientRequests(self.settings)
-        # The async client builds its Authorization header up front, so seed a
-        # token rather than making every test queue a token response.
-        self.client_requests._cached_token = OAuthTokenResponse(
-            access_token="token", token_type="Bearer", expires_in=3600
+        self.token_cache = ClientTokenCache()
+        self.requests = OverdriveAsyncRequests(
+            self.settings, token_cache=self.token_cache
         )
-        self.requests = OverdriveAsyncRequests(self.settings, self.client_requests)
+
+    def seed_token(self, access_token: str = "token") -> None:
+        """Put a token in the shared cache, so no request has to fetch one."""
+        self.token_cache.token = OAuthTokenResponse(
+            access_token=access_token, token_type="Bearer", expires_in=3600
+        )
+
+    @staticmethod
+    def token_response(access_token: str = "token") -> str:
+        return json.dumps(
+            dict(access_token=access_token, token_type="bearer", expires_in=3600)
+        )
 
 
 @pytest.fixture
 def overdrive_async_requests(
     async_http_client: MockAsyncClientFixture,
-    http_client: MockHttpClientFixture,
 ) -> OverdriveAsyncRequestsFixture:
-    # http_client is requested for its patching side effect only. The
-    # OverdriveClientRequests this fixture builds is real, so without it a
-    # sync request would leave the test process.
     return OverdriveAsyncRequestsFixture(async_http_client)
 
 

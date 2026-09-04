@@ -70,7 +70,9 @@ class OverdriveAPIFixture:
             token="fake collection token",
             expires=utc_now() + timedelta(hours=1),
         )
-        api.client_requests._cached_token = OAuthTokenResponse(
+        # The client and async layers share one cache, so seeding either
+        # seeds both.
+        api.client_requests.token_cache.token = OAuthTokenResponse(
             access_token="fake client oauth token",
             token_type="Bearer",
             expires_in=3600,

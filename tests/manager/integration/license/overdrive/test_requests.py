@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import timedelta
 from unittest.mock import patch
@@ -13,6 +14,7 @@ from palace.manager.api.circulation.exceptions import (
     PatronAuthorizationFailedException,
 )
 from palace.manager.api.config import Configuration
+from palace.manager.api.model.token import OAuthTokenResponse
 from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.core.exceptions import IntegrationException
 from palace.manager.integration.license.overdrive.constants import OverdriveConstants
@@ -30,12 +32,15 @@ from palace.manager.integration.license.overdrive.model import (
 )
 from palace.manager.integration.license.overdrive.requests import (
     BookInfoEndpoint,
+    OverdriveAsyncRequests,
     OverdriveClientRequests,
     OverdrivePatronRequests,
 )
 from palace.manager.util import base64
+from palace.manager.util.http.async_http import AsyncClient
 from palace.manager.util.http.exception import BadResponseException
 from tests.fixtures.files import OverdriveFilesFixture
+from tests.fixtures.http import MockAsyncClientFixture, MockHttpClientFixture
 from tests.fixtures.webserver import MockAPIServer, MockAPIServerResponse
 from tests.manager.integration.license.overdrive.conftest import (
     OverdriveAsyncRequestsFixture,
@@ -176,7 +181,7 @@ class TestOverdriveClientRequests:
         client = overdrive_client_requests.client
 
         # Initially the cached token is None.
-        assert requests._cached_token is None
+        assert requests._token_cache.token is None
 
         with freeze_time() as frozen_time:
             # Accessing the token triggers a refresh.
@@ -219,15 +224,18 @@ class TestOverdriveClientRequests:
         this has to be translated rather than escaping as a bare pydantic
         ValidationError.
         """
-        # A token response with no token_type at all.
+        # A token response with no token_type at all. It is a 2xx body, so
+        # the access token in it is live.
         overdrive_client_requests.client.queue_response(
-            200, content=json.dumps(dict(access_token="token", expires_in=3600))
+            200, content=json.dumps(dict(access_token="tok1", expires_in=3600))
         )
         with pytest.raises(OverdriveValidationError) as excinfo:
             overdrive_client_requests.requests.refresh_client_oauth_token()
 
         assert excinfo.value.problem_detail.debug_message is not None
-        assert "1 validation error for OAuthTokenResponse" in caplog.text
+        assert "token_type" in caplog.text
+        assert "tok1" not in caplog.text
+        assert "tok1" not in str(excinfo.value)
 
     def test_raw_get_success(
         self, overdrive_client_requests: OverdriveClientRequestsFixture
@@ -848,6 +856,7 @@ class TestOverdriveAsyncRequests:
         overdrive_async_requests: OverdriveAsyncRequestsFixture,
         overdrive_files_fixture: OverdriveFilesFixture,
     ) -> None:
+        overdrive_async_requests.seed_token()
         overdrive_async_requests.client.queue_response(
             200,
             content=overdrive_files_fixture.sample_data(
@@ -898,6 +907,7 @@ class TestOverdriveAsyncRequests:
         overdrive_async_requests: OverdriveAsyncRequestsFixture,
         overdrive_files_fixture: OverdriveFilesFixture,
     ) -> None:
+        overdrive_async_requests.seed_token()
         # test recovery after failure with book list page
         overdrive_async_requests.client.queue_response(502, content="error")
         overdrive_async_requests.client.queue_response(
@@ -933,6 +943,7 @@ class TestOverdriveAsyncRequests:
         overdrive_async_requests: OverdriveAsyncRequestsFixture,
         overdrive_files_fixture: OverdriveFilesFixture,
     ) -> None:
+        overdrive_async_requests.seed_token()
         overdrive_async_requests.client.queue_response(
             200,
             content=overdrive_files_fixture.sample_data(
@@ -964,6 +975,7 @@ class TestOverdriveAsyncRequests:
         """When the Overdrive API returns a response without a 'products' key
         and a non-empty collection, a BadResponseException is raised so the
         Celery task can retry."""
+        overdrive_async_requests.seed_token()
         # totalItems is non-zero, so the missing 'products' key is a genuinely
         # malformed response rather than an empty collection.
         overdrive_async_requests.client.queue_response(200, content={"totalItems": 5})
@@ -981,6 +993,7 @@ class TestOverdriveAsyncRequests:
         This is what ends the import loop in production, and it is a
         different branch from a page with no links at all.
         """
+        overdrive_async_requests.seed_token()
         overdrive_async_requests.client.queue_response(
             200,
             content={
@@ -1005,6 +1018,7 @@ class TestOverdriveAsyncRequests:
     ) -> None:
         """Overdrive omits the 'products' key for an empty collection
         (totalItems == 0). This is not an error: we return an empty page."""
+        overdrive_async_requests.seed_token()
         overdrive_async_requests.client.queue_response(
             200, content={"totalItems": 0, "limit": 100, "offset": 0}
         )
@@ -1017,3 +1031,340 @@ class TestOverdriveAsyncRequests:
 
         assert book_info_list == []
         assert next_endpoint is None
+
+    async def test_token_fetched_without_blocking(
+        self,
+        overdrive_async_requests: OverdriveAsyncRequestsFixture,
+        async_http_client: MockAsyncClientFixture,
+    ) -> None:
+        # With no cached token, the token is fetched over the async client
+        # rather than by a blocking call.
+        async_http_client.queue_response(
+            200, content=overdrive_async_requests.token_response("a token")
+        )
+
+        assert await overdrive_async_requests.requests.bearer_token() == "a token"
+
+        [request] = async_http_client.requests
+        assert request.url.path == "/token"
+        assert request.method == "POST"
+
+    async def test_token_is_cached(
+        self,
+        overdrive_async_requests: OverdriveAsyncRequestsFixture,
+        async_http_client: MockAsyncClientFixture,
+    ) -> None:
+        async_http_client.queue_response(
+            200, content=overdrive_async_requests.token_response("a token")
+        )
+
+        assert await overdrive_async_requests.requests.bearer_token() == "a token"
+        assert await overdrive_async_requests.requests.bearer_token() == "a token"
+
+        # Only one request was made for it.
+        assert len(async_http_client.requests) == 1
+
+    async def test_token_request_keeps_the_long_timeout(
+        self,
+        overdrive_async_requests: OverdriveAsyncRequestsFixture,
+        async_http_client: MockAsyncClientFixture,
+    ) -> None:
+        """The token endpoint gets the long timeout, not the worker default.
+
+        Overdrive is slow to answer here, and this refresh runs inside the
+        auth flow of a page request, so timing out early would be retried by
+        both this client and the page's.
+        """
+        async_http_client.queue_response(
+            200, content=overdrive_async_requests.token_response()
+        )
+
+        await overdrive_async_requests.requests.bearer_token()
+
+        timeout = async_http_client.requests[0].extensions.get("timeout")
+        assert timeout is not None
+        assert timeout["connect"] == float(OverdriveAsyncRequests.REQUEST_TIMEOUT)
+
+    async def test_token_request_does_not_retry(
+        self,
+        overdrive_async_requests: OverdriveAsyncRequestsFixture,
+        async_http_client: MockAsyncClientFixture,
+    ) -> None:
+        """The token client must not retry on top of the caller that does.
+
+        This refresh runs inside the auth flow of a page request whose client
+        already retries, and it holds the token lock while it does, so
+        retrying here multiplies the attempts and the wait for every other
+        request on the page.
+        """
+        with patch.object(
+            AsyncClient, "for_worker", side_effect=AsyncClient.for_worker
+        ) as for_worker:
+            async_http_client.queue_response(
+                200, content=overdrive_async_requests.token_response()
+            )
+            await overdrive_async_requests.requests.bearer_token()
+
+        assert for_worker.call_args.kwargs["max_retries"] == 0
+
+    async def test_concurrent_refresh_fetches_one_token(
+        self,
+        overdrive_async_requests: OverdriveAsyncRequestsFixture,
+        async_http_client: MockAsyncClientFixture,
+    ) -> None:
+        # When a page's requests all discover a stale token at once, only one
+        # of them should ask Overdrive for a replacement.
+        overdrive_async_requests.seed_token("stale token")
+        async_http_client.queue_response(
+            200, content=overdrive_async_requests.token_response("fresh token")
+        )
+
+        tokens = await asyncio.gather(
+            *(
+                overdrive_async_requests.requests.bearer_token(rejected="stale token")
+                for _ in range(10)
+            )
+        )
+
+        assert tokens == ["fresh token"] * 10
+        assert len(async_http_client.requests) == 1
+
+    async def test_token_refreshed_while_waiting_for_the_lock(
+        self,
+        overdrive_async_requests: OverdriveAsyncRequestsFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A caller that waited for the lock uses what the winner fetched.
+
+        The other dedup test never reaches the lock, because the mocked
+        refresh finishes before the later callers start. This one holds the
+        refresh open so they queue behind it.
+        """
+        requests = overdrive_async_requests.requests
+        overdrive_async_requests.seed_token("stale token")
+
+        started, finish = asyncio.Event(), asyncio.Event()
+        calls = 0
+
+        async def refresh() -> OAuthTokenResponse:
+            nonlocal calls
+            calls += 1
+            started.set()
+            await finish.wait()
+            overdrive_async_requests.seed_token("fresh token")
+            token = overdrive_async_requests.token_cache.token
+            assert token is not None
+            return token
+
+        monkeypatch.setattr(requests, "_refresh_token", refresh)
+
+        first = asyncio.create_task(requests.bearer_token(rejected="stale token"))
+        await started.wait()
+        second = asyncio.create_task(requests.bearer_token(rejected="stale token"))
+        await asyncio.sleep(0)
+        finish.set()
+
+        assert await first == "fresh token"
+        assert await second == "fresh token"
+        # The waiter took the winner's token rather than fetching its own.
+        assert calls == 1
+
+    async def test_unusable_token_response(
+        self,
+        overdrive_async_requests: OverdriveAsyncRequestsFixture,
+        async_http_client: MockAsyncClientFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A 200 that isn't a usable token is an Overdrive error, not a crash.
+
+        The body is a live token document, so neither it nor pydantic's echo
+        of it may reach the log or the exception.
+        """
+        async_http_client.queue_response(
+            200, content=json.dumps(dict(access_token="tok1", expires_in=3600))
+        )
+
+        with pytest.raises(OverdriveValidationError) as excinfo:
+            await overdrive_async_requests.requests.bearer_token()
+
+        assert "token_type" in caplog.text
+        assert "tok1" not in caplog.text
+        assert "tok1" not in str(excinfo.value)
+        # The exception snapshots the response body for the celery result
+        # backend, so the token must not be in there either.
+        assert "tok1" not in excinfo.value.response.text
+        assert b"tok1" not in excinfo.value.response.content
+
+    async def test_dead_token_endpoint_fails_the_page_once(
+        self,
+        overdrive_async_requests: OverdriveAsyncRequestsFixture,
+        async_http_client: MockAsyncClientFixture,
+    ) -> None:
+        """A page that cannot get a token fails before it starts.
+
+        Every request on the page needs one, so asking up front means one
+        failed attempt rather than each request finding out for itself.
+        """
+        async_http_client.queue_response(500, content="nope")
+
+        with pytest.raises(BadResponseException):
+            await overdrive_async_requests.requests.fetch_book_info_list(
+                BookInfoEndpoint(url="/books")
+            )
+
+        # The token was asked for, and the page never started.
+        assert len(async_http_client.requests) == 1
+        assert async_http_client.request_urls[0].endswith("/token")
+
+    @pytest.mark.parametrize(
+        "missing_setting",
+        ["overdrive_client_key", "overdrive_client_secret"],
+    )
+    def test_missing_configuration(
+        self,
+        overdrive_async_requests: OverdriveAsyncRequestsFixture,
+        missing_setting: str,
+    ) -> None:
+        # model_copy skips validation, so we can build the partially
+        # configured settings that these guards defend against.
+        settings = overdrive_async_requests.settings.model_copy(
+            update={missing_setting: None}
+        )
+        with pytest.raises(CannotLoadConfiguration):
+            OverdriveAsyncRequests(settings)
+
+    async def test_token_shared_with_sync_layer(
+        self,
+        overdrive_async_requests: OverdriveAsyncRequestsFixture,
+        async_http_client: MockAsyncClientFixture,
+        http_client: MockHttpClientFixture,
+    ) -> None:
+        # http_client is requested for its patching side effect: this is the
+        # one test that builds a real OverdriveClientRequests, so if the cache
+        # sharing regressed it would otherwise make a live token request.
+        # Both layers read the same cache, so a collection only ever holds
+        # one token.
+        client_requests = OverdriveClientRequests(
+            overdrive_async_requests.settings,
+            token_cache=overdrive_async_requests.token_cache,
+        )
+        async_http_client.queue_response(
+            200, content=overdrive_async_requests.token_response("shared token")
+        )
+
+        assert await overdrive_async_requests.requests.bearer_token() == "shared token"
+
+        # The synchronous layer picks it up without a request of its own.
+        assert client_requests._client_oauth_token == "shared token"
+
+
+class TestOverdriveClientAuth:
+    """The httpx auth flow that keeps a page's requests authenticated."""
+
+    async def test_token_attached_to_every_request(
+        self,
+        overdrive_async_requests: OverdriveAsyncRequestsFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
+        async_http_client: MockAsyncClientFixture,
+    ) -> None:
+        overdrive_async_requests.seed_token("a token")
+        async_http_client.queue_response(
+            200,
+            content=overdrive_files_fixture.sample_data(
+                "overdrive_book_list_with_next_link.json"
+            ),
+        )
+        async_http_client.queue_response(
+            200,
+            content=overdrive_files_fixture.sample_data(
+                "overdrive_availability_information.json"
+            ),
+        )
+
+        await overdrive_async_requests.requests.fetch_book_info_list(
+            BookInfoEndpoint(url="/books"), fetch_availability=True
+        )
+
+        assert len(async_http_client.requests) == 2
+        for request in async_http_client.requests:
+            assert request.headers["Authorization"] == "Bearer a token"
+
+    async def test_expired_token_mid_page_is_refreshed(
+        self,
+        overdrive_async_requests: OverdriveAsyncRequestsFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
+        async_http_client: MockAsyncClientFixture,
+    ) -> None:
+        # A token that expires partway through a page costs one retry of the
+        # rejected request, not the whole page.
+        overdrive_async_requests.seed_token("stale token")
+
+        # The page itself is fetched successfully...
+        async_http_client.queue_response(
+            200,
+            content=overdrive_files_fixture.sample_data(
+                "overdrive_book_list_with_next_link.json"
+            ),
+        )
+        # ...then the token goes stale and the availability request is rejected.
+        async_http_client.queue_response(401, content="Unauthorized")
+        # The auth flow gets a new token...
+        async_http_client.queue_response(
+            200, content=overdrive_async_requests.token_response("fresh token")
+        )
+        # ...and the rejected request succeeds on the retry.
+        async_http_client.queue_response(
+            200,
+            content=overdrive_files_fixture.sample_data(
+                "overdrive_availability_information.json"
+            ),
+        )
+
+        book_info_list, _ = (
+            await overdrive_async_requests.requests.fetch_book_info_list(
+                BookInfoEndpoint(url="/books"), fetch_availability=True
+            )
+        )
+
+        # The page survived.
+        assert len(book_info_list) == 1
+        assert book_info_list[0]["availabilityV2"]
+
+        # The retry carried the new token.
+        assert async_http_client.requests[-1].headers["Authorization"] == (
+            "Bearer fresh token"
+        )
+
+    async def test_401_that_survives_refresh_is_raised(
+        self,
+        overdrive_async_requests: OverdriveAsyncRequestsFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
+        async_http_client: MockAsyncClientFixture,
+    ) -> None:
+        # If a fresh token is also rejected, the request fails rather than
+        # looping.
+        overdrive_async_requests.seed_token("stale token")
+        async_http_client.queue_response(
+            200,
+            content=overdrive_files_fixture.sample_data(
+                "overdrive_book_list_with_next_link.json"
+            ),
+        )
+        # One round only: the auth flow refreshes and retries once, and the
+        # page client is told not to retry a 401 on top of that.
+        async_http_client.queue_response(401, content="Unauthorized")
+        async_http_client.queue_response(
+            200, content=overdrive_async_requests.token_response("fresh token")
+        )
+        async_http_client.queue_response(401, content="Unauthorized")
+
+        with patch(
+            "palace.manager.integration.license.overdrive.requests.WORKER_DEFAULT_BACKOFF",
+            None,
+        ):
+            with pytest.raises(BadResponseException) as excinfo:
+                await overdrive_async_requests.requests.fetch_book_info_list(
+                    BookInfoEndpoint(url="/books"), fetch_availability=True
+                )
+
+        assert excinfo.value.response.status_code == 401

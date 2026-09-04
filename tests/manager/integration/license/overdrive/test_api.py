@@ -49,6 +49,7 @@ from palace.manager.integration.license.overdrive.representation import (
 )
 from palace.manager.integration.license.overdrive.requests import (
     BaseOverdriveRequests,
+    OverdriveClientRequests,
     OverdrivePatronRequests,
 )
 from palace.manager.sqlalchemy.constants import MediaTypes
@@ -127,6 +128,23 @@ class TestOverdriveAPI:
 
             with pytest.raises(Exception, match=exception_message):
                 api.client_requests._client_oauth_token
+
+    def test_injected_client_requests_shares_its_token(
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
+    ) -> None:
+        """A handed-in client layer is still the one the async layer shares.
+
+        The two are meant to hold one token per collection. Building the
+        async layer against a cache of its own would give an injected client
+        layer a second one, and the test fixtures seed only the client side.
+        """
+        injected = OverdriveClientRequests(overdrive_api_fixture.api.settings)
+        api = OverdriveAPI(
+            db.session, overdrive_api_fixture.collection, client_requests=injected
+        )
+
+        assert api.client_requests is injected
+        assert api.async_requests._token_cache is injected.token_cache
 
     def test_ils_name(
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture

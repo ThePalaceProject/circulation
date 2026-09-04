@@ -9,11 +9,14 @@ and 401 retry behavior -- from the business logic in
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from threading import Lock
 from typing import Any, Protocol, Unpack, overload
 
+import httpx
 from frozendict import frozendict
+from httpx import Headers
 from pydantic import ValidationError
 from requests import Response
 from requests.structures import CaseInsensitiveDict
@@ -47,7 +50,7 @@ from palace.manager.integration.license.overdrive.settings import OverdriveSetti
 from palace.manager.integration.license.overdrive.util import _make_link_safe
 from palace.manager.util import base64
 from palace.manager.util.http.async_http import WORKER_DEFAULT_BACKOFF, AsyncClient
-from palace.manager.util.http.exception import BadResponseException
+from palace.manager.util.http.exception import BadResponseException, ResponseData
 from palace.manager.util.http.http import HTTP, RequestKwargs
 
 
@@ -70,10 +73,37 @@ class PatronTokenProvider(Protocol):
 # class attribute inherited from the base would not be visible.
 HOST_ENDPOINT_BASE = "%(host)s"
 
+# The client-credentials token endpoint, used by both client-context layers.
+TOKEN_ENDPOINT = "%(oauth_host)s/token"
+
 
 @dataclass
 class BookInfoEndpoint:
     url: str
+
+
+class ClientTokenCache:
+    """The client credentials bearer token for one collection.
+
+    Held separately from the request classes so that the synchronous and
+    asynchronous layers share a single token. Each layer refreshes it in
+    whichever way suits it -- blocking or awaited -- and guards that refresh
+    with its own lock; this object only holds the result.
+    """
+
+    def __init__(self) -> None:
+        self._token: OAuthTokenResponse | None = None
+
+    @property
+    def token(self) -> OAuthTokenResponse | None:
+        """The cached token, or None if there isn't a usable one."""
+        if (token := self._token) is not None and not token.expired:
+            return token
+        return None
+
+    @token.setter
+    def token(self, token: OAuthTokenResponse) -> None:
+        self._token = token
 
 
 class BaseOverdriveRequests(LoggerMixin):
@@ -154,7 +184,90 @@ class BaseOverdriveRequests(LoggerMixin):
         return HTTP.post_with_timeout(url, data=payload, headers=headers, **kwargs)
 
 
-class OverdriveClientRequests(BaseOverdriveRequests):
+class ClientCredentialsRequests(BaseOverdriveRequests):
+    """Shared client-credential handling for the two client-context layers.
+
+    Both acquire a bearer token with the collection's configured key and
+    secret, and both read it from the same cache so a collection only ever
+    holds one.
+    """
+
+    def __init__(
+        self,
+        settings: OverdriveSettings,
+        *,
+        token_cache: ClientTokenCache | None = None,
+    ) -> None:
+        super().__init__(settings)
+
+        if not settings.overdrive_client_key:
+            raise CannotLoadConfiguration("Overdrive client key is not configured")
+        if not settings.overdrive_client_secret:
+            raise CannotLoadConfiguration(
+                "Overdrive client password/secret is not configured"
+            )
+
+        self._client_key = settings.overdrive_client_key
+        self._client_secret = settings.overdrive_client_secret
+        self._token_cache = (
+            token_cache if token_cache is not None else ClientTokenCache()
+        )
+
+    @property
+    def token_cache(self) -> ClientTokenCache:
+        """The cache this layer reads its bearer token from.
+
+        Exposed so another layer can be built against the same one, which is
+        what keeps a collection to a single token.
+        """
+        return self._token_cache
+
+    @property
+    def _collection_context_basic_auth_header(self) -> str:
+        """The Basic Auth header used to acquire an OAuth bearer token.
+
+        These are the collection's credentials, as configured through the
+        admin interface.
+        """
+        credentials = f"{self._client_key}:{self._client_secret}"
+        return "Basic " + base64.standard_b64encode(credentials).strip()
+
+    def _store_token(self, response: Response | httpx.Response) -> OAuthTokenResponse:
+        """Validate a token response and put the result in the shared cache.
+
+        :raises OverdriveValidationError: If the body is not a usable token.
+        """
+        try:
+            token = OAuthTokenResponse.model_validate_json(response.content)
+        except ValidationError as e:
+            # Overdrive accepted the credentials but sent back something we
+            # can't use as a token. The body is a live token document, so
+            # report the errors without it.
+            errors = e.errors(include_input=False, include_url=False)
+            self.log.error(
+                "Unable to validate Overdrive token response. Errors: '%s'.", errors
+            )
+            raise OverdriveValidationError(
+                str(response.url),
+                "Error validating Overdrive token response",
+                # Not the response itself: BadResponseException snapshots its
+                # body into a ResponseData, which is pickled into the celery
+                # result backend, and the body is a live token document.
+                ResponseData(
+                    status_code=response.status_code,
+                    url=str(response.url),
+                    headers=Headers(response.headers),
+                    text="[redacted token response]",
+                    content=b"",
+                    extensions={},
+                ),
+                debug_message=str(errors),
+            ) from e
+        self._token_cache.token = token
+        return token
+
+
+class OverdriveClientRequests(ClientCredentialsRequests):
     """The Overdrive "Client Authentication" request context.
 
     Uses the collection-configured client key/secret to acquire a bearer
@@ -170,8 +283,6 @@ class OverdriveClientRequests(BaseOverdriveRequests):
     # the endpoint() method (if there are other variables in the
     # template), or by the request methods (if there are no other
     # variables).
-    TOKEN_ENDPOINT = "%(oauth_host)s/token"
-
     LIBRARY_ENDPOINT = "%(host)s/v1/libraries/%(library_id)s"
     ADVANTAGE_LIBRARY_ENDPOINT = (
         "%(host)s/v1/libraries/%(parent_library_id)s/advantageAccounts/%(library_id)s"
@@ -201,25 +312,15 @@ class OverdriveClientRequests(BaseOverdriveRequests):
         settings: OverdriveSettings,
         *,
         parent_library_id: str | None = None,
+        token_cache: ClientTokenCache | None = None,
     ) -> None:
-        super().__init__(settings)
+        super().__init__(settings, token_cache=token_cache)
 
         if not settings.external_account_id:
             raise CannotLoadConfiguration("Overdrive library ID is not configured")
-        if not settings.overdrive_client_key:
-            raise CannotLoadConfiguration("Overdrive client key is not configured")
-        if not settings.overdrive_client_secret:
-            raise CannotLoadConfiguration(
-                "Overdrive client password/secret is not configured"
-            )
 
         self._library_id = settings.external_account_id
         self._parent_library_id = parent_library_id
-        self._client_key = settings.overdrive_client_key
-        self._client_secret = settings.overdrive_client_secret
-
-        # This is set by access to ._client_oauth_token
-        self._cached_token: OAuthTokenResponse | None = None
         self._lock = Lock()
 
     @property
@@ -241,27 +342,9 @@ class OverdriveClientRequests(BaseOverdriveRequests):
             endpoint = self.LIBRARY_ENDPOINT
         return self.endpoint(endpoint, **args)
 
-    @property
-    def _collection_context_basic_auth_header(self) -> str:
-        """
-        Returns the Basic Auth header used to acquire an OAuth bearer token.
-
-        This header contains the collection's credentials that were configured
-        through the admin interface for this specific collection.
-        """
-        credentials = f"{self._client_key}:{self._client_secret}"
-        return "Basic " + base64.standard_b64encode(credentials).strip()
-
     @staticmethod
     def _auth_headers(auth_token: str) -> dict[str, str]:
         return {"Authorization": f"Bearer {auth_token}"}
-
-    def auth_headers(self) -> dict[str, str]:
-        """The Authorization header for a client-context request.
-
-        Refreshes the cached bearer token if needed.
-        """
-        return self._auth_headers(self._client_oauth_token)
 
     @property
     def _client_oauth_token(self) -> str:
@@ -272,7 +355,7 @@ class OverdriveClientRequests(BaseOverdriveRequests):
         This token is refreshed as needed and cached for reuse
         by this property.
         """
-        if (token := self._cached_token) is not None and not token.expired:
+        if (token := self._token_cache.token) is not None:
             return token.access_token
 
         return self.refresh_client_oauth_token().access_token
@@ -281,28 +364,12 @@ class OverdriveClientRequests(BaseOverdriveRequests):
         """Fetch a fresh client credentials bearer token and cache it."""
         with self._lock:
             response = self._do_post(
-                self.TOKEN_ENDPOINT,
+                TOKEN_ENDPOINT,
                 dict(grant_type="client_credentials"),
                 {"Authorization": self._collection_context_basic_auth_header},
                 allowed_response_codes=[200],
             )
-            try:
-                token = OAuthTokenResponse.model_validate_json(response.content)
-            except ValidationError as e:
-                # Overdrive accepted the credentials but sent back something
-                # we can't use as a token. Raise it as an Overdrive error
-                # rather than letting a bare ValidationError escape.
-                self.log.exception(
-                    "Unable to validate Overdrive token response. %s", str(e)
-                )
-                raise OverdriveValidationError(
-                    response.url,
-                    "Error validating Overdrive token response",
-                    response,
-                    debug_message=str(e),
-                ) from e
-            self._cached_token = token
-            return token
+            return self._store_token(response)
 
     def raw_get(
         self,
@@ -347,15 +414,40 @@ class OverdriveClientRequests(BaseOverdriveRequests):
             return status_code, headers, content
 
 
-class OverdriveAsyncRequests(BaseOverdriveRequests):
+class OverdriveClientAuth(httpx.Auth):
+    """Attaches the client credentials token, refreshing it on a 401.
+
+    httpx runs this flow around every request, so the token is read fresh
+    each time and an expiry partway through a page costs one retry rather
+    than the whole page.
+    """
+
+    def __init__(self, requests: OverdriveAsyncRequests) -> None:
+        self._requests = requests
+
+    async def async_auth_flow(
+        self, request: httpx.Request
+    ) -> AsyncGenerator[httpx.Request, httpx.Response]:
+        token = await self._requests.bearer_token()
+        request.headers["Authorization"] = f"Bearer {token}"
+        response = yield request
+
+        if response.status_code == 401:
+            # The token went stale mid-flight. Ask for one that isn't the
+            # token we just had rejected, and try again; if that also fails,
+            # the response is passed back to the caller.
+            retry_token = await self._requests.bearer_token(rejected=token)
+            request.headers["Authorization"] = f"Bearer {retry_token}"
+            yield request
+
+
+class OverdriveAsyncRequests(ClientCredentialsRequests):
     """The client-context requests made concurrently by import workers.
 
-    Separate from :class:`OverdriveClientRequests` because it shares none of
-    that class's request machinery: it runs on httpx rather than requests,
-    with its own retry and backoff policy, and holds one client open across a
-    whole page of products. It does share that class's bearer token, which it
-    reaches through the object it is given, so a collection still only ever
-    holds one.
+    Separate from OverdriveClientRequests because it shares none of that
+    class's machinery: it runs on httpx with its own retry policy, and it
+    acquires its token without blocking the event loop. The two do share a
+    token, through the cache passed to both.
     """
 
     NEXT_REL = "next"
@@ -363,10 +455,52 @@ class OverdriveAsyncRequests(BaseOverdriveRequests):
     def __init__(
         self,
         settings: OverdriveSettings,
-        client_requests: OverdriveClientRequests,
+        *,
+        token_cache: ClientTokenCache | None = None,
     ) -> None:
-        super().__init__(settings)
-        self._client_requests = client_requests
+        super().__init__(settings, token_cache=token_cache)
+        self._token_lock = asyncio.Lock()
+
+    async def bearer_token(self, *, rejected: str | None = None) -> str:
+        """The client credentials token, refreshed if needed.
+
+        :param rejected: The token a request just had rejected with a 401.
+            Any cached token other than this one is newer than the rejected
+            one and is used instead of asking for another.
+
+        Keying on the rejected token rather than on a "refresh please" flag
+        is what keeps a page from stampeding: when a token expires, every
+        request still in flight is rejected at once, and they must all end up
+        sharing the single replacement rather than each fetching their own.
+        """
+        cached = self._token_cache.token
+        if cached is not None and cached.access_token != rejected:
+            return cached.access_token
+
+        async with self._token_lock:
+            # Another request may have refreshed while we waited for the lock.
+            current = self._token_cache.token
+            if current is not None and current.access_token != rejected:
+                return current.access_token
+            return (await self._refresh_token()).access_token
+
+    async def _refresh_token(self) -> OAuthTokenResponse:
+        """Ask Overdrive for a new client credentials token."""
+        url = self.endpoint(TOKEN_ENDPOINT)
+        async with AsyncClient.for_worker(
+            allowed_response_codes=[200],
+            timeout=self.REQUEST_TIMEOUT,
+            # The request whose auth flow we are running inside retries
+            # already. Retrying here too multiplies out, and every other
+            # request on the page waits on the token lock while it happens.
+            max_retries=0,
+        ) as client:
+            response = await client.post(
+                url,
+                data={"grant_type": "client_credentials"},
+                headers={"Authorization": self._collection_context_basic_auth_header},
+            )
+        return self._store_token(response)
 
     @staticmethod
     def _page_link(page: dict[str, Any], rel: str) -> str | None:
@@ -389,6 +523,11 @@ class OverdriveAsyncRequests(BaseOverdriveRequests):
         of book data. In this way, "page" retrievals are accelerated while allowing the client to retrieve chunks
         in a deterministic and therefore retriable manner.
         """
+        # Get a token before opening the page. Every request on it needs
+        # one, so if Overdrive cannot give us one the page fails here, once,
+        # rather than each of its requests finding out separately.
+        await self.bearer_token()
+
         base_url = self.endpoint(HOST_ENDPOINT_BASE)
         async with self._create_configured_async_client(base_url=base_url) as client:
             books: dict[str, Any] = {}
@@ -479,10 +618,20 @@ class OverdriveAsyncRequests(BaseOverdriveRequests):
         self,
         base_url: str,
     ) -> AsyncClient:
+        """A client that authenticates every request through the auth flow.
+
+        The token is attached per request rather than baked into the client's
+        headers, so a refresh triggered by one request is picked up by the
+        rest of the page.
+        """
         return AsyncClient.for_worker(
             base_url=base_url,
-            headers=self._client_requests.auth_headers(),
+            auth=OverdriveClientAuth(self),
             allowed_response_codes=[200, 404],
+            # The auth flow has already refreshed and retried a 401 by the
+            # time we see one, so retrying the request cannot help: it opens
+            # by asking for the token that was just refused.
+            no_retry_status_codes=[401],
             backoff=WORKER_DEFAULT_BACKOFF,
         )
 
