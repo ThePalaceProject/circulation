@@ -43,6 +43,7 @@ from palace.manager.integration.license.overdrive.model import (
     Format,
     Hold,
     Holds,
+    MetadataResponse,
     PatronInformation,
     RequestSpec,
     build_field_request,
@@ -156,6 +157,51 @@ class BaseOverdriveRequests(LoggerMixin):
 
         return dict(cls.HOSTS[server_nickname])
 
+    @staticmethod
+    def _response_data(
+        status_code: int, url: str, headers: Mapping[str, str], content: bytes
+    ) -> ResponseData:
+        """Snapshot a raw response for an exception to carry.
+
+        Only called on a failure: it decodes the body, and these run large.
+        """
+        return ResponseData(
+            status_code=status_code,
+            url=url,
+            headers=Headers(headers),
+            text=content.decode(errors="replace"),
+            content=content,
+            extensions={},
+        )
+
+    def _validate_body[TModel: BaseOverdriveModel](
+        self,
+        model: type[TModel],
+        description: str,
+        status_code: int,
+        url: str,
+        headers: Mapping[str, str],
+        content: bytes,
+    ) -> TModel:
+        """Validate a response body into a model, or say why it could not be.
+
+        The response is taken apart rather than passed as a ResponseData
+        because building one decodes the body, and these bodies run large on
+        a crawl where this failure does not normally happen.
+
+        :raises OverdriveValidationError: If the body is not a shape we know.
+        """
+        try:
+            return model.model_validate_json(content)
+        except ValidationError as e:
+            self.log.exception("Unable to validate Overdrive %s. %s", description, e)
+            raise OverdriveValidationError(
+                url,
+                f"Error validating Overdrive {description}",
+                self._response_data(status_code, url, headers, content),
+                debug_message=str(e),
+            ) from e
+
     def endpoint(self, url: str, **kwargs: str) -> str:
         """Create the URL to an Overdrive API endpoint.
 
@@ -227,16 +273,6 @@ class ClientCredentialsRequests(BaseOverdriveRequests):
         :raises OverdriveValidationError: If the page is not a shape we know.
         """
 
-        def response_data() -> ResponseData:
-            return ResponseData(
-                status_code=status_code,
-                url=url,
-                headers=Headers(headers),
-                text=content.decode(errors="replace"),
-                content=content,
-                extensions={},
-            )
-
         if status_code != 200:
             # Both callers are handed a 404 rather than having it raised, and
             # every field of a page is optional, so an error document would
@@ -244,18 +280,11 @@ class ClientCredentialsRequests(BaseOverdriveRequests):
             raise BadResponseException(
                 url,
                 f"Got status code {status_code} from Overdrive, expected 200.",
-                response_data(),
+                self._response_data(status_code, url, headers, content),
             )
-        try:
-            return BookListPage.model_validate_json(content)
-        except ValidationError as e:
-            self.log.exception("Unable to validate Overdrive book list page. %s", e)
-            raise OverdriveValidationError(
-                url,
-                "Error validating Overdrive book list page",
-                response_data(),
-                debug_message=str(e),
-            ) from e
+        return self._validate_body(
+            BookListPage, "book list page", status_code, url, headers, content
+        )
 
     @property
     def token_cache(self) -> ClientTokenCache:
@@ -482,6 +511,26 @@ class OverdriveClientRequests(ClientCredentialsRequests):
                 limit=str(limit),
                 collection_token=collection_token,
             )
+        )
+
+    def metadata(self, collection_token: str, item_id: str) -> MetadataResponse:
+        """Look up a title's metadata.
+
+        An unrecognized identifier is reported by Overdrive in the response
+        body rather than as an HTTP error, so the caller inspects
+        :attr:`MetadataResponse.error_code`.
+
+        :raises OverdriveValidationError: If the body is not a document we
+            can read.
+        """
+        url = self.endpoint(
+            self.METADATA_ENDPOINT,
+            collection_token=collection_token,
+            item_id=item_id,
+        )
+        status_code, headers, content = self.raw_get(url)
+        return self._validate_body(
+            MetadataResponse, "metadata", status_code, url, headers, content
         )
 
     def book_list_page(self, url: str) -> BookListPage:

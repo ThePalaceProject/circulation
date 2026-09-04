@@ -44,9 +44,13 @@ from palace.manager.integration.license.overdrive.model import (
     LibraryResponse,
     Link,
     LinkTemplate,
+    MetadataResponse,
     PatronInformation,
     RequestSpec,
     build_field_request,
+)
+from palace.manager.integration.license.overdrive.representation import (
+    OverdriveRepresentationExtractor,
 )
 from palace.manager.util.http.exception import ResponseData
 from tests.fixtures.files import OverdriveFilesFixture
@@ -884,3 +888,59 @@ class TestBookListPage:
         assert page.products is None
         assert page.total_items == 0
         assert page.link_safe("next") is None
+
+
+class TestMetadataResponse:
+    def test_raw_is_verbatim(
+        self, overdrive_files_fixture: OverdriveFilesFixture
+    ) -> None:
+        # The extractor reads the raw document, so it must survive parsing
+        # byte for byte.
+        data = overdrive_files_fixture.sample_data("overdrive_metadata.json")
+        response = MetadataResponse.model_validate_json(data)
+        assert response.raw == json.loads(data)
+
+    def test_raw_feeds_the_extractor(
+        self, overdrive_files_fixture: OverdriveFilesFixture
+    ) -> None:
+        # raw is what the extractor reads, and test_raw_is_verbatim already
+        # pins it to the document Overdrive sent.
+        data = overdrive_files_fixture.sample_data("overdrive_metadata.json")
+        response = MetadataResponse.model_validate_json(data)
+
+        bibliographic = OverdriveRepresentationExtractor.book_info_to_bibliographic(
+            response.raw
+        )
+        assert bibliographic is not None
+        assert bibliographic.title == "Agile Documentation"
+
+    def test_raw_is_left_alone_when_already_present(self) -> None:
+        """Round-tripping a model does not nest raw inside itself.
+
+        The validator fills raw from the document, so it has to leave a
+        document that already carries one exactly as it is.
+        """
+        original = MetadataResponse.model_validate({"id": "an-id", "title": "A book"})
+        again = MetadataResponse.model_validate(original.model_dump(by_alias=True))
+
+        assert again.raw == original.raw
+        assert "raw" not in again.raw
+
+    def test_error_response(self) -> None:
+        response = MetadataResponse.model_validate(
+            {
+                "errorCode": "NotFound",
+                "message": "Not found in Overdrive collection.",
+                "token": "7aebce0e-2e88-41b3-b6d3-82bf15f8e1a2",
+            }
+        )
+        assert response.error_code == "NotFound"
+        assert response.message == "Not found in Overdrive collection."
+        assert response.token == "7aebce0e-2e88-41b3-b6d3-82bf15f8e1a2"
+
+    def test_no_error(self, overdrive_files_fixture: OverdriveFilesFixture) -> None:
+        response = MetadataResponse.model_validate_json(
+            overdrive_files_fixture.sample_data("overdrive_metadata.json")
+        )
+        assert response.error_code is None
+        assert response.id == "3896665d-9d81-4cac-bd43-ffc5066de1f5"

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import datetime
-import json
 from collections.abc import Generator, Iterable
 from functools import partial
 from threading import Lock
@@ -83,6 +82,7 @@ from palace.manager.integration.license.overdrive.model import (
     Format,
     Holds as HoldsResponse,
     LibraryResponse,
+    MetadataResponse,
 )
 from palace.manager.integration.license.overdrive.representation import (
     OverdriveRepresentationExtractor,
@@ -510,15 +510,11 @@ class OverdriveAPI(
             # refresh. At that point we will send out events.
             yield from page_inventory
 
-    def metadata_lookup(self, identifier: Identifier) -> dict[str, Any]:
+    def metadata_lookup(self, identifier: Identifier) -> MetadataResponse:
         """Look up metadata for an Overdrive identifier."""
-        url = self.endpoint(
-            self.client_requests.METADATA_ENDPOINT,
-            collection_token=self.collection_token,
-            item_id=identifier.identifier,
+        return self.client_requests.metadata(
+            self.collection_token, identifier.identifier
         )
-        status_code, headers, content = self.get(url)
-        return json.loads(content)  # type: ignore[no-any-return]
 
     def website_id(self) -> str:
         return self.settings.overdrive_website_id
@@ -1227,7 +1223,7 @@ class OverdriveAPI(
         info = self.metadata_lookup(licensepool.identifier)
 
         bibliographic = OverdriveRepresentationExtractor.book_info_to_bibliographic(
-            info, include_bibliographic=True, include_formats=True
+            info.raw, include_bibliographic=True, include_formats=True
         )
         if not bibliographic:
             # No work to be done.

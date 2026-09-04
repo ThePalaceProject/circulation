@@ -19,6 +19,7 @@ from palace.manager.integration.license.overdrive.importer import (
     FeedImportResult,
     OverdriveImporter,
 )
+from palace.manager.integration.license.overdrive.model import MetadataResponse
 from palace.manager.integration.license.overdrive.representation import (
     OverdriveRepresentationExtractor,
 )
@@ -549,7 +550,9 @@ class TestOverdriveImporter:
         api.async_requests.fetch_book_info_list = AsyncMock(
             return_value=(mock_book_data, None)
         )
-        api.metadata_lookup = Mock(return_value={"title": "New Book"})
+        api.metadata_lookup = Mock(
+            return_value=MetadataResponse.model_validate({"title": "New Book"})
+        )
         # Mock extractor
         mock_bibliographic = Mock(spec=BibliographicData)
         mock_bibliographic.needs_apply.return_value = True
@@ -635,7 +638,9 @@ class TestOverdriveImporter:
         )
 
         # Mock metadata_lookup to return metadata for the book not in parent set
-        api.metadata_lookup = Mock(return_value={"title": "New Book"})
+        api.metadata_lookup = Mock(
+            return_value=MetadataResponse.model_validate({"title": "New Book"})
+        )
 
         # Mock extractor
         mock_bibliographic = Mock(spec=BibliographicData)

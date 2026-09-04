@@ -140,7 +140,7 @@ class OverdriveImporter(LoggerMixin):
             or IdentifierData.from_identifier(identifier)
             not in self._parent_identifiers
         ):
-            book["metadata"] = self._api.metadata_lookup(identifier=identifier)
+            book["metadata"] = self._api.metadata_lookup(identifier=identifier).raw
 
         # we need to check that there is metadata because it is possible that we attempted to fetch it, but we
         # didn't get anything back from overdrive (ie from the book list fetch above) or we did not attempt to

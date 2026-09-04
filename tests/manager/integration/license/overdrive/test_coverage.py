@@ -95,6 +95,28 @@ class TestOverdriveBibliographicCoverageProvider:
         assert failure.transient is False
         assert failure.exception == "ID not recognized by Overdrive: bad guid"
 
+    def test_unextractable_document_is_a_failure(
+        self,
+        overdrive_biblio_provider_fixture: OverdriveBibliographicCoverageProviderFixture,
+        db: DatabaseTransactionFixture,
+    ):
+        """A 200 that yields nothing to extract is reported, not ignored.
+
+        Overdrive answers with an error code for the identifiers it knows are
+        bad, so this is the case where it says nothing is wrong and still
+        gives us a document we cannot use.
+        """
+        fixture = overdrive_biblio_provider_fixture
+        identifier = db.identifier()
+
+        # No id in the document, which is what the extractor requires.
+        fixture.overdrive.mock_http.queue_response(200, content='{"title": "A book"}')
+
+        failure = fixture.provider.process_item(identifier)
+
+        assert isinstance(failure, CoverageFailure)
+        assert "Could not extract bibliographic data" in failure.exception
+
     def test_process_item_creates_presentation_ready_work(
         self,
         overdrive_biblio_provider_fixture: OverdriveBibliographicCoverageProviderFixture,

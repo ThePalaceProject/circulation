@@ -27,6 +27,7 @@ from palace.manager.integration.license.overdrive.model import (
     Checkouts,
     Format,
     Holds,
+    MetadataResponse,
     PatronInformation,
     RequestSpec,
 )
@@ -374,6 +375,60 @@ class TestOverdriveClientRequests:
         events = requests.events_url("a-collection-token", "2020-01-01T12:00:00Z", 300)
         assert "lastUpdateTime=2020-01-01T12%3A00%3A00Z" in events
         assert "limit=300" in events
+
+    def test_metadata(
+        self,
+        overdrive_client_requests: OverdriveClientRequestsFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
+    ) -> None:
+        """The metadata URL is built here now, so it is asserted here."""
+        overdrive_client_requests.queue_access_token_response()
+        overdrive_client_requests.client.queue_response(
+            200, content=overdrive_files_fixture.sample_data("overdrive_metadata.json")
+        )
+
+        response = overdrive_client_requests.requests.metadata(
+            "a-collection-token", "an-item-id"
+        )
+
+        assert isinstance(response, MetadataResponse)
+        assert response.error_code is None
+        assert overdrive_client_requests.client.requests[-1].endswith(
+            "/v1/collections/a-collection-token/products/an-item-id/metadata"
+        )
+
+    def test_metadata_error_envelope_is_returned_not_raised(
+        self, overdrive_client_requests: OverdriveClientRequestsFixture
+    ) -> None:
+        """An unknown title comes back as an envelope, whatever the status.
+
+        raw_get lets a 404 through rather than raising, and the caller
+        branches on error_code, so adding a status guard here the way the
+        book list page has one would break that quietly.
+        """
+        overdrive_client_requests.queue_access_token_response()
+        overdrive_client_requests.client.queue_response(
+            404,
+            content=json.dumps(
+                {"errorCode": "NotFound", "message": "Not found in collection."}
+            ),
+        )
+
+        response = overdrive_client_requests.requests.metadata("a-token", "an-item-id")
+
+        assert response.error_code == "NotFound"
+
+    def test_metadata_unparseable_is_raised(
+        self, overdrive_client_requests: OverdriveClientRequestsFixture
+    ) -> None:
+        """A body that is not a document is an Overdrive error, not a crash."""
+        overdrive_client_requests.queue_access_token_response()
+        overdrive_client_requests.client.queue_response(200, content="not json at all")
+
+        with pytest.raises(OverdriveValidationError) as excinfo:
+            overdrive_client_requests.requests.metadata("a-token", "an-item-id")
+
+        assert excinfo.value.problem_detail.debug_message is not None
 
     def test_book_list_page_error_status_is_raised(
         self, overdrive_client_requests: OverdriveClientRequestsFixture

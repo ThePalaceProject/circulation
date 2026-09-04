@@ -12,7 +12,7 @@ class OverdriveRawBibliographicScript(IdentifierInputScript):
         for collection in Collection.by_protocol(self._db, OverdriveAPI.label()):
             overdrive = OverdriveAPI(self._db, collection)
             for identifier in args.identifiers:
-                data = overdrive.metadata_lookup(identifier)
+                data = overdrive.metadata_lookup(identifier).raw
                 print(
                     json.dumps(data, sort_keys=True, indent=4, separators=(",", ": ")),
                     "\n",
