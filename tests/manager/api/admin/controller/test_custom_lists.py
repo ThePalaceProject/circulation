@@ -1,5 +1,4 @@
 import json
-import logging
 from typing import Any, Literal
 from unittest import mock
 
@@ -20,7 +19,6 @@ from palace.manager.api.admin.problem_details import (
     MISSING_CUSTOM_LIST,
 )
 from palace.manager.api.problem_details import CANNOT_DELETE_SHARED_LIST
-from palace.manager.core.query.customlist import CustomListQueries
 from palace.manager.search.pagination import Pagination
 from palace.manager.sqlalchemy.model.admin import Admin, AdminRole
 from palace.manager.sqlalchemy.model.collection import Collection
@@ -68,14 +66,7 @@ class TestCustomListsController:
             auto_update_enabled=False,
         )
 
-        # This will set the is_shared attribute
-        shared_library = admin_librarian_fixture.ctrl.db.library()
-        assert (
-            CustomListQueries.share_locally_with_library(
-                admin_librarian_fixture.ctrl.db.session, no_entries, shared_library
-            )
-            == True
-        )
+        no_entries.shared_locally = True
 
         with admin_librarian_fixture.request_context_with_library_and_admin("/"):
             response = (
@@ -871,9 +862,7 @@ class TestCustomListsController:
 
         library = admin_librarian_fixture.ctrl.db.library()
         admin_librarian_fixture.admin.add_role(AdminRole.LIBRARY_MANAGER, library)
-        CustomListQueries.share_locally_with_library(
-            admin_librarian_fixture.ctrl.db.session, list, library
-        )
+        list.shared_locally = True
         with admin_librarian_fixture.request_context_with_library_and_admin(
             "/", method="DELETE"
         ):
@@ -926,113 +915,92 @@ class TestCustomListsController:
             )
         return response
 
-    def test_share_locally_missing_collection(
-        self, admin_librarian_fixture: AdminLibrarianFixture
-    ):
-        s = self._setup_share_locally(admin_librarian_fixture)
-        response = self._share_locally(
-            s.list, s.primary_library, admin_librarian_fixture
-        )
-        assert response["failures"] == 2
-        assert response["successes"] == 0
-
     def test_share_locally_success(
         self, admin_librarian_fixture: AdminLibrarianFixture
     ):
         s = self._setup_share_locally(admin_librarian_fixture)
-        s.collection1.associated_libraries.append(s.shared_with)
         response = self._share_locally(
             s.list, s.primary_library, admin_librarian_fixture
         )
-        assert response["successes"] == 1
-        assert response["failures"] == 1  # The default library
+
+        # The list is shared with every other library on this Palace Manager:
+        # the one built by the fixture, plus the default library.
+        assert response["successes"] == 2
+        assert response["failures"] == 0
 
         admin_librarian_fixture.ctrl.db.session.refresh(s.list)
-        assert len(s.list.shared_locally_with_libraries) == 1
+        assert s.list.shared_locally is True
 
-        # Try again should have 0 more libraries as successes
+        # Sharing again is not an error and does not change anything.
         response = self._share_locally(
             s.list, s.primary_library, admin_librarian_fixture
         )
-        assert response["successes"] == 0
-        assert response["failures"] == 1  # The default library
+        assert response["successes"] == 2
+        assert response["failures"] == 0
+        assert s.list.shared_locally is True
 
-    def test_share_locally_with_invalid_entries(
-        self, admin_librarian_fixture: AdminLibrarianFixture, caplog
+    def test_share_locally_without_licensed_works(
+        self, admin_librarian_fixture: AdminLibrarianFixture
     ):
-        caplog.set_level(
-            logging.INFO, "palace.manager.core.query.customlist.CustomListQueries"
-        )
+        # A library that does not have the list's collection, and so cannot
+        # license its works, is still shared with. Sharing is all or nothing;
+        # the library's own lanes and feeds stay scoped to its collections.
         s = self._setup_share_locally(admin_librarian_fixture)
-        s.collection1.associated_libraries.append(s.shared_with)
-
-        # Second collection with work in list
-        collection2 = admin_librarian_fixture.ctrl.db.collection()
-        collection2.associated_libraries.append(s.primary_library)
-        w = admin_librarian_fixture.ctrl.db.work(collection=collection2)
-        s.list.add_entry(w)
-
-        response = self._share_locally(
-            s.list, s.primary_library, admin_librarian_fixture
-        )
-        assert response["failures"] == 2
-        assert response["successes"] == 0
-
-        assert self.message_found_n_times(
-            caplog, "This list contains 1 entry without an associated work", 0
-        )
-        assert self.message_found_n_times(
-            caplog, "Unable to share customlist: No license for work", 1
-        )
-
-    def test_share_locally_with_entry_with_missing_work(
-        self, admin_librarian_fixture: AdminLibrarianFixture, caplog
-    ):
-        caplog.set_level(
-            logging.INFO, "palace.manager.core.query.customlist.CustomListQueries"
-        )
-        s = self._setup_share_locally(admin_librarian_fixture)
-        s.collection1.associated_libraries.append(s.shared_with)
-
         w = admin_librarian_fixture.ctrl.db.work(collection=s.collection1)
-        entry, ignore = s.list.add_entry(w)
-
-        entry.work = None
-        entry.work_id = None
-
-        assert entry.edition is not None
+        s.list.add_entry(w)
+        assert s.collection1 not in s.shared_with.active_collections
 
         response = self._share_locally(
             s.list, s.primary_library, admin_librarian_fixture
         )
 
-        assert response["failures"] == 1  # The default library
-        assert response["successes"] == 1
-        assert self.message_found_n_times(
-            caplog, "This list contains 1 entry without an associated work", 1
+        assert response["successes"] == 2
+        assert response["failures"] == 0
+        assert s.list.shared_locally is True
+
+    def test_share_locally_includes_libraries_created_later(
+        self, admin_librarian_fixture: AdminLibrarianFixture
+    ):
+        """A library added after a list is shared can use it, with no re-share."""
+        s = self._setup_share_locally(admin_librarian_fixture)
+
+        unshared, ignore = create(
+            admin_librarian_fixture.ctrl.db.session,
+            CustomList,
+            name=admin_librarian_fixture.ctrl.db.fresh_str(),
+            data_source=s.list.data_source,
+            library=s.primary_library,
         )
 
-    def message_found_n_times(self, caplog, message: str, occurrences: int = 1):
-        return (
-            len(
-                [
-                    x
-                    for x in caplog.messages
-                    if x.__contains__(
-                        message,
-                    )
-                ]
+        self._share_locally(s.list, s.primary_library, admin_librarian_fixture)
+
+        # Only now does the library come into existence.
+        latecomer = admin_librarian_fixture.ctrl.db.library("latecomer")
+        admin_librarian_fixture.admin.add_role(AdminRole.LIBRARIAN, latecomer)
+
+        with admin_librarian_fixture.request_context_with_library_and_admin(
+            "/", method="GET", library=latecomer
+        ):
+            response = (
+                admin_librarian_fixture.manager.admin_custom_lists_controller.custom_lists()
             )
-            == occurrences
-        )
+
+        assert isinstance(response, dict)
+        listed = {list["id"]: list for list in response["custom_lists"]}
+
+        # The shared list is available, and behaves like any other shared list.
+        assert s.list.id in listed
+        assert listed[s.list.id]["is_owner"] is False
+        assert listed[s.list.id]["is_shared"] is True
+
+        # The list that was never shared remains unavailable.
+        assert unshared.id not in listed
 
     def test_share_locally_get(self, admin_librarian_fixture: AdminLibrarianFixture):
         """Does the GET method fetch shared lists"""
         s = self._setup_share_locally(admin_librarian_fixture)
-        s.collection1.associated_libraries.append(s.shared_with)
 
-        resp = self._share_locally(s.list, s.primary_library, admin_librarian_fixture)
-        assert resp["successes"] == 1
+        self._share_locally(s.list, s.primary_library, admin_librarian_fixture)
 
         admin_librarian_fixture.admin.add_role(AdminRole.LIBRARIAN, s.shared_with)
         with admin_librarian_fixture.request_context_with_library_and_admin(
@@ -1064,10 +1032,8 @@ class TestCustomListsController:
     def test_share_locally_delete(self, admin_librarian_fixture: AdminLibrarianFixture):
         """Test the deleting of a lists shared status"""
         s = self._setup_share_locally(admin_librarian_fixture)
-        s.collection1.associated_libraries.append(s.shared_with)
 
-        resp = self._share_locally(s.list, s.primary_library, admin_librarian_fixture)
-        assert resp["successes"] == 1
+        self._share_locally(s.list, s.primary_library, admin_librarian_fixture)
 
         # First, we are shared with a library which uses the list
         # so we cannot delete the share status
@@ -1096,12 +1062,11 @@ class TestCustomListsController:
             assert isinstance(response, flask.Response)
             assert response.status_code == 204
 
-        assert s.list.shared_locally_with_libraries == []
+        assert s.list.shared_locally is False
 
         # Third, it is in use by the owner library (not the shared library)
         # so the list can still be unshared
-        resp = self._share_locally(s.list, s.primary_library, admin_librarian_fixture)
-        assert resp["successes"] == 1
+        self._share_locally(s.list, s.primary_library, admin_librarian_fixture)
 
         lane_with_primary = admin_librarian_fixture.ctrl.db.lane(
             library=s.primary_library,
@@ -1116,7 +1081,7 @@ class TestCustomListsController:
             assert isinstance(response, flask.Response)
             assert response.status_code == 204
 
-        assert s.list.shared_locally_with_libraries == []
+        assert s.list.shared_locally is False
 
     def test_auto_update_edit(self, admin_librarian_fixture: AdminLibrarianFixture):
         w1 = admin_librarian_fixture.ctrl.db.work()

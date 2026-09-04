@@ -2,11 +2,7 @@ import pytest
 
 from palace.util.datetime_helpers import utc_now
 
-from palace.manager.sqlalchemy.model.customlist import (
-    CustomList,
-    CustomListEntry,
-    customlist_sharedlibrary,
-)
+from palace.manager.sqlalchemy.model.customlist import CustomList, CustomListEntry
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.util import get_one_or_create
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -356,33 +352,43 @@ class TestCustomList:
         list.update_size(db.session)
         assert 4 == list.size
 
+    def test_shared_locally_defaults_to_false(self, db: DatabaseTransactionFixture):
+        list, ignore = db.customlist(num_entries=0)
+        assert list.shared_locally is False
 
-class TestCustomListSharedLibrary:
-    def test_cascade(self, db: DatabaseTransactionFixture):
-        c1, _ = db.customlist()
-        l1 = db.library()
+    def test_shared_with_library(self, db: DatabaseTransactionFixture):
+        owner = db.library("owner")
+        other = db.library("other")
 
-        c1.shared_locally_with_libraries = [l1]
-        db.session.commit()
+        shared, ignore = db.customlist(num_entries=0)
+        shared.library = owner
+        shared.shared_locally = True
 
-        shared = (
-            db.session.query(customlist_sharedlibrary)
-            .filter(customlist_sharedlibrary.c.library_id == l1.id)
-            .all()
+        unshared, ignore = db.customlist(num_entries=0)
+        unshared.library = owner
+
+        owned_by_other, ignore = db.customlist(num_entries=0)
+        owned_by_other.library = other
+        owned_by_other.shared_locally = True
+
+        # The other library sees the shared list, but not the unshared one and
+        # not the one it owns itself.
+        assert db.session.scalars(CustomList.shared_with_library(other)).all() == [
+            shared
+        ]
+
+        # A library added after the list was shared sees it with no further
+        # action -- sharing is forward inclusive.
+        latecomer = db.library("latecomer")
+        assert (
+            shared
+            in db.session.scalars(CustomList.shared_with_library(latecomer)).all()
         )
-        assert len(shared) == 1
-        assert shared[0].customlist_id == c1.id
 
-        db.session.delete(c1)
-        db.session.commit()
-
-        # should be deleted on cascade
-        shared = (
-            db.session.query(customlist_sharedlibrary)
-            .filter(customlist_sharedlibrary.c.library_id == l1.id)
-            .all()
-        )
-        assert len(shared) == 0
+        # Deleting a library nulls its lists' library_id rather than deleting
+        # them. Such an ownerless list is still shared with everyone.
+        shared.library = None
+        assert shared in db.session.scalars(CustomList.shared_with_library(other)).all()
 
 
 class TestCustomListEntry:

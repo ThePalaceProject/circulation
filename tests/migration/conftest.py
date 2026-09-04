@@ -127,6 +127,53 @@ class AlembicDatabaseFixture:
         assert isinstance(library.id, int)
         return library.id
 
+    def fetch_customlist(self, customlist_id: int) -> Row:
+        with self._engine.begin() as connection:
+            result = connection.execute(
+                text("SELECT * FROM customlists WHERE id = :id"),
+                {"id": customlist_id},
+            )
+            return result.one()
+
+    def customlist(
+        self,
+        name: str | None = None,
+        library_id: int | None = None,
+    ) -> int:
+        """Insert a custom list.
+
+        ``size``, ``auto_update_enabled`` and ``auto_update_status`` are supplied
+        explicitly: they are NOT NULL with Python-side-only defaults, so the ORM
+        would fill them in but a raw insert must not omit them.
+        """
+        if name is None:
+            name = self.random_name()
+
+        with self._engine.begin() as connection:
+            customlist = connection.execute(
+                text(
+                    "INSERT INTO customlists "
+                    "(name, library_id, size, auto_update_enabled, auto_update_status) "
+                    "VALUES (:name, :library_id, 0, false, 'init') returning id"
+                ),
+                {"name": name, "library_id": library_id},
+            ).fetchone()
+
+        assert customlist is not None
+        assert isinstance(customlist.id, int)
+        return customlist.id
+
+    def share_customlist(self, customlist_id: int, library_id: int) -> None:
+        """Record a row in the pre-``shared_locally`` sharing join table."""
+        with self._engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO customlist_sharedlibraries "
+                    "(customlist_id, library_id) VALUES (:customlist_id, :library_id)"
+                ),
+                {"customlist_id": customlist_id, "library_id": library_id},
+            )
+
     def fetch_integration(self, integration_id: int) -> Row:
         with self._engine.begin() as connection:
             result = connection.execute(
