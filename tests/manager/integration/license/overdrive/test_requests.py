@@ -354,6 +354,59 @@ class TestOverdriveClientRequests:
         # Exactly one request was made for each error code, plus one for a token
         assert len(mock_web_server.requests()) == 8
 
+    def test_feed_urls_are_escaped(
+        self, overdrive_client_requests: OverdriveClientRequestsFixture
+    ) -> None:
+        """The feed URLs escape the characters Overdrive puts in them.
+
+        Both carry a colon in a query value, and the events feed carries a
+        space as well, so the escaping is the part of these that would break
+        without saying so.
+        """
+        requests = overdrive_client_requests.requests
+
+        products = requests.all_products_url("a-collection-token")
+        assert products.startswith("https://integration.api.overdrive.com")
+        assert "a-collection-token" in products
+        assert "sort=dateAdded%3Adesc" in products
+
+        # The caller formats the time as OverdriveAPI.TIME_FORMAT does.
+        events = requests.events_url("a-collection-token", "2020-01-01T12:00:00Z", 300)
+        assert "lastUpdateTime=2020-01-01T12%3A00%3A00Z" in events
+        assert "limit=300" in events
+
+    def test_book_list_page_error_status_is_raised(
+        self, overdrive_client_requests: OverdriveClientRequestsFixture
+    ) -> None:
+        """An error document is not an empty page.
+
+        raw_get hands a 404 back rather than raising it, and every field of a
+        page is optional, so without this the error would validate into a page
+        with no titles and read as an empty collection.
+        """
+        overdrive_client_requests.queue_access_token_response()
+        overdrive_client_requests.client.queue_response(
+            404, content=json.dumps({"errorCode": "NotFound", "message": "no"})
+        )
+
+        with pytest.raises(BadResponseException, match="Got status code 404"):
+            overdrive_client_requests.requests.book_list_page("http://example.com/feed")
+
+    def test_book_list_page_unparseable_is_raised(
+        self, overdrive_client_requests: OverdriveClientRequestsFixture
+    ) -> None:
+        """A page in a shape we do not know raises an Overdrive error."""
+        overdrive_client_requests.queue_access_token_response()
+        # totalItems is a count, so a word for it is not a page we can read.
+        overdrive_client_requests.client.queue_response(
+            200, content=json.dumps({"totalItems": "lots"})
+        )
+
+        with pytest.raises(OverdriveValidationError) as excinfo:
+            overdrive_client_requests.requests.book_list_page("http://example.com/feed")
+
+        assert excinfo.value.problem_detail.debug_message is not None
+
 
 class TestOverdrivePatronRequests:
     def test_refresh_patron_oauth_token(
@@ -1011,6 +1064,46 @@ class TestOverdriveAsyncRequests:
 
         assert next_endpoint is None
         assert len(book_info_list) == 1
+
+    async def test_fetch_book_info_list_error_status(
+        self, overdrive_async_requests: OverdriveAsyncRequestsFixture
+    ) -> None:
+        """A 404 during an import says so, rather than blaming the products.
+
+        The async client allows a 404 through rather than raising it, and an
+        error document parses into a page with no products, so without the
+        status check the import would report a missing 'products' key.
+        """
+        overdrive_async_requests.seed_token()
+        overdrive_async_requests.client.queue_response(
+            404, content={"errorCode": "NotFound", "message": "no"}
+        )
+
+        with pytest.raises(BadResponseException, match="Got status code 404"):
+            await overdrive_async_requests.requests.fetch_book_info_list(
+                BookInfoEndpoint(url="/books")
+            )
+
+    async def test_fetch_book_info_list_unparseable_page(
+        self, overdrive_async_requests: OverdriveAsyncRequestsFixture
+    ) -> None:
+        """A page in an unknown shape fails the same way on both paths.
+
+        The synchronous fetch translates this, and an import worker hitting
+        the same body should not get a bare pydantic error instead.
+        """
+        overdrive_async_requests.seed_token()
+        # totalItems is a count, so a word for it is not a page we can read.
+        overdrive_async_requests.client.queue_response(
+            200, content={"totalItems": "lots"}
+        )
+
+        with pytest.raises(OverdriveValidationError) as excinfo:
+            await overdrive_async_requests.requests.fetch_book_info_list(
+                BookInfoEndpoint(url="/books")
+            )
+
+        assert excinfo.value.problem_detail.debug_message is not None
 
     async def test_fetch_book_info_list_empty_collection(
         self,

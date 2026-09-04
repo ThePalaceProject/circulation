@@ -56,13 +56,11 @@ class OverdriveRepresentationExtractor(LoggerMixin):
         self.library_id = api.advantage_library_id
 
     @classmethod
-    def availability_link_list(cls, book_list: dict[str, Any]) -> list[dict[str, str]]:
+    def availability_link_list(
+        cls, products: list[dict[str, Any]]
+    ) -> list[dict[str, str]]:
         """:return: A list of dictionaries with keys `id`, `title`, `availability_link`."""
         l = []
-        if not "products" in book_list:
-            return []
-
-        products = book_list["products"]
         for product in products:
             if not "id" in product:
                 cls.logger().warning("No ID found in %r", product)
@@ -88,15 +86,6 @@ class OverdriveRepresentationExtractor(LoggerMixin):
                 )
             l.append(data)
         return l
-
-    @classmethod
-    def link(cls, page: dict[str, Any], rel: str) -> str | None:
-        if "links" in page and rel in page["links"]:
-            raw_link = page["links"][rel]["href"]
-            link = _make_link_safe(raw_link)
-        else:
-            link = None
-        return link
 
     _format_data_for_overdrive_format: dict[str, list[FormatData]] = {
         "ebook-overdrive": [

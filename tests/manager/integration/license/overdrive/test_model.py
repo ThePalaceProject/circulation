@@ -6,6 +6,7 @@ from uuid import uuid4
 import pytest
 from frozendict import frozendict
 from httpx import Headers
+from pydantic import ValidationError
 
 from palace.util.datetime_helpers import utc_now
 
@@ -33,6 +34,7 @@ from palace.manager.integration.license.overdrive.model import (
     Availability,
     AvailabilityAccount,
     AvailabilityType,
+    BookListPage,
     Checkout,
     Checkouts,
     ErrorResponse,
@@ -40,6 +42,7 @@ from palace.manager.integration.license.overdrive.model import (
     Hold,
     Holds,
     LibraryResponse,
+    Link,
     LinkTemplate,
     PatronInformation,
     RequestSpec,
@@ -812,3 +815,72 @@ class TestAdvantageAccountsResponse:
         assert entry.id == 7
         assert entry.name == "My Library"
         assert entry.collection_token == "tok789"
+
+
+class TestBookListPage:
+    def test_feed_links_tolerate_a_missing_type(self) -> None:
+        """A page is not lost over a link field nothing follows.
+
+        Only the href is read here, so requiring a type would let one link
+        abort a crawl. Link itself still requires it, because fulfillment
+        reads it off the contentlink to pick a delivery mechanism.
+        """
+        page = BookListPage.model_validate(
+            {"links": {"next": {"href": "http://example.com/2"}}}
+        )
+        assert page.link_safe("next") == "http://example.com/2"
+
+        with pytest.raises(ValidationError):
+            Link.model_validate({"href": "http://example.com/2"})
+
+    def test_book_list_page(
+        self, overdrive_files_fixture: OverdriveFilesFixture
+    ) -> None:
+        page = BookListPage.model_validate_json(
+            overdrive_files_fixture.sample_data("overdrive_book_list.json")
+        )
+        assert page.id == "v1L1BCgAAAA2C"
+        assert page.limit == 300
+        assert page.offset == 0
+        assert page.products is not None
+        assert len(page.products) == 3
+        # Products are left as raw documents for the extractor.
+        assert page.products[0]["id"] == "210bdcad-29b7-445f-8d05-cdbb40abc03a"
+
+    def test_link_safe(self, overdrive_files_fixture: OverdriveFilesFixture) -> None:
+        page = BookListPage.model_validate_json(
+            overdrive_files_fixture.sample_data(
+                "overdrive_book_list_with_next_link.json"
+            )
+        )
+        next_link = page.link_safe("next")
+        assert next_link is not None
+        assert "offset=1" in next_link
+
+        # A relation the page doesn't have gives None.
+        assert page.link_safe("nonexistent") is None
+
+    def test_link_safe_rewrites_availability_v1(self) -> None:
+        # _make_link_safe upgrades v1 availability links to v2, so that
+        # following a link never drops us back to the older API.
+        page = BookListPage.model_validate(
+            {
+                "links": {
+                    "next": {
+                        "href": "http://api.overdrive.com/v1/collections/x/products/y/availability",
+                        "type": "application/json",
+                    }
+                }
+            }
+        )
+        assert (
+            page.link_safe("next")
+            == "http://api.overdrive.com/v2/collections/x/products/y/availability"
+        )
+
+    def test_missing_products(self) -> None:
+        # Overdrive omits "products" entirely for an empty collection.
+        page = BookListPage.model_validate({"totalItems": 0, "limit": 100, "offset": 0})
+        assert page.products is None
+        assert page.total_items == 0
+        assert page.link_safe("next") is None

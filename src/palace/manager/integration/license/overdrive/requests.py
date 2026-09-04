@@ -9,7 +9,7 @@ and 401 retry behavior -- from the business logic in
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Mapping
 from dataclasses import dataclass
 from threading import Lock
 from typing import Any, Protocol, Unpack, overload
@@ -36,6 +36,7 @@ from palace.manager.integration.license.overdrive.exception import (
 )
 from palace.manager.integration.license.overdrive.model import (
     BaseOverdriveModel,
+    BookListPage,
     Checkout,
     Checkouts,
     ErrorResponse,
@@ -212,6 +213,49 @@ class ClientCredentialsRequests(BaseOverdriveRequests):
         self._token_cache = (
             token_cache if token_cache is not None else ClientTokenCache()
         )
+
+    def _parse_book_list_page(
+        self, status_code: int, url: str, headers: Mapping[str, str], content: bytes
+    ) -> BookListPage:
+        """Turn a feed body into a page, or say why it could not be.
+
+        The pieces are taken apart rather than as a ResponseData because that
+        decodes the body to text, and these pages run to megabytes on a crawl
+        where neither of the failures below normally happens.
+
+        :raises BadResponseException: If Overdrive refused the request.
+        :raises OverdriveValidationError: If the page is not a shape we know.
+        """
+
+        def response_data() -> ResponseData:
+            return ResponseData(
+                status_code=status_code,
+                url=url,
+                headers=Headers(headers),
+                text=content.decode(errors="replace"),
+                content=content,
+                extensions={},
+            )
+
+        if status_code != 200:
+            # Both callers are handed a 404 rather than having it raised, and
+            # every field of a page is optional, so an error document would
+            # otherwise validate into a feed with no titles.
+            raise BadResponseException(
+                url,
+                f"Got status code {status_code} from Overdrive, expected 200.",
+                response_data(),
+            )
+        try:
+            return BookListPage.model_validate_json(content)
+        except ValidationError as e:
+            self.log.exception("Unable to validate Overdrive book list page. %s", e)
+            raise OverdriveValidationError(
+                url,
+                "Error validating Overdrive book list page",
+                response_data(),
+                debug_message=str(e),
+            ) from e
 
     @property
     def token_cache(self) -> ClientTokenCache:
@@ -413,6 +457,44 @@ class OverdriveClientRequests(ClientCredentialsRequests):
         else:
             return status_code, headers, content
 
+    def all_products_url(self, collection_token: str) -> str:
+        """The URL of the collection's product feed, newest titles first."""
+        return _make_link_safe(
+            self.endpoint(
+                self.ALL_PRODUCTS_ENDPOINT,
+                collection_token=collection_token,
+                sort="dateAdded:desc",
+            )
+        )
+
+    def events_url(
+        self, collection_token: str, last_update_time: str, limit: int
+    ) -> str:
+        """The URL of the collection's feed of titles changed since a time."""
+        return _make_link_safe(
+            self.endpoint(
+                self.EVENTS_ENDPOINT,
+                # From https://developer.overdrive.com/apis/search:
+                # "**Note: When you search using the lastTitleUpdateTime or
+                # lastUpdateTime parameters, your results will be automatically
+                # sorted in ascending order (and all other sort options will be ignored)."
+                lastupdatetime=last_update_time,
+                limit=str(limit),
+                collection_token=collection_token,
+            )
+        )
+
+    def book_list_page(self, url: str) -> BookListPage:
+        """Fetch one page of a product or events feed.
+
+        These pages are not cached, because they change constantly.
+
+        :raises BadResponseException: If Overdrive refused the request.
+        :raises OverdriveValidationError: If the page is not a shape we know.
+        """
+        status_code, headers, content = self.raw_get(url, {})
+        return self._parse_book_list_page(status_code, url, headers, content)
+
 
 class OverdriveClientAuth(httpx.Auth):
     """Attaches the client credentials token, refreshing it on a 401.
@@ -502,13 +584,6 @@ class OverdriveAsyncRequests(ClientCredentialsRequests):
             )
         return self._store_token(response)
 
-    @staticmethod
-    def _page_link(page: dict[str, Any], rel: str) -> str | None:
-        """The href of the given link relation on a book list page, if present."""
-        if "links" in page and rel in page["links"]:
-            return _make_link_safe(page["links"][rel]["href"])
-        return None
-
     async def fetch_book_info_list(
         self,
         endpoint: BookInfoEndpoint,
@@ -533,31 +608,36 @@ class OverdriveAsyncRequests(ClientCredentialsRequests):
             books: dict[str, Any] = {}
             req = client.get(endpoint.url)
             response = await req
-            data = response.json()
-            next_url = self._page_link(data, self.NEXT_REL)
+            page = self._parse_book_list_page(
+                response.status_code,
+                str(response.url),
+                response.headers,
+                response.content,
+            )
+            next_url = page.link_safe(self.NEXT_REL)
             next_endpoint: BookInfoEndpoint | None = (
                 BookInfoEndpoint(next_url) if next_url else None
             )
             async_task_list = list()
-            response_products = data.get("products")
+            response_products = page.products
             if response_products is None:
                 # Overdrive omits the 'products' key entirely when a collection
                 # (or page) contains no titles. In that case 'totalItems' is 0
                 # and there is simply nothing to import, so we treat it as an
                 # empty page rather than an error.
-                if data.get("totalItems") == 0:
+                if page.total_items == 0:
                     return [], next_endpoint
 
                 self.log.warning(
                     f"Overdrive response missing 'products' key for endpoint {endpoint.url}.",
                     extra={
-                        "palace_response_data": data,
+                        "palace_response_data": response.text,
                         "palace_response_status_code": response.status_code,
                     },
                 )
                 raise BadResponseException(
                     endpoint.url,
-                    f"Overdrive response missing 'products' key. Response data: {data}",
+                    f"Overdrive response missing 'products' key. Response data: {response.text}",
                     response,
                 )
             for product in response_products:

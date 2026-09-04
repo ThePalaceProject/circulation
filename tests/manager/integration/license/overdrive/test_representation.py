@@ -14,7 +14,6 @@ from palace.manager.integration.license.overdrive.model import Availability
 from palace.manager.integration.license.overdrive.representation import (
     OverdriveRepresentationExtractor,
 )
-from palace.manager.integration.license.overdrive.util import _make_link_safe
 from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.contributor import Contributor
@@ -32,7 +31,9 @@ from tests.fixtures.overdrive import OverdriveAPIFixture
 class TestOverdriveRepresentationExtractor:
     def test_availability_info(self, overdrive_api_fixture: OverdriveAPIFixture):
         data, raw = overdrive_api_fixture.sample_json("overdrive_book_list.json")
-        availability = OverdriveRepresentationExtractor.availability_link_list(raw)
+        availability = OverdriveRepresentationExtractor.availability_link_list(
+            raw["products"]
+        )
         # Every item in the list has a few important values.
         for item in availability:
             for key in "availability_link", "author_name", "id", "title", "date_added":
@@ -53,7 +54,9 @@ class TestOverdriveRepresentationExtractor:
         data, raw = overdrive_api_fixture.sample_json(
             "overdrive_book_list_missing_data.json"
         )
-        [item] = OverdriveRepresentationExtractor.availability_link_list(raw)
+        [item] = OverdriveRepresentationExtractor.availability_link_list(
+            raw["products"]
+        )
 
         # We got a data structure -- full of missing data -- for the
         # item that has an ID.
@@ -65,13 +68,6 @@ class TestOverdriveRepresentationExtractor:
         # We did not get a data structure for the item that only has a
         # title, because an ID is required -- otherwise we don't know
         # what book we're talking about.
-
-    def test_link(self, overdrive_api_fixture: OverdriveAPIFixture):
-        data, raw = overdrive_api_fixture.sample_json("overdrive_book_list.json")
-        expect = _make_link_safe(
-            "http://api.overdrive.com/v1/collections/collection-id/products?limit=300&offset=0&lastupdatetime=2014-04-28%2009:25:09&sort=popularity:desc&formats=ebook-epub-open,ebook-epub-adobe,ebook-pdf-adobe,ebook-pdf-open"
-        )
-        assert expect == OverdriveRepresentationExtractor.link(raw, "first")
 
     def test_book_info_to_circulation(self, overdrive_api_fixture: OverdriveAPIFixture):
         # Tests that can convert an overdrive availability document into a CirculationData object.

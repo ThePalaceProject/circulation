@@ -5,7 +5,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from functools import cached_property
-from typing import Self, overload
+from typing import Any, Self, overload
 from urllib.parse import quote_plus
 
 from frozendict import frozendict
@@ -42,6 +42,7 @@ from palace.manager.integration.license.overdrive.exception import (
     NotFoundError,
     OverdriveResponseException,
 )
+from palace.manager.integration.license.overdrive.util import _make_link_safe
 from palace.manager.util.http.exception import ResponseData
 
 
@@ -140,6 +141,17 @@ class Link(BaseOverdriveModel):
 
     href: str
     type: str
+
+
+class FeedLink(BaseOverdriveModel):
+    """A link on a feed envelope.
+
+    Separate from :class:`Link` because only the href is ever followed here,
+    and a page of titles should not be lost over a field nothing reads.
+    """
+
+    href: str
+    type: str | None = None
 
 
 class LinkTemplate(Link):
@@ -527,6 +539,31 @@ class PatronInformation(BaseOverdriveModel):
         default_factory=dict, alias="linkTemplates"
     )
     actions: list[dict[str, Action]] = Field(default_factory=list)
+
+
+class BookListPage(BaseOverdriveModel):
+    """One page of a product or events feed.
+
+    The products themselves are left as raw documents: they are handed
+    straight to OverdriveRepresentationExtractor, which reads far more of
+    the Overdrive schema than we model here.
+
+    See: https://developer.overdrive.com/apis/products
+    """
+
+    id: str | None = None
+    # Overdrive omits totalItems on some feeds, and omits products entirely
+    # when a collection or page has no titles.
+    total_items: int | None = Field(None, alias="totalItems")
+    limit: int | None = None
+    offset: int | None = None
+    links: dict[str, FeedLink] = Field(default_factory=dict)
+    products: list[dict[str, Any]] | None = None
+
+    def link_safe(self, rel: str) -> str | None:
+        """The href of the given link relation, made safe to request."""
+        link = self.links.get(rel)
+        return _make_link_safe(link.href) if link else None
 
 
 class LibraryResponse(BaseOverdriveModel):
