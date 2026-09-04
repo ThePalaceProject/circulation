@@ -12,7 +12,10 @@ class OverdriveRawCirculationScript(IdentifierInputScript):
         for collection in Collection.by_protocol(self._db, OverdriveAPI.label()):
             overdrive = OverdriveAPI(self._db, collection)
             for identifier in args.identifiers:
-                (_, _, _, content) = overdrive.circulation_lookup(identifier.identifier)
+                url = overdrive.client_requests.availability_url(
+                    overdrive.collection_token, identifier.identifier
+                )
+                _, _, content = overdrive.client_requests.raw_get(url)
                 data = json.loads(content)
                 print(
                     json.dumps(data, sort_keys=True, indent=4, separators=(",", ": ")),

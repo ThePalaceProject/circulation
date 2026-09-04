@@ -162,16 +162,6 @@ class TestOverdriveAPI:
         l2 = db.library()
         assert api.ils_name(l2) == "default"
 
-    def test_get_success(
-        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
-    ):
-        api = overdrive_api_fixture.api
-        http = overdrive_api_fixture.mock_http
-        http.queue_response(200, content="some content")
-        status_code, headers, content = api.get(db.fresh_url(), {})
-        assert 200 == status_code
-        assert b"some content" == content
-
     def test_get_library_refreshes_expired_token(
         self, overdrive_api_fixture: OverdriveAPIFixture
     ):
@@ -1434,60 +1424,6 @@ class TestOverdriveAPI:
         with pytest.raises(CannotLoadConfiguration, match="bad credentials"):
             api.collection_token
 
-    def test_circulation_lookup(
-        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
-    ):
-        """Test the method that actually looks up Overdrive circulation
-        information.
-        """
-
-        http = overdrive_api_fixture.mock_http
-        api = overdrive_api_fixture.api
-
-        http.queue_response(200, content="foo")
-
-        # If passed an identifier, we'll use the endpoint() method to
-        # construct a v2 availability URL and make a request to
-        # it.
-
-        book, (
-            status_code,
-            headers,
-            content,
-        ) = api.circulation_lookup("an-identifier")
-        assert book == dict(id="an-identifier")
-        assert status_code == 200
-        assert content == b"foo"
-
-        request_url = http.requests.pop()
-        expect_url = api.endpoint(
-            api.client_requests.AVAILABILITY_ENDPOINT,
-            collection_token=api.collection_token,
-            product_id="an-identifier",
-        )
-        assert request_url == expect_url
-        assert "/v2/collections" in request_url
-
-        # If passed the result of an API call that includes an
-        # availability link, we'll clean up the URL in the link and
-        # use it to get our availability data.
-        http.queue_response(200, content="foo")
-        v1 = "https://qa.api.overdrive.com/v1/collections/abcde/products/12345/availability"
-        v2 = "https://qa.api.overdrive.com/v2/collections/abcde/products/12345/availability"
-        previous_result = dict(availability_link=v1)
-        book, (
-            status_code,
-            headers,
-            content,
-        ) = api.circulation_lookup(previous_result)
-        assert book == previous_result
-        assert status_code == 200
-        assert content == b"foo"
-        request_url = http.requests.pop()
-
-        # The v1 URL was converted to a v2 url.
-        assert request_url == v2
-
     def test_update_licensepool_error(
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
     ):
@@ -1502,6 +1438,31 @@ class TestOverdriveAPI:
         book = dict(id=identifier.identifier, availability_link=db.fresh_url())
         pool, was_new, changed = overdrive_api_fixture.api.update_licensepool(book)
         assert pool is None
+
+    def test_update_licensepool_url_resolution_error(
+        self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
+    ):
+        """Failing to build the URL is handled like failing to fetch it.
+
+        Resolving a bare Overdrive ID reaches the collection token, which can
+        make its own request. The reaper works through identifiers one at a
+        time, and the dispatcher asks for availability while handling
+        NoLicenses, so an error escaping here would take out a whole batch or
+        replace the error a patron should have seen.
+        """
+        api = overdrive_api_fixture.api
+        identifier = db.identifier(identifier_type=Identifier.OVERDRIVE_ID)
+
+        with patch.object(
+            api,
+            "_resolve_availability_request",
+            side_effect=CannotLoadConfiguration("no token"),
+        ):
+            pool, was_new, changed = api.update_licensepool(identifier.identifier)
+
+        assert pool is None
+        assert was_new is None
+        assert changed is False
 
     def test_update_licensepool_not_found(
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
