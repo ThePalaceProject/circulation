@@ -1400,6 +1400,12 @@ class Work(Base, LoggerMixin):
         if self.target_age != new_target_age:
             self.target_age = new_target_age
 
+        # Never let a recalculation erase a known fiction status. If the
+        # classifier came back with no determination (e.g. every classification
+        # it gathered abstained), keep whatever we already had rather than
+        # writing NULL over a previously-determined status.
+        if new_fiction is None and old_fiction is not None:
+            new_fiction = old_fiction
         if new_fiction != old_fiction:
             self.fiction = new_fiction
         # Never let a recalculation erase a known audience. If the classifier

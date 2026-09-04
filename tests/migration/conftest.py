@@ -279,6 +279,45 @@ class AlembicDatabaseFixture:
         assert isinstance(identifier_record.id, int)
         return identifier_record.id
 
+    def subject(
+        self,
+        subject_type: str,
+        identifier: str,
+        name: str | None = None,
+        fiction: bool | None = None,
+        checked: bool = True,
+    ) -> int:
+        """Create a subject record."""
+        with self._engine.begin() as connection:
+            subject_record = connection.execute(
+                text(
+                    """
+                    INSERT INTO subjects (type, identifier, name, fiction, checked, locked)
+                    VALUES (:type, :identifier, :name, :fiction, :checked, false)
+                    RETURNING id
+                """
+                ),
+                {
+                    "type": subject_type,
+                    "identifier": identifier,
+                    "name": name,
+                    "fiction": fiction,
+                    "checked": checked,
+                },
+            ).fetchone()
+
+        assert subject_record is not None
+        assert isinstance(subject_record.id, int)
+        return subject_record.id
+
+    def fetch_subject(self, subject_id: int) -> Row:
+        with self._engine.begin() as connection:
+            result = connection.execute(
+                text("SELECT * FROM subjects WHERE id = :id"),
+                {"id": subject_id},
+            )
+            return result.one()
+
     def collection(
         self,
         integration_configuration_id: int,

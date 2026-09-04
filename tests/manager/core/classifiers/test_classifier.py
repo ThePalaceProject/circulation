@@ -827,6 +827,38 @@ class TestWorkClassifier:
         genres = data.classifier.genres(False)
         assert [(nonfiction_genre.genredata, 100)] == list(genres.items())
 
+    def test_unrecognized_bisac_codes_do_not_imply_nonfiction(
+        self, work_classifier_fixture: TestWorkClassifierFixture
+    ):
+        """An unresolvable BISAC code must not cast a nonfiction vote.
+
+        Everything on the Palace Marketplace category scheme arrives typed as
+        BISAC, including codes that describe language or territory rather than
+        subject matter. Each of those used to vote nonfiction, so enough of
+        them could outvote the genuine fiction codes on the same book.
+        """
+        data = work_classifier_fixture
+        session = data.transaction.session
+        source = DataSource.lookup(session, DataSource.GUTENBERG, autocreate=True)
+
+        for code, name in [("INFEN000", "English"), ("INFENUSA", "USA")]:
+            data.classifier.add(
+                data.identifier.classify(source, Subject.BISAC, code, name, weight=1)
+            )
+
+        # No vote either way, so no determination.
+        assert 0 == data.classifier.fiction_weights[False]
+        assert 0 == data.classifier.fiction_weights[True]
+        assert None == data.classifier.fiction()
+
+        # A single code that does resolve is now decisive.
+        data.classifier.add(
+            data.identifier.classify(
+                source, Subject.BISAC, "FBFIC014000", "Historical", weight=1
+            )
+        )
+        assert True == data.classifier.fiction()
+
     def test_genres_consolidated_before_classification(
         self, work_classifier_fixture: TestWorkClassifierFixture
     ):

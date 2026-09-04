@@ -393,6 +393,63 @@ class TestBISACClassifier:
         assert subject.fiction is True
 
     @pytest.mark.parametrize(
+        "identifier,stored_name",
+        [
+            pytest.param("INFEN000", None, id="no_name"),
+            pytest.param("INFEN000", "English", id="language_name"),
+            pytest.param("INFENUSA", "USA", id="territory_name"),
+            pytest.param("FBINFEN000", "English", id="fb_prefixed"),
+            pytest.param("FBZZZ000000", "Historical", id="partial_bisac_heading"),
+        ],
+    )
+    def test_unrecognized_code_abstains(
+        self, identifier: str, stored_name: str | None
+    ) -> None:
+        """A code that is not BISAC carries no fiction or audience signal.
+
+        Everything on the Feedbooks/Palace Marketplace category scheme arrives
+        typed as BISAC, including codes that describe language or territory
+        rather than subject matter. When such a code cannot be resolved, the
+        name we fall back on is a distributor fragment, so the rulesets' "not
+        filed under Fiction, therefore nonfiction" and "no juvenile heading,
+        therefore Adult" inferences do not apply. Abstaining keeps an
+        unresolvable code from voting against the codes that did resolve.
+        """
+        subject = self._subject(identifier, stored_name)
+        assert subject.fiction is None
+        assert subject.audience is None
+
+    def test_unrecognized_code_still_uses_keyword_fallback(self) -> None:
+        """Abstaining is not the same as ignoring the name.
+
+        An unrecognized code skips the BISAC rulesets but still goes through
+        the keyword classifier, so a distributor name that does carry a signal
+        is honored.
+        """
+        subject = self._subject("INFEN000", "Science Fiction")
+        assert subject.fiction is True
+
+        subject = self._subject("INFEN000", "Nonfiction")
+        assert subject.fiction is False
+
+    def test_recognized_code_unaffected_by_abstention(self) -> None:
+        """Codes that do resolve are classified exactly as before.
+
+        These are the Palace Marketplace codes whose partial names
+        ("Historical", "Literary") would each vote nonfiction if the canonical
+        lookup were ever to miss.
+        """
+        for identifier, stored_name in [
+            ("FBFIC000000", "Fiction"),
+            ("FBFIC014000", "Historical"),
+            ("FBFIC016000", "Humorous"),
+            ("FBFIC019000", "Literary"),
+        ]:
+            subject = self._subject(identifier, stored_name)
+            assert subject.fiction is True
+            assert subject.audience == Classifier.AUDIENCE_ADULT
+
+    @pytest.mark.parametrize(
         "identifier,expected",
         [
             pytest.param(
