@@ -829,7 +829,7 @@ class TestWorkClassifier:
 
     def test_unrecognized_bisac_codes_do_not_imply_nonfiction(
         self, work_classifier_fixture: TestWorkClassifierFixture
-    ):
+    ) -> None:
         """An unresolvable BISAC code must not cast a nonfiction vote.
 
         Everything on the Palace Marketplace category scheme arrives typed as

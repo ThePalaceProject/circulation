@@ -654,21 +654,32 @@ class BISACClassifier(Classifier):
         m(classifier.Life_Strategies, nonfiction, social_topics),
     ]
 
+    # A BISAC code is a single unpunctuated token (e.g. "FIC014000"). Some
+    # distributors instead put the BISAC *heading* in the identifier field
+    # (e.g. Boundless sends "FICTION / Horror"), which is not a failed code --
+    # it is a name, and is matched as one.
+    _CODE_SHAPED = re.compile(r"^[A-Za-z0-9]+$")
+
     @classmethod
     def _unrecognized_code(cls, identifier: str | None) -> bool:
-        """Was a subject identifier supplied that is not an official BISAC code?
+        """Was a BISAC code supplied that cannot be resolved to a real one?
 
         By the time a classification method runs, `scrub_identifier` has already
         stripped the "FB" prefix and "N" suffix used by some distributors and
-        applied `NON_STANDARD_CODE_ALIASES`, so an identifier that is still
-        absent from `NAMES` is not a BISAC code at all. That matters because it
-        also means `name` is whatever fragment the distributor supplied (e.g.
-        "Historical", "English") rather than a canonical BISAC heading.
+        applied `NON_STANDARD_CODE_ALIASES`, so a code-shaped identifier that is
+        still absent from `NAMES` is not a BISAC code at all. That matters
+        because it also means `name` is whatever fragment the distributor
+        supplied (e.g. "Historical", "English literature") rather than a
+        canonical BISAC heading.
 
-        A subject that carries a name but no identifier is not affected: there
-        the name is expected to be a real BISAC heading.
+        Two kinds of subject are deliberately excluded, because for both of them
+        `name` is expected to be a real BISAC heading and is matched as one: a
+        subject with no identifier, and a subject whose identifier is a heading
+        rather than a code.
         """
-        return bool(identifier) and identifier not in cls.NAMES
+        if not identifier or not cls._CODE_SHAPED.match(identifier):
+            return False
+        return identifier not in cls.NAMES
 
     @classmethod
     def is_fiction(cls, identifier, name):
