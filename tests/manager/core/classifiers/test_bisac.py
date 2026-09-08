@@ -432,6 +432,33 @@ class TestBISACClassifier:
         subject = self._subject("INFEN000", "Nonfiction")
         assert subject.fiction is False
 
+    @pytest.mark.parametrize(
+        "identifier,expected_fiction",
+        [
+            pytest.param("FICTION / Horror", True, id="fiction_heading"),
+            pytest.param(
+                "FICTION / Science Fiction / Time Travel", True, id="deep_heading"
+            ),
+            pytest.param("HISTORY / General", False, id="nonfiction_heading"),
+            pytest.param(
+                "Antiques & Collectibles / Kitchenware", False, id="mixed_case_heading"
+            ),
+        ],
+    )
+    def test_heading_in_identifier_field_is_matched_as_a_name(
+        self, identifier: str, expected_fiction: bool
+    ) -> None:
+        """Some distributors put the BISAC heading in the identifier field.
+
+        Boundless sends e.g. "FICTION / Horror" as the subject identifier rather
+        than "FIC015000". That is a name, not a code that failed to resolve, so
+        it must still be matched against the rulesets. Regression guard for the
+        abstention introduced alongside it.
+        """
+        subject = self._subject(identifier, None)
+        assert subject.fiction is expected_fiction
+        assert subject.audience == Classifier.AUDIENCE_ADULT
+
     def test_recognized_code_unaffected_by_abstention(self) -> None:
         """Codes that do resolve are classified exactly as before.
 
