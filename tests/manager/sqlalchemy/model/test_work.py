@@ -391,7 +391,7 @@ class TestWork:
 
     def test_assign_genres_does_not_overwrite_fiction_with_null(
         self, db: DatabaseTransactionFixture
-    ):
+    ) -> None:
         # Defensive invariant: when a recalculation pass reaches no fiction
         # determination (e.g. every classification it gathered abstained), a
         # previously-determined fiction status must be kept rather than
