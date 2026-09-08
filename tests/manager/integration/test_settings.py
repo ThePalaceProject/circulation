@@ -1,4 +1,5 @@
 import logging
+from enum import Enum
 from functools import partial
 from typing import Annotated, Any, Self
 from unittest.mock import MagicMock
@@ -26,6 +27,13 @@ from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailExcep
 from tests.fixtures.problem_detail import raises_problem_detail
 
 mock_problem_detail = ProblemDetail("http://test.com", 400, "test", "testing 123")
+
+
+# Arbitrary enum used only to exercise FormMetadata.get_form_value normalization
+# in tests. It does not correspond to any enum in the application code.
+class MockColorEnum(Enum):
+    RED = "red"
+    BLUE = "blue"
 
 
 class MockSettings(BaseSettings):
@@ -548,6 +556,30 @@ class TestBaseSettings:
                 'Configuration form item (label="Test", key=test) does not have '
                 "a default value or factory and yet its required property is set to False"
             ) in caplog.text
+
+        @pytest.mark.parametrize(
+            "value, expected",
+            [
+                pytest.param(None, "", id="none-becomes-empty-string"),
+                pytest.param(MockColorEnum.RED, "red", id="enum-unwrapped"),
+                pytest.param(True, "true", id="bool-lowercased"),
+                pytest.param(42, "42", id="int-stringified"),
+                pytest.param("text", "text", id="string-unchanged"),
+                pytest.param(
+                    [MockColorEnum.RED, MockColorEnum.BLUE],
+                    ["red", "blue"],
+                    id="enum-list-elements-unwrapped",
+                ),
+                pytest.param(("red", "blue"), ["red", "blue"], id="tuple-becomes-list"),
+                pytest.param(
+                    ["red", 1], ["red", 1], id="non-enum-list-elements-unchanged"
+                ),
+            ],
+        )
+        def test_get_form_value(self, value: Any, expected: Any) -> None:
+            """List defaults (e.g. a multi-select of enums) must be normalized
+            element-wise so the admin interface never receives raw Enum objects."""
+            assert FormMetadata.get_form_value(value) == expected
 
         @pytest.mark.parametrize(
             "field_type, monospace, in_output",
