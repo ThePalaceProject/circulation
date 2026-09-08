@@ -18,11 +18,17 @@ scores the INF* family as fiction. This migration resets checked=False on the
 affected subjects so classify_unchecked_subjects re-scores them and recalculates
 the works they are attached to.
 
-Scope is deliberately narrow: only non-canonical identifiers that currently hold
-fiction=False. Canonical BISAC codes are untouched (the great majority of those
-are legitimately nonfiction), as are non-canonical codes already holding
-fiction=True or NULL, which are not implicated and whose reset would enlarge the
-reindex for no benefit.
+Rather than approximating "not a real BISAC code" with a pattern, the selection
+asks BISACClassifier itself and resets every subject stored as nonfiction that
+the classifier no longer scores that way. That keeps the two definitions from
+drifting apart: a pattern match on the identifier would, for instance, accept a
+shape-valid but non-existent code like FBZZZ000000 that the classifier rejects,
+leaving its fabricated nonfiction vote in place forever.
+
+Scope stays narrow: only subjects currently holding fiction=False are examined,
+so codes already scored as fiction or as unknown are left alone. The great
+majority of the rows examined are legitimate nonfiction BISAC codes and are
+untouched.
 
 Revision ID: 52d1bbdd4671
 Revises: de6ae4bbf4a5
@@ -33,6 +39,7 @@ Create Date: 2026-09-02 17:26:39.209822+00:00
 import sqlalchemy as sa
 from alembic import op
 
+from palace.manager.core.classifier.bisac import BISACClassifier
 from palace.manager.util.migration.helpers import migration_logger
 
 # revision identifiers, used by Alembic.
@@ -43,37 +50,48 @@ depends_on = None
 
 log = migration_logger(revision)
 
-# An official BISAC code is three letters followed by six digits. Some
-# distributors add an "FB" prefix and/or an "N" suffix, both of which
-# BISACClassifier.scrub_identifier strips before looking the code up. Anything
-# that does not match this shape is not a BISAC code.
-CANONICAL_BISAC_CODE = r"^(FB)?[A-Z]{3}[0-9]{6}N?$"
-
 
 def upgrade() -> None:
     conn = op.get_bind()
 
-    result = conn.execute(
+    candidates = conn.execute(
         sa.text(
             """
-            UPDATE subjects
-            SET checked = false
+            SELECT id, identifier, name
+            FROM subjects
             WHERE type = 'BISAC'
               AND checked
               AND fiction IS FALSE
-              AND identifier !~ :canonical_bisac_code
-            RETURNING id, identifier, name
             """
-        ),
-        {"canonical_bisac_code": CANONICAL_BISAC_CODE},
-    )
-    rows = list(result)
-    for row in rows:
-        log.info(
-            f"Reset checked=False for subject id={row[0]} "
-            f"identifier={row[1]!r} name={row[2]!r}"
         )
-    log.info(f"Reset checked=False for {len(rows)} non-BISAC nonfiction subjects")
+    ).all()
+
+    stale_ids = []
+    for row in candidates:
+        if not row.identifier and not row.name:
+            # Nothing to classify. Subject.lookup will not create such a row,
+            # but the columns are nullable, so don't assume.
+            continue
+        identifier, name = BISACClassifier.scrub_identifier_and_name(
+            row.identifier, row.name
+        )
+        if BISACClassifier.is_fiction(identifier, name) is not False:
+            stale_ids.append(row.id)
+            log.info(
+                f"Reset checked=False for subject id={row.id} "
+                f"identifier={row.identifier!r} name={row.name!r}"
+            )
+
+    if stale_ids:
+        conn.execute(
+            sa.text("UPDATE subjects SET checked = false WHERE id = ANY(:ids)"),
+            {"ids": stale_ids},
+        )
+
+    log.info(
+        f"Reset checked=False for {len(stale_ids)} of {len(candidates)} "
+        f"BISAC subjects stored as nonfiction"
+    )
 
 
 def downgrade() -> None:

@@ -16,16 +16,22 @@ REVISION = "52d1bbdd4671"
         pytest.param("FBSACT000000", "News and investigations", id="vendor_code"),
         pytest.param("FSHUM000000N", "Human science", id="vendor_code_with_n_suffix"),
         pytest.param("SOCO32000", None, id="malformed_code_without_name"),
+        pytest.param("FBZZZ000000", "Historical", id="shape_valid_but_nonexistent"),
+        pytest.param("FBFIC014000", "Historical", id="stale_canonical_fiction_code"),
     ],
 )
-def test_resets_non_canonical_nonfiction_subjects(
+def test_resets_subjects_no_longer_scored_as_nonfiction(
     alembic_runner: MigrationContext,
     alembic_database: AlembicDatabaseFixture,
     identifier: str,
     name: str | None,
 ) -> None:
-    """Codes that are not BISAC at all, holding a fabricated fiction=False, are
-    marked unchecked so classify_unchecked_subjects re-scores them."""
+    """Subjects stored as nonfiction that the classifier no longer scores that
+    way are marked unchecked, so classify_unchecked_subjects re-scores them.
+
+    Covers both codes that are not BISAC at all and codes that merely look like
+    one (FBZZZ000000), which a pattern-based predicate would wrongly accept.
+    """
     alembic_runner.migrate_down_to(REVISION)
     alembic_runner.migrate_down_one()
 
@@ -39,15 +45,16 @@ def test_resets_non_canonical_nonfiction_subjects(
 
 
 @pytest.mark.parametrize(
-    "subject_type,identifier,fiction",
+    "subject_type,identifier,name,fiction",
     [
-        pytest.param("BISAC", "FIC014000", False, id="canonical_code"),
-        pytest.param("BISAC", "FBFIC014000", False, id="canonical_fb_prefixed"),
-        pytest.param("BISAC", "FBJUV000000N", False, id="canonical_fb_and_n"),
-        pytest.param("BISAC", "HIS027000", False, id="canonical_real_nonfiction"),
-        pytest.param("BISAC", "INFEN000", True, id="non_canonical_already_fiction"),
-        pytest.param("BISAC", "INFEN000", None, id="non_canonical_already_null"),
-        pytest.param("tag", "INFEN000", False, id="not_a_bisac_subject"),
+        pytest.param("BISAC", "HIS027000", None, False, id="real_nonfiction_code"),
+        pytest.param("BISAC", "HIS000000", None, False, id="real_nonfiction_general"),
+        pytest.param(
+            "BISAC", "HISTORY / General", None, False, id="nonfiction_heading"
+        ),
+        pytest.param("BISAC", "INFEN000", None, True, id="already_scored_fiction"),
+        pytest.param("BISAC", "INFEN000", None, None, id="already_scored_unknown"),
+        pytest.param("tag", "INFEN000", None, False, id="not_a_bisac_subject"),
     ],
 )
 def test_leaves_everything_else_checked(
@@ -55,15 +62,17 @@ def test_leaves_everything_else_checked(
     alembic_database: AlembicDatabaseFixture,
     subject_type: str,
     identifier: str,
+    name: str | None,
     fiction: bool | None,
 ) -> None:
-    """The reset is narrow: canonical BISAC codes, non-canonical codes that are
-    not voting nonfiction, and non-BISAC subject types are all left alone."""
+    """Legitimate nonfiction codes keep their value, and subjects outside the
+    examined set -- already scored as fiction or unknown, or not BISAC-typed --
+    are not touched."""
     alembic_runner.migrate_down_to(REVISION)
     alembic_runner.migrate_down_one()
 
     subject_id = alembic_database.subject(
-        subject_type, identifier, fiction=fiction, checked=True
+        subject_type, identifier, name=name, fiction=fiction, checked=True
     )
 
     alembic_runner.migrate_up_one()
