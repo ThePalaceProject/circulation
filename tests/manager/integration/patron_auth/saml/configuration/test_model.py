@@ -2,17 +2,22 @@ import json
 import logging
 from collections.abc import Callable
 from datetime import datetime
+from typing import Any
 from unittest.mock import MagicMock, call, create_autospec
 
 import pytest
 import sqlalchemy
+from werkzeug.datastructures import ImmutableMultiDict
 
+from palace.manager.api.admin.form_data import ProcessFormData
 from palace.manager.api.admin.problem_details import (
     INCOMPLETE_CONFIGURATION,
     INVALID_CONFIGURATION_OPTION,
 )
 from palace.manager.integration.patron_auth.saml.configuration.model import (
     ACS_SELECTION_POLICY_LABELS,
+    SAMLAuthnContextClass,
+    SAMLAuthnContextComparison,
     SAMLOneLoginConfiguration,
     SAMLWebSSOAuthSettings,
 )
@@ -723,6 +728,140 @@ class TestSAMLSettings:
             exc_info.value.problem_detail.detail or ""
         )
 
+    def test_requested_authn_context_defaults(self) -> None:
+        """The defaults preserve the request behavior integrations had before
+        these settings existed, when the OneLogin toolkit's built-in default
+        requested PasswordProtectedTransport with exact comparison."""
+        settings = SAMLWebSSOAuthSettings()
+
+        assert settings.requested_authn_context_classes == [
+            SAMLAuthnContextClass.PASSWORD_PROTECTED_TRANSPORT
+        ]
+        assert (
+            settings.requested_authn_context_comparison
+            is SAMLAuthnContextComparison.EXACT
+        )
+
+    def test_requested_authn_context_survives_settings_dict_round_trip(self) -> None:
+        """settings_dict is stored as JSONB, so the values have to survive that trip."""
+        settings = SAMLWebSSOAuthSettings(
+            requested_authn_context_classes=[
+                SAMLAuthnContextClass.PASSWORD,
+                SAMLAuthnContextClass.KERBEROS,
+            ],
+            requested_authn_context_comparison=SAMLAuthnContextComparison.MINIMUM,
+        )
+
+        settings_dict = json.loads(json_serializer(settings.model_dump()))
+
+        assert settings_dict["requested_authn_context_classes"] == [
+            SAMLAuthnContextClass.PASSWORD.value,
+            SAMLAuthnContextClass.KERBEROS.value,
+        ]
+        assert (
+            settings_dict["requested_authn_context_comparison"]
+            == SAMLAuthnContextComparison.MINIMUM.value
+        )
+
+        round_tripped = SAMLWebSSOAuthSettings(**settings_dict)
+
+        assert round_tripped.requested_authn_context_classes == [
+            SAMLAuthnContextClass.PASSWORD,
+            SAMLAuthnContextClass.KERBEROS,
+        ]
+        assert (
+            round_tripped.requested_authn_context_comparison
+            is SAMLAuthnContextComparison.MINIMUM
+        )
+
+    def test_requested_authn_context_form_fields_track_the_enums(self) -> None:
+        """Every enum member is offered in the form, keyed by its stored value.
+
+        Guards against a new class or comparison being added without being
+        offered in the admin interface.
+        """
+        classes_field = SAMLWebSSOAuthSettings.model_fields[
+            "requested_authn_context_classes"
+        ]
+        classes_metadata = next(
+            m for m in classes_field.metadata if hasattr(m, "label")
+        )
+        assert set(classes_metadata.options) == {
+            authn_context_class.value for authn_context_class in SAMLAuthnContextClass
+        }
+
+        comparison_field = SAMLWebSSOAuthSettings.model_fields[
+            "requested_authn_context_comparison"
+        ]
+        comparison_metadata = next(
+            m for m in comparison_field.metadata if hasattr(m, "label")
+        )
+        assert set(comparison_metadata.options) == {
+            comparison.value for comparison in SAMLAuthnContextComparison
+        }
+
+    @pytest.mark.parametrize(
+        "settings_kwargs",
+        [
+            pytest.param(
+                {"requested_authn_context_classes": ["bogus"]},
+                id="unknown-authn-context-class",
+            ),
+            pytest.param(
+                {"requested_authn_context_comparison": "bogus"},
+                id="unknown-comparison",
+            ),
+        ],
+    )
+    def test_requested_authn_context_invalid_values(
+        self, settings_kwargs: dict[str, Any]
+    ) -> None:
+        """Stored settings are re-parsed on every load, so bad values must fail cleanly."""
+        with pytest.raises(ProblemDetailException) as exc_info:
+            SAMLWebSSOAuthSettings(**settings_kwargs)
+        assert exc_info.value.problem_detail.uri == INVALID_CONFIGURATION_OPTION.uri
+
+    def test_requested_authn_context_empty_menu_selection_is_preserved(self) -> None:
+        """Deselecting every method stores an empty list, not the default.
+
+        The admin form always submits menu fields, so an empty selection reaches
+        the settings as an empty list and must stay that way rather than being
+        replaced by the field default.
+        """
+        form_data = ImmutableMultiDict(
+            {"requested_authn_context_classes_menu": "requested_authn_context_classes"}
+        )
+
+        settings = ProcessFormData.get_settings(SAMLWebSSOAuthSettings, form_data)
+
+        assert settings.requested_authn_context_classes == []
+
+    def test_requested_authn_context_menu_selection_is_parsed(self) -> None:
+        """Selected methods and the comparison flag survive admin form processing."""
+        form_data = ImmutableMultiDict(
+            {
+                "requested_authn_context_classes_menu": (
+                    "requested_authn_context_classes"
+                ),
+                f"requested_authn_context_classes_{SAMLAuthnContextClass.PASSWORD.value}": "",
+                f"requested_authn_context_classes_{SAMLAuthnContextClass.SMARTCARD.value}": "",
+                "requested_authn_context_comparison": (
+                    SAMLAuthnContextComparison.MINIMUM.value
+                ),
+            }
+        )
+
+        settings = ProcessFormData.get_settings(SAMLWebSSOAuthSettings, form_data)
+
+        assert settings.requested_authn_context_classes == [
+            SAMLAuthnContextClass.PASSWORD,
+            SAMLAuthnContextClass.SMARTCARD,
+        ]
+        assert (
+            settings.requested_authn_context_comparison
+            is SAMLAuthnContextComparison.MINIMUM
+        )
+
 
 SP_METADATA_WITH_TWO_ACS_ENDPOINTS = (
     '<md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" '
@@ -1084,7 +1223,9 @@ class TestSAMLOneLoginConfiguration:
                 "logoutResponseSigned": False,
                 "wantMessagesSigned": False,
                 "metadataCacheDuration": None,
-                "requestedAuthnContext": True,
+                "requestedAuthnContext": [
+                    SAMLAuthnContextClass.PASSWORD_PROTECTED_TRANSPORT.value
+                ],
                 "logoutRequestSigned": False,
                 "wantAttributeStatement": True,
                 "signMetadata": False,
@@ -1114,6 +1255,72 @@ class TestSAMLOneLoginConfiguration:
         assert result == expected_result
         onelogin_configuration.get_service_provider.assert_called_with()
         onelogin_configuration.get_identity_providers.assert_called_with(db)
+
+    @pytest.mark.parametrize(
+        "settings_kwargs, expected_context, expected_comparison",
+        [
+            pytest.param(
+                {},
+                [SAMLAuthnContextClass.PASSWORD_PROTECTED_TRANSPORT.value],
+                SAMLAuthnContextComparison.EXACT.value,
+                id="default-requests-password-protected-transport-exact",
+            ),
+            pytest.param(
+                {"requested_authn_context_classes": []},
+                False,
+                SAMLAuthnContextComparison.EXACT.value,
+                id="empty-selection-defers-to-idp",
+            ),
+            pytest.param(
+                {
+                    "requested_authn_context_classes": [
+                        SAMLAuthnContextClass.PASSWORD,
+                        SAMLAuthnContextClass.KERBEROS,
+                    ],
+                    "requested_authn_context_comparison": (
+                        SAMLAuthnContextComparison.MINIMUM
+                    ),
+                },
+                [
+                    SAMLAuthnContextClass.PASSWORD.value,
+                    SAMLAuthnContextClass.KERBEROS.value,
+                ],
+                SAMLAuthnContextComparison.MINIMUM.value,
+                id="selected-classes-and-comparison-are-passed-through",
+            ),
+        ],
+    )
+    def test_get_settings_requested_authn_context(
+        self,
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
+        settings_kwargs: dict[str, Any],
+        expected_context: list[str] | bool,
+        expected_comparison: str,
+    ) -> None:
+        """The selected classes and comparison reach the OneLogin security settings.
+
+        An empty selection becomes requestedAuthnContext=False, which makes the
+        toolkit omit the RequestedAuthnContext element entirely so the IdP
+        chooses the authentication method.
+        """
+        configuration = create_saml_configuration(**settings_kwargs)
+        onelogin_configuration = SAMLOneLoginConfiguration(configuration)
+        onelogin_configuration.get_service_provider = MagicMock(
+            return_value=SERVICE_PROVIDER_WITH_CERTIFICATE
+        )
+        onelogin_configuration.get_identity_providers = MagicMock(
+            return_value=IDENTITY_PROVIDERS
+        )
+        db = create_autospec(spec=sqlalchemy.orm.session.Session)
+
+        result = onelogin_configuration.get_settings(
+            db, IDENTITY_PROVIDERS[0].entity_id
+        )
+
+        assert result["security"]["requestedAuthnContext"] == expected_context
+        assert (
+            result["security"]["requestedAuthnContextComparison"] == expected_comparison
+        )
 
     @pytest.mark.parametrize(
         "slo_binding",
