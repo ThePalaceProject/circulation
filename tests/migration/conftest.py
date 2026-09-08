@@ -358,6 +358,7 @@ class AlembicDatabaseFixture:
         return subject_record.id
 
     def fetch_subject(self, subject_id: int) -> Row:
+        """Read back a subject record."""
         with self._engine.begin() as connection:
             result = connection.execute(
                 text("SELECT * FROM subjects WHERE id = :id"),
