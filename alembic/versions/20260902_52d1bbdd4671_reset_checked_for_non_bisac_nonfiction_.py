@@ -31,7 +31,7 @@ majority of the rows examined are legitimate nonfiction BISAC codes and are
 untouched.
 
 Revision ID: 52d1bbdd4671
-Revises: de6ae4bbf4a5
+Revises: 912c566f3383
 Create Date: 2026-09-02 17:26:39.209822+00:00
 
 """
@@ -44,7 +44,7 @@ from palace.manager.util.migration.helpers import migration_logger
 
 # revision identifiers, used by Alembic.
 revision = "52d1bbdd4671"
-down_revision = "de6ae4bbf4a5"
+down_revision = "912c566f3383"
 branch_labels = None
 depends_on = None
 
