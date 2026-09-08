@@ -133,7 +133,7 @@ class LanesController(CirculationManagerController, AdminPermissionsControllerMi
             for list_id in custom_list_ids:
                 list = get_one(self._db, CustomList, library=library, id=list_id)
                 if not list:
-                    # Not a list this library owns -- is it one another library
+                    # Not a list this library owns -- is it one that another library
                     # on this Palace Manager has shared?
                     list = self._db.scalars(
                         CustomList.shared_with_library(library).where(
