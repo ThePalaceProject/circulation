@@ -88,6 +88,7 @@ def check_patron_blocking_rules_with_evaluator(
     rules: list[PatronBlockingRule],
     values: dict[str, Any],
     log: logging.Logger | logging.LoggerAdapter[logging.Logger] | None = None,
+    show_title: bool = True,
 ) -> ProblemDetail | None:
     """Evaluate blocking rules using the simpleeval rule engine.
 
@@ -99,6 +100,11 @@ def check_patron_blocking_rules_with_evaluator(
     :param rules: The list of :class:`PatronBlockingRule` objects for the library.
     :param values: Runtime placeholder values.
     :param log: Optional logger for server-side error diagnostics.
+    :param show_title: Whether clients should display a title above the block
+        message.  Palace clients render their own title for this problem type
+        rather than the document's ``title``, so ``False`` is passed on as the
+        ``show_title`` extension member of the problem detail document, asking
+        them to show only the library's configured message.
     :returns: A :class:`~palace.manager.util.problem_detail.ProblemDetail`
         (HTTP 403) if the patron should be blocked, or ``None`` if
         authentication should proceed normally.
@@ -125,6 +131,8 @@ def check_patron_blocking_rules_with_evaluator(
             continue
 
         if blocked:
-            return BLOCKED_BY_POLICY.detailed(rule.message or _DEFAULT_BLOCK_MESSAGE)
+            return BLOCKED_BY_POLICY.detailed(
+                rule.message or _DEFAULT_BLOCK_MESSAGE, show_title=show_title
+            )
 
     return None
