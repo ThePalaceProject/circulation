@@ -241,6 +241,27 @@ class PatronBlockingRulesSetting(BaseSettings):
         ),
     ] = []
 
+    patron_blocking_rules_show_title: Annotated[
+        bool,
+        FormMetadata(
+            label="Show standard title with blocking rule message",
+            type=FormFieldType.SELECT,
+            options={
+                True: "Show the standard title above the message",
+                False: "Show only the message configured on the rule",
+            },
+            description=(
+                "When a patron is blocked by one of the rules above, the Palace apps "
+                "render a standard title (<em>Blocked by library policy.</em>) above the "
+                "message configured on the rule. Choose <em>Show only the message "
+                "configured on the rule</em> to suppress that title, so the patron sees "
+                "only the message the library wrote. Suppressing the title requires an "
+                "app version that supports it; older apps continue to show the standard "
+                "title alongside the message."
+            ),
+        ),
+    ] = True
+
     @field_validator("patron_blocking_rules")
     @classmethod
     def validate_patron_blocking_rules(
@@ -451,6 +472,7 @@ class BasicAuthenticationProvider[
             )
         )
         self.patron_blocking_rules: list[PatronBlockingRule] = []
+        self.patron_blocking_rules_show_title: bool = True
 
     def process_library_identifier_restriction_criteria(
         self, criteria: str | None
@@ -684,7 +706,10 @@ class BasicAuthenticationProvider[
             self.log.info("Patron blocking rules evaluation attempted")
             values = self._build_blocking_rule_values(result, extra_context)
             blocked = check_patron_blocking_rules_with_evaluator(
-                self.patron_blocking_rules, values, log=self.log
+                self.patron_blocking_rules,
+                values,
+                log=self.log,
+                show_title=self.patron_blocking_rules_show_title,
             )
             if blocked is not None:
                 return blocked
