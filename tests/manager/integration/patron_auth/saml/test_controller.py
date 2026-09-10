@@ -375,6 +375,58 @@ class TestSAMLController:
                 None,
                 None,
                 None,
+                SAML_INVALID_REQUEST.detailed(
+                    "Required parameter {} is missing".format(
+                        SAMLController.SAML_RESPONSE
+                    )
+                ),
+                id="with_missing_saml_response",
+            ),
+            pytest.param(
+                {SAMLController.SAML_RESPONSE: ""},
+                None,
+                None,
+                None,
+                None,
+                SAML_INVALID_REQUEST.detailed(
+                    "Required parameter {} is missing".format(
+                        SAMLController.SAML_RESPONSE
+                    )
+                ),
+                id="with_empty_saml_response",
+            ),
+            # A well-formed RelayState must not be acted on (no lookups, no redirect)
+            # when there is no SAMLResponse to go with it.
+            pytest.param(
+                {
+                    SAMLController.RELAY_STATE: "http://localhost?"
+                    + urlencode(
+                        {
+                            SAMLController.LIBRARY_SHORT_NAME: "default",
+                            SAMLController.PROVIDER_NAME: SAMLWebSSOAuthenticationProvider.label(),
+                            SAMLController.IDP_ENTITY_ID: IDENTITY_PROVIDERS[
+                                0
+                            ].entity_id,
+                        }
+                    )
+                },
+                None,
+                None,
+                None,
+                None,
+                SAML_INVALID_REQUEST.detailed(
+                    "Required parameter {} is missing".format(
+                        SAMLController.SAML_RESPONSE
+                    )
+                ),
+                id="with_missing_saml_response_and_valid_relay_state",
+            ),
+            pytest.param(
+                {SAMLController.SAML_RESPONSE: "encoded"},
+                None,
+                None,
+                None,
+                None,
                 SAML_INVALID_RESPONSE.detailed(
                     "Required parameter {} is missing from the response body".format(
                         SAMLController.RELAY_STATE
@@ -383,7 +435,10 @@ class TestSAMLController:
                 id="with_missing_relay_state",
             ),
             pytest.param(
-                {SAMLController.RELAY_STATE: "<>"},
+                {
+                    SAMLController.SAML_RESPONSE: "encoded",
+                    SAMLController.RELAY_STATE: "<>",
+                },
                 None,
                 None,
                 None,
@@ -397,8 +452,9 @@ class TestSAMLController:
             ),
             pytest.param(
                 {
+                    SAMLController.SAML_RESPONSE: "encoded",
                     SAMLController.RELAY_STATE: "http://localhost?"
-                    + urlencode({SAMLController.LIBRARY_SHORT_NAME: "default"})
+                    + urlencode({SAMLController.LIBRARY_SHORT_NAME: "default"}),
                 },
                 None,
                 None,
@@ -413,13 +469,14 @@ class TestSAMLController:
             ),
             pytest.param(
                 {
+                    SAMLController.SAML_RESPONSE: "encoded",
                     SAMLController.RELAY_STATE: "http://localhost?"
                     + urlencode(
                         {
                             SAMLController.LIBRARY_SHORT_NAME: "default",
                             SAMLController.PROVIDER_NAME: SAMLWebSSOAuthenticationProvider.label(),
                         }
-                    )
+                    ),
                 },
                 None,
                 None,
@@ -434,6 +491,7 @@ class TestSAMLController:
             ),
             pytest.param(
                 {
+                    SAMLController.SAML_RESPONSE: "encoded",
                     SAMLController.RELAY_STATE: "http://localhost?"
                     + urlencode(
                         {
@@ -443,7 +501,7 @@ class TestSAMLController:
                                 0
                             ].entity_id,
                         }
-                    )
+                    ),
                 },
                 SAML_INCORRECT_RESPONSE.detailed("Authentication failed"),
                 None,
@@ -454,6 +512,7 @@ class TestSAMLController:
             ),
             pytest.param(
                 {
+                    SAMLController.SAML_RESPONSE: "encoded",
                     SAMLController.RELAY_STATE: "http://localhost?"
                     + urlencode(
                         {
@@ -463,7 +522,7 @@ class TestSAMLController:
                                 0
                             ].entity_id,
                         }
-                    )
+                    ),
                 },
                 None,
                 SAML_CANNOT_DETERMINE_PATRON,
@@ -474,6 +533,7 @@ class TestSAMLController:
             ),
             pytest.param(
                 {
+                    SAMLController.SAML_RESPONSE: "encoded",
                     SAMLController.RELAY_STATE: "http://localhost?"
                     + urlencode(
                         {
@@ -483,7 +543,7 @@ class TestSAMLController:
                                 0
                             ].entity_id,
                         }
-                    )
+                    ),
                 },
                 None,
                 (create_autospec(spec=Credential), object(), create_patron_data_mock()),
@@ -572,6 +632,7 @@ class TestSAMLController:
             elif expected_problem:
                 assert isinstance(result, ProblemDetail)
                 assert result.response == expected_problem.response
+                authentication_manager.finish_authentication.assert_not_called()
             else:
                 assert result.status_code == 302
                 assert (
@@ -1483,6 +1544,63 @@ class TestSAMLController:
 
         assert isinstance(result, ProblemDetail)
         assert result.uri == SAML_INVALID_RESPONSE.uri
+
+    @pytest.mark.parametrize(
+        "method, saml_response",
+        [
+            pytest.param("GET", None, id="get-missing"),
+            pytest.param("GET", "", id="get-empty"),
+            pytest.param("POST", None, id="post-missing"),
+            pytest.param("POST", "", id="post-empty"),
+        ],
+    )
+    def test_saml_logout_callback_missing_saml_response(
+        self,
+        controller_fixture: ControllerFixture,
+        method: str,
+        saml_response: str | None,
+    ):
+        """A missing or empty SAMLResponse is rejected before RelayState is
+        acted on, for both bindings, even when RelayState is well-formed.
+        """
+        controller, mock_provider, mock_auth_manager, mock_credential_manager = (
+            self._make_controller_and_mocks(controller_fixture)
+        )
+
+        relay_state = urlencode(
+            {
+                SAMLController.LIBRARY_SHORT_NAME: "default",
+                SAMLController.PROVIDER_NAME: self.PROVIDER_NAME,
+                SAMLController.IDP_ENTITY_ID: self.IDP_ENTITY_ID,
+            }
+        )
+        params = {
+            SAMLController.RELAY_STATE: f"https://app.example.com/logout?{relay_state}"
+        }
+        if saml_response is not None:
+            params[SAMLController.SAML_RESPONSE] = saml_response
+
+        if method == "GET":
+            context = controller_fixture.app.test_request_context(
+                f"/saml/logout_callback?{urlencode(params)}"
+            )
+        else:
+            context = controller_fixture.app.test_request_context(
+                "/saml/logout_callback", method="POST", data=params
+            )
+
+        with context:
+            result = controller.saml_logout_callback(
+                request, controller_fixture.db.session
+            )
+
+        assert isinstance(result, ProblemDetail)
+        assert result.uri == SAML_INVALID_REQUEST.uri
+        assert (
+            result.detail
+            == f"Required parameter {SAMLController.SAML_RESPONSE} is missing"
+        )
+        mock_auth_manager.finish_logout.assert_not_called()
 
     def test_saml_logout_callback_post_binding(
         self, controller_fixture: ControllerFixture
