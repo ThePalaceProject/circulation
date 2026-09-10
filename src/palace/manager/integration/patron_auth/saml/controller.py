@@ -226,13 +226,13 @@ class SAMLController:
     def _get_request_parameter(
         params: Mapping[str, str], name: str, default_value: str | None = None
     ) -> str | ProblemDetail:
-        """Returns a parameter containing in the incoming request
+        """Returns a parameter contained in the incoming request
 
         :param params: Request's parameters
         :param name: Name of the parameter
         :param default_value: Optional default value
 
-        :return: Parameter's value or ProblemDetail instance if the parameter is missing
+        :return: Parameter's value, or a ProblemDetail if the parameter is missing or empty
         """
         parameter = params.get(name, default_value)
 
