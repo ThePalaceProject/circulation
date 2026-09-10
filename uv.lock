@@ -10,6 +10,8 @@ resolution-markers = [
 
 [manifest]
 members = [
+    "palace-brainfuck-utils",
+    "palace-brainfuck-vm",
     "palace-manager",
     "palace-opds",
     "palace-util",
@@ -2059,6 +2061,32 @@ wheels = [
 ]
 
 [[package]]
+name = "palace-brainfuck-utils"
+source = { editable = "packages/palace-brainfuck-utils" }
+dependencies = [
+    { name = "frozendict" },
+    { name = "palace-brainfuck-vm" },
+    { name = "palace-util" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "frozendict", specifier = ">=2.4.6,<3" },
+    { name = "palace-brainfuck-vm", editable = "packages/palace-brainfuck-vm" },
+    { name = "palace-util", editable = "packages/palace-util" },
+]
+
+[[package]]
+name = "palace-brainfuck-vm"
+source = { editable = "packages/palace-brainfuck-vm" }
+dependencies = [
+    { name = "palace-util" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "palace-util", editable = "packages/palace-util" }]
+
+[[package]]
 name = "palace-manager"
 version = "0"
 source = { editable = "." }
@@ -2096,6 +2124,7 @@ dependencies = [
     { name = "nameparser" },
     { name = "openpyxl" },
     { name = "opensearch-py" },
+    { name = "palace-brainfuck-utils" },
     { name = "palace-opds" },
     { name = "palace-util" },
     { name = "pillow" },
@@ -2201,6 +2230,7 @@ requires-dist = [
     { name = "nameparser", specifier = ">=2.1.0,<3" },
     { name = "openpyxl", specifier = ">=3.1,<4" },
     { name = "opensearch-py", specifier = ">=3.2.0,<4" },
+    { name = "palace-brainfuck-utils", editable = "packages/palace-brainfuck-utils" },
     { name = "palace-opds", editable = "packages/palace-opds" },
     { name = "palace-util", editable = "packages/palace-util" },
     { name = "pillow", specifier = ">=12.3.0,<13" },

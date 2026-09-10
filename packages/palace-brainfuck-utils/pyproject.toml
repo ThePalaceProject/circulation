@@ -1,0 +1,38 @@
+[build-system]
+build-backend = "hatchling.build"
+requires = ["hatchling"]
+
+[project]
+authors = [{name = "The Palace Project", email = "info@thepalaceproject.org"}]
+dependencies = [
+    "frozendict>=2.4.6,<3",
+    "palace-brainfuck-vm",
+    "palace-util",
+]
+description = "Utility functions - title sorting, medians, money parsing, cache-control parsing, a SIP2 checksum, and a UUID/base64 codec - implemented as Palace Brainfuck programs."
+dynamic = ["version"]
+license = "Apache-2.0"
+name = "palace-brainfuck-utils"
+readme = "README.md"
+requires-python = ">=3.12,<4"
+
+[project.urls]
+Homepage = "https://thepalaceproject.org"
+Repository = "https://github.com/ThePalaceProject/circulation"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/palace"]
+
+[tool.hatch.version]
+path = "src/palace/brainfuck_utils/__init__.py"
+
+[tool.isort]
+combine_as_imports = true
+known_first_party = ["palace.brainfuck_utils"]
+known_palace = ["palace.brainfuck_vm", "palace.util"]
+profile = "black"
+sections = "FUTURE,STDLIB,THIRDPARTY,PALACE,FIRSTPARTY,LOCALFOLDER"
+
+[tool.uv.sources]
+palace-brainfuck-vm = {workspace = true}
+palace-util = {workspace = true}

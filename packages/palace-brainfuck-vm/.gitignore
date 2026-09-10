@@ -1,0 +1,4 @@
+# Cargo's build directory, and the extension module maturin drops into the
+# Python source tree next to `palace_brainfuck.py` when installing in place.
+/target
+*.so

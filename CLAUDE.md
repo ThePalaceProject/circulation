@@ -76,6 +76,21 @@ This repository is a [`uv` workspace](https://docs.astral.sh/uv/concepts/project
   - `/palace-opds` - Pydantic models for the OPDS / Readium specifications (OPDS 2.0, RWPM, ODL,
     LCP, Authentication for OPDS, Palace extensions) under the `palace.opds` namespace. Import
     from `palace.opds.*` directly. Depends on `palace-util`; depends on no other Palace package.
+  - `/palace-brainfuck-vm` - The Palace Brainfuck interpreter: a Brainfuck dialect with an
+    `@name@` escape for calling registered Python functions. `palace.brainfuck_vm.palace_brainfuck`
+    is the public surface; `palace.brainfuck_vm._native` is a Rust extension built by maturin.
+    This is the one workspace member whose Python lives under `python/` rather than `src/`, since
+    `src/` is Cargo's. Depends on `palace-util`.
+  - `/palace-brainfuck-utils` - Utility functions (title sorting, medians, money parsing,
+    cache-control parsing, a SIP2 checksum, a UUID/base64 codec) implemented as Palace Brainfuck
+    programs under the `palace.brainfuck_utils` namespace. Depends on `palace-brainfuck-vm` and
+    `palace-util`.
+- Palace package dependencies point *toward* `palace-util`, never away from it. `palace-util` and
+  `palace-opds` are published to PyPI and must stay pure Python, so neither may depend on
+  `palace-brainfuck-utils` or anything else that pulls in the Rust extension.
+- Building the workspace needs a Rust toolchain on `PATH`, because `uv sync` builds
+  `palace-brainfuck-vm` from source. CI installs one; the app Docker image installs and removes one
+  inside a single layer so the compiler does not ship in the runtime image.
 - `/tests` - Test files for the whole repository (both `palace-manager` and workspace-member packages)
   - `/files` - Test fixture files
   - `/fixtures` - pytest fixtures shared across test functions

@@ -77,8 +77,10 @@ repos:
       -   id: check-namespace-package
           name: Check that palace is a namespace package
           language: fail
-          entry: Please remove src/palace/__init__.py - palace must remain a PEP 420 namespace.
-          files: (^|/)src/palace/__init__\.py$
+          entry: Please remove the palace/__init__.py - palace must remain a PEP 420 namespace.
+          # Most packages keep their Python under src/; palace-brainfuck-vm is
+          # a maturin package, where src/ is Cargo's and Python lives in python/.
+          files: (^|/)(src|python)/palace/__init__\.py$
 
 # Exclude test files, since they may be intentionally malformed
 exclude: ^tests/files/

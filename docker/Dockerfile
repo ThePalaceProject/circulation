@@ -21,6 +21,8 @@ RUN mv /etc/cron.daily/logrotate /etc/cron.hourly/logrotate
 # We copy the workspace-member pyproject.toml files (but not their source) so that
 # uv can resolve workspace members without invalidating this layer on source changes.
 COPY --chown=palace:palace uv.lock pyproject.toml /var/www/circulation/
+COPY --chown=palace:palace packages/palace-brainfuck-utils/pyproject.toml /var/www/circulation/packages/palace-brainfuck-utils/
+COPY --chown=palace:palace packages/palace-brainfuck-vm/pyproject.toml /var/www/circulation/packages/palace-brainfuck-vm/
 COPY --chown=palace:palace packages/palace-util/pyproject.toml /var/www/circulation/packages/palace-util/
 COPY --chown=palace:palace packages/palace-opds/pyproject.toml /var/www/circulation/packages/palace-opds/
 RUN uv sync --frozen --no-dev --no-install-workspace
@@ -28,7 +30,19 @@ RUN uv sync --frozen --no-dev --no-install-workspace
 COPY --chown=palace:palace . /var/www/circulation
 
 # Install the project itself as an editable install.
-RUN uv sync --frozen --no-dev
+#
+# palace-brainfuck-utils depends on palace-brainfuck-vm, a Rust extension that
+# uv builds from source via maturin, so a toolchain has to be on PATH for this
+# step. Ubuntu's apt-provided rustc is too old for that crate's 2024 edition,
+# so we take it from rustup. It is installed and removed inside this one layer
+# so that the compiler and its ~1GB of toolchain do not ship in the runtime
+# image; only the compiled extension module survives.
+RUN export RUSTUP_HOME=/tmp/rustup CARGO_HOME=/tmp/cargo && \
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+      sh -s -- -y --profile minimal --default-toolchain stable --no-modify-path && \
+    PATH="$CARGO_HOME/bin:$PATH" uv sync --frozen --no-dev && \
+    rm -rf "$RUSTUP_HOME" "$CARGO_HOME" \
+           packages/palace-brainfuck-vm/target /root/.cache
 
 ###############################################################################
 ## Circ-exec Image

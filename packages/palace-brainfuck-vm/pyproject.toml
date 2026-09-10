@@ -1,0 +1,37 @@
+[build-system]
+build-backend = "maturin"
+requires = ["maturin>=1.15,<2.0"]
+
+[project]
+authors = [{name = "The Palace Project", email = "info@thepalaceproject.org"}]
+classifiers = [
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Rust",
+]
+dependencies = [
+    "palace-util",
+]
+description = "A native-speed interpreter for Palace Brainfuck, required by palace-brainfuck-utils."
+dynamic = ["version"]
+license = "Apache-2.0"
+name = "palace-brainfuck-vm"
+readme = "README.md"
+requires-python = ">=3.12,<4"
+
+[project.urls]
+Homepage = "https://thepalaceproject.org"
+Repository = "https://github.com/ThePalaceProject/circulation"
+
+[tool.isort]
+combine_as_imports = true
+known_first_party = ["palace.brainfuck_vm"]
+known_palace = ["palace.util"]
+profile = "black"
+sections = "FUTURE,STDLIB,THIRDPARTY,PALACE,FIRSTPARTY,LOCALFOLDER"
+
+[tool.maturin]
+module-name = "palace.brainfuck_vm._native"
+python-source = "python"
+
+[tool.uv.sources]
+palace-util = {workspace = true}

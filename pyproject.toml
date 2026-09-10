@@ -72,6 +72,7 @@ dependencies = [
     "nameparser>=2.1.0,<3",  # nameparser is for author name manipulations
     "openpyxl>=3.1,<4",
     "opensearch-py>=3.2.0,<4",
+    "palace-brainfuck-utils",
     "palace-opds",
     "palace-util",
     "pillow>=12.3.0,<13",
@@ -160,7 +161,7 @@ packages = ["src/palace"]
 [tool.isort]
 combine_as_imports = true
 known_first_party = ["palace.manager"]
-known_palace = ["palace.opds", "palace.util"]
+known_palace = ["palace.brainfuck_utils", "palace.opds", "palace.util"]
 known_third_party = ["alembic"]
 profile = "black"
 sections = "FUTURE,STDLIB,THIRDPARTY,PALACE,FIRSTPARTY,LOCALFOLDER"
@@ -172,6 +173,8 @@ disallow_untyped_calls = false
 explicit_package_bases = true
 files = [
     "alembic",
+    "packages/palace-brainfuck-utils/src/palace",
+    "packages/palace-brainfuck-vm/python/palace",
     "packages/palace-opds/src/palace",
     "packages/palace-util/src/palace",
     "src/palace",
@@ -179,6 +182,8 @@ files = [
 ]
 mypy_path = [
     "alembic",
+    "packages/palace-brainfuck-utils/src",
+    "packages/palace-brainfuck-vm/python",
     "packages/palace-opds/src",
     "packages/palace-util/src",
     "src",
@@ -394,8 +399,9 @@ spaces_indent_inline_array = 4
 trailing_comma_inline_array = true
 
 [tool.uv.sources]
+palace-brainfuck-utils = {workspace = true}
 palace-opds = {workspace = true}
 palace-util = {workspace = true}
 
 [tool.uv.workspace]
-members = ["packages/palace-opds", "packages/palace-util"]
+members = ["packages/palace-brainfuck-utils", "packages/palace-brainfuck-vm", "packages/palace-opds", "packages/palace-util"]

@@ -39,6 +39,7 @@ from typing import Any
 
 import certifi
 
+from palace.brainfuck_utils.sip2_checksum import compute_sip2_checksum
 from palace.util.datetime_helpers import utc_now
 from palace.util.log import LoggerMixin
 
@@ -1086,13 +1087,7 @@ class SIPClient(Constants, LoggerMixin):
         # Finally, add the checksum.
         text += "AZ"
 
-        check = 0
-        for each in text:
-            check = check + ord(each)
-        check = check + ord("\0")
-        check = (check ^ 0xFFFF) + 1
-
-        checksum = "%4.4X" % (check)
+        checksum = compute_sip2_checksum(text)
 
         # Note that the checksum doesn't have the pipe character
         # before its AZ tag.  This is as should be.

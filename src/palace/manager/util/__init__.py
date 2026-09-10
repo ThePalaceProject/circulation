@@ -5,10 +5,13 @@ from __future__ import annotations
 import re
 from collections import Counter
 from collections.abc import Generator, Iterable, Sequence
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from typing import Any, overload
 
 import sqlalchemy
+
+from palace.brainfuck_utils.money_parse import parse_money_amount
+from palace.brainfuck_utils.sort_title_for import move_matching_prefix_to_suffix
 
 import palace.manager.sqlalchemy.flask_sqlalchemy_session
 
@@ -37,11 +40,7 @@ class TitleProcessor:
     def sort_title_for(cls, title: str | None) -> str | None:
         if not title:
             return title
-        for stopword in cls.title_stopwords:
-            if title.startswith(stopword):
-                title = title[len(stopword) :] + ", " + stopword.strip()
-                break
-        return title
+        return move_matching_prefix_to_suffix(title, cls.title_stopwords)
 
 
 class Bigrams:
@@ -309,20 +308,7 @@ class MoneyUtility:
         if not amount:
             amount = "0"
         amount = str(amount)
-
-        if amount[0] == "$":
-            amount = amount[1:]
-
-        # We assume we are working with currency amounts where ',' is used as a possible
-        # thousands seperator, so we can safely strip them.
-        amount = "".join(amount.split(","))
-        try:
-            return Decimal(amount).quantize(Decimal("1.00"))
-        except InvalidOperation:
-            raise ValueError(
-                "amount value could not be converted to "
-                "Decimal(): '{}'".format(amount)
-            ) from None
+        return parse_money_amount(amount)
 
 
 def is_session(value: object) -> bool:

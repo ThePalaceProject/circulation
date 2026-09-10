@@ -14,6 +14,7 @@ from psycopg2 import OperationalError
 from redis.exceptions import AuthenticationError as RedisAuthenticationError
 from werkzeug.exceptions import HTTPException
 
+from palace.brainfuck_utils.cache_control import parse_cache_control
 from palace.util.log import LoggerMixin
 
 from palace import manager
@@ -111,31 +112,9 @@ def raises_problem_detail[T, **P](f: Callable[P, T]) -> Callable[P, T | Response
     return decorated
 
 
-def _parse_cache_control(cache_control_header: str | None) -> dict[str, int | None]:
-    """
-    Parse the Cache-Control header into a dictionary of directives.
-
-    https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control
-    """
-    cache_control_header = cache_control_header or ""
-
-    directives: dict[str, int | None] = {}
-    for directive in cache_control_header.split(","):
-        directive = directive.strip().lower()
-        if not directive:
-            continue
-
-        if "=" in directive:
-            key, value = directive.split("=", 1)
-            try:
-                int_val = int(value)
-            except ValueError:
-                continue
-            directives[key] = int_val
-        else:
-            directives[directive] = None
-
-    return directives
+# The parser itself lives in palace-brainfuck-utils; this module keeps the name
+# it has always called it by.
+_parse_cache_control = parse_cache_control
 
 
 def cache_control_headers[**P](

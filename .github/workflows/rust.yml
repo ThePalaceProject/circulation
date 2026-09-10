@@ -1,0 +1,39 @@
+name: Rust (palace-brainfuck-vm)
+on: [push, pull_request]
+
+concurrency:
+  group: rust-${{ github.ref_name }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  rust:
+    name: Format and lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/palace-brainfuck-vm
+
+      - name: Check formatting
+        working-directory: packages/palace-brainfuck-vm
+        run: cargo fmt -- --check
+
+      # Clippy type-checks the crate without linking it. Building the
+      # extension module for real is left to the test workflow, which does it
+      # through maturin once per Python in its matrix. Plain `cargo build`
+      # here would link against libpython instead, since only maturin turns on
+      # pyo3's `extension-module` feature.
+      - name: Clippy
+        working-directory: packages/palace-brainfuck-vm
+        run: cargo clippy --all-targets -- -D warnings

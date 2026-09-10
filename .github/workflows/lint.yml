@@ -13,6 +13,17 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Install Rust
+        # palace-brainfuck-utils depends on palace-brainfuck-vm, a Rust
+        # extension that uv builds from source via maturin as part of
+        # `uv sync`, so a toolchain has to be on PATH before that runs.
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/palace-brainfuck-vm
+
       - name: Install uv
         uses: astral-sh/setup-uv@v10.0.1
         with:
