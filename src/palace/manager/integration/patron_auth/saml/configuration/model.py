@@ -1,6 +1,7 @@
 import re
 from collections.abc import Mapping
 from datetime import datetime
+from enum import StrEnum
 from re import Pattern
 from threading import Lock
 from typing import Annotated, Any, Final
@@ -138,6 +139,83 @@ ACS_SELECTION_POLICY_LABELS: Final[Mapping[SAMLACSSelectionPolicy, str]] = froze
         SAMLACSSelectionPolicy.METADATA_DEFAULT: "Metadata default",
         SAMLACSSelectionPolicy.DEFER_TO_IDP: "Defer to identity provider",
     }
+)
+
+
+class SAMLAuthnContextClass(StrEnum):
+    """SAML authentication context classes offered in the admin interface.
+
+    The values are URNs defined by the SAML 2.0 authentication context
+    specification. They are stored in each integration's settings and sent to
+    IdPs in authentication requests, so they must not change.
+    """
+
+    PASSWORD_PROTECTED_TRANSPORT = (
+        "urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport"
+    )
+    PASSWORD = "urn:oasis:names:tc:SAML:2.0:ac:classes:Password"
+    MOBILE_TWO_FACTOR_CONTRACT = (
+        "urn:oasis:names:tc:SAML:2.0:ac:classes:MobileTwoFactorContract"
+    )
+    TIME_SYNC_TOKEN = "urn:oasis:names:tc:SAML:2.0:ac:classes:TimeSyncToken"
+    TLS_CLIENT = "urn:oasis:names:tc:SAML:2.0:ac:classes:TLSClient"
+    SMARTCARD = "urn:oasis:names:tc:SAML:2.0:ac:classes:Smartcard"
+    KERBEROS = "urn:oasis:names:tc:SAML:2.0:ac:classes:Kerberos"
+    UNSPECIFIED = "urn:oasis:names:tc:SAML:2.0:ac:classes:unspecified"
+
+
+class SAMLAuthnContextComparison(StrEnum):
+    """Comparison attribute values for a RequestedAuthnContext element.
+
+    The values are defined by the SAML 2.0 Core specification and are stored in
+    each integration's settings, so they must not change.
+    """
+
+    EXACT = "exact"
+    MINIMUM = "minimum"
+    BETTER = "better"
+    MAXIMUM = "maximum"
+
+
+# Names shown in the administrative interface. The technical class name is kept in
+# parentheses so admins can match a selection against IdP documentation.
+AUTHN_CONTEXT_CLASS_LABELS: Final[Mapping[SAMLAuthnContextClass, str]] = frozendict(
+    {
+        SAMLAuthnContextClass.PASSWORD_PROTECTED_TRANSPORT: (
+            "Password over a secure connection (PasswordProtectedTransport)"
+        ),
+        SAMLAuthnContextClass.PASSWORD: "Password (Password)",
+        SAMLAuthnContextClass.MOBILE_TWO_FACTOR_CONTRACT: (
+            "Mobile two-factor (MobileTwoFactorContract)"
+        ),
+        SAMLAuthnContextClass.TIME_SYNC_TOKEN: (
+            "One-time password token (TimeSyncToken)"
+        ),
+        SAMLAuthnContextClass.TLS_CLIENT: "TLS client certificate (TLSClient)",
+        SAMLAuthnContextClass.SMARTCARD: "Smart card (Smartcard)",
+        SAMLAuthnContextClass.KERBEROS: "Kerberos (Kerberos)",
+        SAMLAuthnContextClass.UNSPECIFIED: "Unspecified (unspecified)",
+    }
+)
+
+AUTHN_CONTEXT_COMPARISON_LABELS: Final[Mapping[SAMLAuthnContextComparison, str]] = (
+    frozendict(
+        {
+            SAMLAuthnContextComparison.EXACT: (
+                "Exact: the authentication method must exactly match one of the "
+                "requested methods"
+            ),
+            SAMLAuthnContextComparison.MINIMUM: (
+                "Minimum: one of the requested methods, or stronger"
+            ),
+            SAMLAuthnContextComparison.BETTER: (
+                "Better: stronger than all of the requested methods"
+            ),
+            SAMLAuthnContextComparison.MAXIMUM: (
+                "Maximum: as strong as possible without exceeding the requested methods"
+            ),
+        }
+    )
 )
 
 
@@ -280,6 +358,46 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
             use_monospace_font=True,
         ),
     ] = None
+    requested_authn_context_classes: Annotated[
+        list[SAMLAuthnContextClass],
+        FormMetadata(
+            label="Requested Authentication Methods",
+            description=(
+                "Authentication methods (SAML authentication context classes) that the "
+                "Identity Provider will be asked to use, compared according to "
+                "<b>Requested Authentication Method Comparison</b>. "
+                "If none are selected, no requirement is sent and the Identity Provider "
+                "chooses how to authenticate the patron. Selecting none is the most "
+                "compatible choice for IdPs that offer passwordless methods such as "
+                "passkeys. By default, "
+                f"'{AUTHN_CONTEXT_CLASS_LABELS[SAMLAuthnContextClass.PASSWORD_PROTECTED_TRANSPORT]}' "
+                "is requested."
+            ),
+            type=FormFieldType.MENU,
+            options={
+                authn_context_class.value: label
+                for authn_context_class, label in AUTHN_CONTEXT_CLASS_LABELS.items()
+            },
+            format="narrow",
+        ),
+    ] = [SAMLAuthnContextClass.PASSWORD_PROTECTED_TRANSPORT]
+    requested_authn_context_comparison: Annotated[
+        SAMLAuthnContextComparison,
+        FormMetadata(
+            label="Requested Authentication Method Comparison",
+            description=(
+                "How the Identity Provider should compare the authentication method it "
+                "uses against the <b>Requested Authentication Methods</b> list. The "
+                "comparison applies to the list as a whole. It has no effect when no "
+                "methods are selected."
+            ),
+            type=FormFieldType.SELECT,
+            options={
+                comparison.value: label
+                for comparison, label in AUTHN_CONTEXT_COMPARISON_LABELS.items()
+            },
+        ),
+    ] = SAMLAuthnContextComparison.EXACT
     session_lifetime: Annotated[
         PositiveInt | None,
         FormMetadata(
@@ -571,6 +689,8 @@ class SAMLOneLoginConfiguration(LoggerMixin):
 
     SECURITY = "security"
     AUTHN_REQUESTS_SIGNED = "authnRequestsSigned"
+    REQUESTED_AUTHN_CONTEXT = "requestedAuthnContext"
+    REQUESTED_AUTHN_CONTEXT_COMPARISON = "requestedAuthnContextComparison"
 
     def __init__(
         self,
@@ -933,6 +1053,19 @@ class SAMLOneLoginConfiguration(LoggerMixin):
             service_provider_settings[self.SECURITY][self.AUTHN_REQUESTS_SIGNED]
             or service_provider_settings[self.SECURITY][self.AUTHN_REQUESTS_SIGNED]
         )
+
+        # An empty selection means no RequestedAuthnContext element is sent at all
+        # (the OneLogin toolkit omits it when the value is False), leaving the choice
+        # of authentication method entirely to the IdP.
+        requested_classes = self._configuration.requested_authn_context_classes
+        onelogin_settings[self.SECURITY][self.REQUESTED_AUTHN_CONTEXT] = (
+            [authn_context_class.value for authn_context_class in requested_classes]
+            if requested_classes
+            else False
+        )
+        onelogin_settings[self.SECURITY][
+            self.REQUESTED_AUTHN_CONTEXT_COMPARISON
+        ] = self._configuration.requested_authn_context_comparison.value
 
         settings = OneLogin_Saml2_Settings(onelogin_settings)
 
