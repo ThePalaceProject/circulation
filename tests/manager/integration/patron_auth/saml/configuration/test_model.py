@@ -800,6 +800,38 @@ class TestSAMLSettings:
             comparison.value for comparison in SAMLAuthnContextComparison
         }
 
+    def test_requested_authn_context_configuration_form_defaults(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        """The rendered form emits the defaults as plain values.
+
+        This is the first settings field whose default is a non-empty list of
+        enum members, so it guards the whole configuration_form path (not just
+        the FormMetadata.get_form_value helper) against raw Enum objects
+        reaching the admin interface.
+        """
+        form = SAMLWebSSOAuthSettings.configuration_form(db.session)
+
+        [classes_entry] = [
+            entry for entry in form if entry["key"] == "requested_authn_context_classes"
+        ]
+        assert classes_entry["default"] == [
+            SAMLAuthnContextClass.PASSWORD_PROTECTED_TRANSPORT.value
+        ]
+        # StrEnum members compare equal to their values, so also pin the exact
+        # type to prove normalization happened.
+        assert all(type(default) is str for default in classes_entry["default"])
+        json.dumps(classes_entry)
+
+        [comparison_entry] = [
+            entry
+            for entry in form
+            if entry["key"] == "requested_authn_context_comparison"
+        ]
+        assert comparison_entry["default"] == SAMLAuthnContextComparison.EXACT.value
+        assert type(comparison_entry["default"]) is str
+        json.dumps(comparison_entry)
+
     @pytest.mark.parametrize(
         "settings_kwargs",
         [

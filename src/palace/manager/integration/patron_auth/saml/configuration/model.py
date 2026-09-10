@@ -194,7 +194,7 @@ AUTHN_CONTEXT_CLASS_LABELS: Final[Mapping[SAMLAuthnContextClass, str]] = frozend
         SAMLAuthnContextClass.TLS_CLIENT: "TLS client certificate (TLSClient)",
         SAMLAuthnContextClass.SMARTCARD: "Smart card (Smartcard)",
         SAMLAuthnContextClass.KERBEROS: "Kerberos (Kerberos)",
-        SAMLAuthnContextClass.UNSPECIFIED: "Unspecified / any method (unspecified)",
+        SAMLAuthnContextClass.UNSPECIFIED: "Unspecified (unspecified)",
     }
 )
 
