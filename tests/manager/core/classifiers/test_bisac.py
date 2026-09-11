@@ -393,6 +393,90 @@ class TestBISACClassifier:
         assert subject.fiction is True
 
     @pytest.mark.parametrize(
+        "identifier,stored_name",
+        [
+            pytest.param("INFEN000", None, id="no_name"),
+            pytest.param("INFEN000", "English", id="language_name"),
+            pytest.param("INFENUSA", "USA", id="territory_name"),
+            pytest.param("FBINFEN000", "English", id="fb_prefixed"),
+            pytest.param("FBZZZ000000", "Historical", id="partial_bisac_heading"),
+        ],
+    )
+    def test_unrecognized_code_abstains(
+        self, identifier: str, stored_name: str | None
+    ) -> None:
+        """A code that is not BISAC carries no fiction or audience signal.
+
+        Everything on the Feedbooks/Palace Marketplace category scheme arrives
+        typed as BISAC, including codes that describe language or territory
+        rather than subject matter. When such a code cannot be resolved, the
+        name we fall back on is a distributor fragment, so the rulesets' "not
+        filed under Fiction, therefore nonfiction" and "no juvenile heading,
+        therefore Adult" inferences do not apply. Abstaining keeps an
+        unresolvable code from voting against the codes that did resolve.
+        """
+        subject = self._subject(identifier, stored_name)
+        assert subject.fiction is None
+        assert subject.audience is None
+
+    def test_unrecognized_code_still_uses_keyword_fallback(self) -> None:
+        """Abstaining is not the same as ignoring the name.
+
+        An unrecognized code skips the BISAC rulesets but still goes through
+        the keyword classifier, so a distributor name that does carry a signal
+        is honored.
+        """
+        subject = self._subject("INFEN000", "Science Fiction")
+        assert subject.fiction is True
+
+        subject = self._subject("INFEN000", "Nonfiction")
+        assert subject.fiction is False
+
+    @pytest.mark.parametrize(
+        "identifier,expected_fiction",
+        [
+            pytest.param("FICTION / Horror", True, id="fiction_heading"),
+            pytest.param(
+                "FICTION / Science Fiction / Time Travel", True, id="deep_heading"
+            ),
+            pytest.param("HISTORY / General", False, id="nonfiction_heading"),
+            pytest.param(
+                "Antiques & Collectibles / Kitchenware", False, id="mixed_case_heading"
+            ),
+        ],
+    )
+    def test_heading_in_identifier_field_is_matched_as_a_name(
+        self, identifier: str, expected_fiction: bool
+    ) -> None:
+        """Some distributors put the BISAC heading in the identifier field.
+
+        Boundless sends e.g. "FICTION / Horror" as the subject identifier rather
+        than "FIC015000". That is a name, not a code that failed to resolve, so
+        it must still be matched against the rulesets. Regression guard for the
+        abstention introduced alongside it.
+        """
+        subject = self._subject(identifier, None)
+        assert subject.fiction is expected_fiction
+        assert subject.audience == Classifier.AUDIENCE_ADULT
+
+    def test_recognized_code_unaffected_by_abstention(self) -> None:
+        """Codes that do resolve are classified exactly as before.
+
+        These are the Palace Marketplace codes whose partial names
+        ("Historical", "Literary") would each vote nonfiction if the canonical
+        lookup were ever to miss.
+        """
+        for identifier, stored_name in [
+            ("FBFIC000000", "Fiction"),
+            ("FBFIC014000", "Historical"),
+            ("FBFIC016000", "Humorous"),
+            ("FBFIC019000", "Literary"),
+        ]:
+            subject = self._subject(identifier, stored_name)
+            assert subject.fiction is True
+            assert subject.audience == Classifier.AUDIENCE_ADULT
+
+    @pytest.mark.parametrize(
         "identifier,expected",
         [
             pytest.param(

@@ -654,25 +654,61 @@ class BISACClassifier(Classifier):
         m(classifier.Life_Strategies, nonfiction, social_topics),
     ]
 
+    # A BISAC code is a single unpunctuated token (e.g. "FIC014000"). Some
+    # distributors instead put the BISAC *heading* in the identifier field
+    # (e.g. Boundless sends "FICTION / Horror"), which is not a failed code --
+    # it is a name, and is matched as one.
+    _CODE_SHAPED = re.compile(r"^[A-Za-z0-9]+$")
+
+    @classmethod
+    def _unrecognized_code(cls, identifier: str | None) -> bool:
+        """Was a BISAC code supplied that cannot be resolved to a real one?
+
+        By the time a classification method runs, `scrub_identifier` has already
+        stripped the "FB" prefix and "N" suffix used by some distributors and
+        applied `NON_STANDARD_CODE_ALIASES`, so a code-shaped identifier that is
+        still absent from `NAMES` is not a BISAC code at all. That matters
+        because it also means `name` is whatever fragment the distributor
+        supplied (e.g. "Historical", "English literature") rather than a
+        canonical BISAC heading.
+
+        Two kinds of subject are deliberately excluded, because for both of them
+        `name` is expected to be a real BISAC heading and is matched as one: a
+        subject with no identifier, and a subject whose identifier is a heading
+        rather than a code.
+        """
+        if not identifier or not cls._CODE_SHAPED.match(identifier):
+            return False
+        return identifier not in cls.NAMES
+
     @classmethod
     def is_fiction(cls, identifier, name):
-        for ruleset in cls.FICTION:
-            fiction = ruleset.match(*name)
-            if fiction is cls.stop:
-                return None
-            if fiction is not None:
-                return fiction
+        # The rulesets below end in a catch-all that reads "not filed under a
+        # Fiction heading, therefore nonfiction". That inference is sound for a
+        # canonical BISAC name and unsound for anything else, so an unrecognized
+        # code skips them and goes straight to the keyword fallback, which
+        # abstains when the distributor's name carries no fiction signal.
+        if not cls._unrecognized_code(identifier):
+            for ruleset in cls.FICTION:
+                fiction = ruleset.match(*name)
+                if fiction is cls.stop:
+                    return None
+                if fiction is not None:
+                    return fiction
         keyword = "/".join(name)
         return KeywordBasedClassifier.is_fiction(identifier, keyword)
 
     @classmethod
     def audience(cls, identifier, name):
-        for ruleset in cls.AUDIENCE:
-            audience = ruleset.match(*name)
-            if audience is cls.stop:
-                return None
-            if audience is not None:
-                return audience
+        # As in is_fiction: the catch-all rule infers Adult from the absence of
+        # a juvenile heading, which only holds for a canonical BISAC name.
+        if not cls._unrecognized_code(identifier):
+            for ruleset in cls.AUDIENCE:
+                audience = ruleset.match(*name)
+                if audience is cls.stop:
+                    return None
+                if audience is not None:
+                    return audience
         keyword = "/".join(name)
         return KeywordBasedClassifier.audience(identifier, keyword)
 
