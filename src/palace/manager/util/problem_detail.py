@@ -8,6 +8,7 @@ from __future__ import annotations
 import json as j
 import logging
 from abc import ABC, abstractmethod
+from typing import Any
 
 from flask_babel import LazyString
 from pydantic import BaseModel
@@ -23,12 +24,24 @@ def json(
     title: str | None,
     detail: str | None = None,
     debug_message: str | None = None,
+    show_title: bool = True,
 ) -> str:
-    d = dict(type=type, title=str(title), status=status)
+    # `title` is an optional member of a problem detail document (RFC 7807), so a
+    # `None` title is omitted entirely rather than serialized as the string "None".
+    d: dict[str, Any] = {"type": type}
+    if title is not None:
+        d["title"] = str(title)
+    d["status"] = status
     if detail:
         d["detail"] = str(detail)
     if debug_message:
         d["debug_message"] = debug_message
+    # `show_title` is a Palace extension member, emitted only when a title should
+    # *not* be displayed. Clients that render their own title for this problem type
+    # are expected to suppress it; its absence means "display the title as usual",
+    # so every other problem detail document is unaffected.
+    if not show_title:
+        d["show_title"] = False
     return j.dumps(d)
 
 
@@ -52,12 +65,22 @@ class ProblemDetail:
         title: str | None = None,
         detail: str | None = None,
         debug_message: str | None = None,
+        show_title: bool = True,
     ):
+        """Create a ProblemDetail.
+
+        :param show_title: Whether clients should display a title alongside
+            ``detail``.  Palace clients render their own title for a known
+            problem type rather than the document's ``title``, so this is
+            serialized as the ``show_title`` extension member (only when
+            ``False``) to tell them not to.
+        """
         self.uri = uri
         self.title = title
         self.status_code = status_code
         self.detail = detail
         self.debug_message = debug_message
+        self.show_title = show_title
 
     @property
     def response(self) -> tuple[str, int, dict[str, str]]:
@@ -69,6 +92,7 @@ class ProblemDetail:
                 self.title,
                 self.detail,
                 self.debug_message,
+                self.show_title,
             ),
             self.status_code or 400,
             {"Content-Type": JSON_MEDIA_TYPE},
@@ -80,11 +104,15 @@ class ProblemDetail:
         status_code: int | None = None,
         title: str | None = None,
         debug_message: str | None = None,
+        show_title: bool | None = None,
     ) -> ProblemDetail:
         """Create a ProblemDetail for a more specific occurrence of an existing
         ProblemDetail.
 
         The detailed error message will be shown to patrons.
+
+        :param show_title: Whether clients should display a title alongside the
+            detailed message.  Defaults to this ProblemDetail's own setting.
         """
 
         # Title and detail must be LazyStrings from Flask-Babel that are
@@ -100,6 +128,7 @@ class ProblemDetail:
             title or self.title,
             detail,
             debug_message,
+            self.show_title if show_title is None else show_title,
         )
 
     def with_debug(
@@ -121,15 +150,17 @@ class ProblemDetail:
             title or self.title,
             detail or self.detail,
             debug_message,
+            self.show_title,
         )
 
     def __repr__(self) -> str:
-        return "<ProblemDetail(uri={}, title={}, status_code={}, detail={}, debug_message={}".format(
+        return "<ProblemDetail(uri={}, title={}, status_code={}, detail={}, debug_message={}, show_title={}".format(
             self.uri,
             self.title,
             self.status_code,
             self.detail,
             self.debug_message,
+            self.show_title,
         )
 
     def __eq__(self, other: object) -> bool:
@@ -147,6 +178,7 @@ class ProblemDetail:
             and self.status_code == other.status_code
             and self.detail == other.detail
             and self.debug_message == other.debug_message
+            and self.show_title == other.show_title
         )
 
 
