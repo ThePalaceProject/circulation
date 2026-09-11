@@ -1,5 +1,6 @@
 import json
 import logging
+from collections.abc import Mapping
 from typing import ClassVar
 from urllib.parse import (
     SplitResult,
@@ -65,6 +66,7 @@ class SAMLController:
     PROVIDER_NAME = "provider"
     IDP_ENTITY_ID = "idp_entity_id"
     LIBRARY_SHORT_NAME = "library_short_name"
+    SAML_RESPONSE = "SAMLResponse"
     RELAY_STATE = "RelayState"
     ACCESS_TOKEN = "access_token"
     PATRON_INFO = "patron_info"
@@ -221,17 +223,16 @@ class SAMLController:
         return redirect_uri
 
     @staticmethod
-    def _get_request_parameter(params, name, default_value=None):
-        """Returns a parameter containing in the incoming request
+    def _get_request_parameter(
+        params: Mapping[str, str], name: str, default_value: str | None = None
+    ) -> str | ProblemDetail:
+        """Returns a parameter contained in the incoming request
 
         :param params: Request's parameters
-        :type params: Dict
-
+        :param name: Name of the parameter
         :param default_value: Optional default value
-        :type params: Optional[Any]
 
-        :return: Parameter's value or ProblemDetail instance if the parameter is missing
-        :rtype: Union[string, ProblemDetail]
+        :return: Parameter's value, or a ProblemDetail if the parameter is missing or empty
         """
         parameter = params.get(name, default_value)
 
@@ -378,6 +379,15 @@ class SAMLController:
         :return: Redirection response or a ProblemDetail if the response is not correct
         :rtype: Union[Response, ProblemDetail]
         """
+        # SAMLResponse is what makes this request a SAML response. Check for it before
+        # RelayState, which is optional in the SAML POST binding and holds only our own
+        # state. That way a request that is not a SAML response at all (a scanner or a
+        # bare POST) is reported as such, and nothing in RelayState is acted on
+        # before there is a response to validate.
+        saml_response = self._get_request_parameter(request.form, self.SAML_RESPONSE)
+        if isinstance(saml_response, ProblemDetail):
+            return saml_response
+
         if self.RELAY_STATE not in request.form:
             return SAML_INVALID_RESPONSE.detailed(
                 _(
@@ -577,10 +587,16 @@ class SAMLController:
         :param db: Database session
         :return: Redirect response or ProblemDetail
         """
-        # Relay state may arrive via GET (HTTP-Redirect) or POST (HTTP-POST).
-        relay_state = request.args.get(self.RELAY_STATE) or request.form.get(
-            self.RELAY_STATE
-        )
+        # SAMLResponse and RelayState may arrive via GET (HTTP-Redirect) or POST
+        # (HTTP-POST). request.values reads the query string for GET, and both the
+        # query string and the form body for POST. As in saml_authentication_callback,
+        # SAMLResponse is checked first, since RelayState is optional and only carries
+        # our own state.
+        saml_response = self._get_request_parameter(request.values, self.SAML_RESPONSE)
+        if isinstance(saml_response, ProblemDetail):
+            return saml_response
+
+        relay_state = request.values.get(self.RELAY_STATE)
         if not relay_state:
             return SAML_INVALID_RESPONSE.detailed(
                 _(
