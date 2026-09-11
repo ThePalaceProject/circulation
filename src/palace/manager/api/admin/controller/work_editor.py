@@ -19,8 +19,6 @@ from palace.manager.api.admin.problem_details import (
     INVALID_EDIT,
     INVALID_RATING,
     INVALID_SERIES_POSITION,
-    METADATA_REFRESH_FAILURE,
-    METADATA_REFRESH_PENDING,
     MISSING_CUSTOM_LIST,
     UNKNOWN_LANGUAGE,
     UNKNOWN_MEDIUM,
@@ -31,7 +29,6 @@ from palace.manager.api.controller.circulation_manager import (
 )
 from palace.manager.api.problem_details import (
     LIBRARY_NOT_FOUND,
-    REMOTE_INTEGRATION_FAILED,
 )
 from palace.manager.api.util.flask import get_request_library
 from palace.manager.core.classifier import NO_NUMBER, NO_VALUE, genres
@@ -446,41 +443,6 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
         return Response(
             json.dumps({"message": message}), 200, mimetype="application/json"
         )
-
-    def refresh_metadata(
-        self, identifier_type: str, identifier: str, provider: Any | None = None
-    ) -> Response | ProblemDetail:
-        """Refresh the metadata for a book from the content server"""
-        library = get_request_library()
-        self.require_librarian(library)
-
-        work = self.load_work(library, identifier_type, identifier)
-        if isinstance(work, ProblemDetail):
-            return work
-
-        if provider is None:
-            return METADATA_REFRESH_FAILURE
-
-        assert work.presentation_edition is not None
-        primary_identifier = work.presentation_edition.primary_identifier
-        try:
-            record = provider.ensure_coverage(primary_identifier, force=True)
-        except Exception:
-            # The coverage provider may raise an HTTPIntegrationException.
-            return REMOTE_INTEGRATION_FAILED
-
-        if record.exception:
-            # There was a coverage failure.
-            if str(record.exception).startswith("201") or str(
-                record.exception
-            ).startswith("202"):
-                # A 201/202 error means it's never looked up this work before
-                # so it's started the resolution process or looking for sources.
-                return METADATA_REFRESH_PENDING
-            # Otherwise, it just doesn't know anything.
-            return METADATA_REFRESH_FAILURE
-
-        return Response("", 200)
 
     def classifications(
         self, identifier_type: str, identifier: str

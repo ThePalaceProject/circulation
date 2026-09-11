@@ -260,7 +260,6 @@ module = [
     "palace.manager.core.classifier.simplified",
     "palace.manager.core.classifier.work",
     "palace.manager.core.config",
-    "palace.manager.core.coverage",
     "palace.manager.core.entrypoint",
     "palace.manager.core.external_list",
     "palace.manager.core.lcp.credential",

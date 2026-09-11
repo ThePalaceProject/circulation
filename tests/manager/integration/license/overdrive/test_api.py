@@ -7,7 +7,8 @@ from unittest.mock import MagicMock, create_autospec, patch
 import pytest
 
 from palace.util.datetime_helpers import utc_now
-from palace.util.exceptions import BasePalaceException
+from palace.util.exceptions import BasePalaceException, PalaceValueError
+from palace.util.log import LogLevel
 
 from palace.manager.api.circulation.data import HoldInfo, LoanInfo
 from palace.manager.api.circulation.exceptions import (
@@ -43,6 +44,7 @@ from palace.manager.integration.license.overdrive.model import (
     Format,
     LibraryResponse,
     Link,
+    MetadataResponse,
     RequestSpec,
 )
 from palace.manager.integration.license.overdrive.representation import (
@@ -1513,10 +1515,10 @@ class TestOverdriveAPI:
         http.queue_response(200, content=bibliographic)
 
         # Now we're ready. When we call update_licensepool, the
-        # OverdriveAPI will retrieve the availability information,
-        # then the bibliographic information. It will then trigger the
-        # OverdriveBibliographicCoverageProvider, which will
-        # create an Edition and a presentation-ready Work.
+        # OverdriveAPI will retrieve the availability information, then
+        # the bibliographic information. It will then apply that
+        # bibliographic data to create an Edition and a
+        # presentation-ready Work.
         pool, was_new, changed = overdrive_api_fixture.api.update_licensepool(
             identifier.identifier
         )
@@ -1530,15 +1532,6 @@ class TestOverdriveAPI:
         assert pool.work.cover_thumbnail_url.startswith(
             "http://images.contentreserve.com/"
         )
-
-        # The book has been run through the bibliographic coverage
-        # provider.
-        coverage = [
-            x
-            for x in identifier.coverage_records
-            if x.operation is None and x.data_source.name == DataSource.OVERDRIVE
-        ]
-        assert len(coverage) == 1
 
         # Call update_licensepool on an identifier that is missing a work and make
         # sure that it provides bibliographic coverage in that case.
@@ -1559,6 +1552,137 @@ class TestOverdriveAPI:
         )
         assert was_new is False
         assert pool.work.presentation_ready is True
+
+    @pytest.mark.parametrize(
+        "error_code",
+        ["InvalidGuid", "NotFound"],
+    )
+    def test_ensure_bibliographic_coverage_unusable_identifier(
+        self,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        db: DatabaseTransactionFixture,
+        caplog: pytest.LogCaptureFixture,
+        error_code: str,
+    ):
+        # Overdrive tells us the identifier is malformed or unknown to it. The
+        # pool is left without a Work and the caller moves on to the next
+        # title, rather than the whole batch failing over one bad ID.
+        caplog.set_level(LogLevel.warning)
+        identifier = db.identifier(identifier_type=Identifier.OVERDRIVE_ID)
+        pool, _ = LicensePool.for_foreign_id(
+            db.session,
+            DataSource.OVERDRIVE,
+            Identifier.OVERDRIVE_ID,
+            identifier.identifier,
+            collection=overdrive_api_fixture.collection,
+        )
+        overdrive_api_fixture.mock_http.queue_response(
+            200, content=json.dumps({"errorCode": error_code, "message": "no good"})
+        )
+
+        overdrive_api_fixture.api._ensure_bibliographic_coverage(pool)
+
+        assert not pool.work
+        assert f"Could not get Overdrive metadata for {identifier.identifier}" in (
+            caplog.text
+        )
+        assert error_code in caplog.text
+
+    def test_ensure_bibliographic_coverage_unextractable_document(
+        self,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        db: DatabaseTransactionFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        # Overdrive reports no error and still hands us a document we cannot
+        # use. Like an unrecognized ID, this is logged and skipped.
+        caplog.set_level(LogLevel.warning)
+        identifier = db.identifier(identifier_type=Identifier.OVERDRIVE_ID)
+        pool, _ = LicensePool.for_foreign_id(
+            db.session,
+            DataSource.OVERDRIVE,
+            Identifier.OVERDRIVE_ID,
+            identifier.identifier,
+            collection=overdrive_api_fixture.collection,
+        )
+        # No id in the document, which is what the extractor requires.
+        overdrive_api_fixture.mock_http.queue_response(
+            200, content=json.dumps({"title": "A book"})
+        )
+
+        overdrive_api_fixture.api._ensure_bibliographic_coverage(pool)
+
+        assert not pool.work
+        assert "Could not extract bibliographic data" in caplog.text
+
+    def test_ensure_bibliographic_coverage_apply_error(
+        self,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        db: DatabaseTransactionFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        # An exception raised while applying bibliographic data is caught and
+        # logged rather than propagating out of update_licensepool, so one bad
+        # title does not abort the wider availability update.
+        caplog.set_level(LogLevel.warning)
+        api = overdrive_api_fixture.api
+        identifier = db.identifier(identifier_type=Identifier.OVERDRIVE_ID)
+        pool, _ = LicensePool.for_foreign_id(
+            db.session,
+            DataSource.OVERDRIVE,
+            Identifier.OVERDRIVE_ID,
+            identifier.identifier,
+            collection=overdrive_api_fixture.collection,
+        )
+
+        api.metadata_lookup = MagicMock(
+            return_value=MetadataResponse.model_validate({"id": identifier.identifier})
+        )
+        bibliographic = MagicMock()
+        bibliographic.apply.side_effect = PalaceValueError("boom")
+
+        with patch.object(
+            OverdriveRepresentationExtractor,
+            "book_info_to_bibliographic",
+            return_value=bibliographic,
+        ):
+            # Should not raise.
+            api._ensure_bibliographic_coverage(pool)
+
+        bibliographic.apply.assert_called_once()
+        assert not pool.work
+        assert "Error applying Overdrive bibliographic data" in caplog.text
+
+    def test_ensure_bibliographic_coverage_reraises_unexpected_error(
+        self,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        db: DatabaseTransactionFixture,
+    ):
+        # An unexpected error (e.g. a programming bug) is not swallowed: only
+        # BasePalaceException is caught, so anything else propagates.
+        api = overdrive_api_fixture.api
+        identifier = db.identifier(identifier_type=Identifier.OVERDRIVE_ID)
+        pool, _ = LicensePool.for_foreign_id(
+            db.session,
+            DataSource.OVERDRIVE,
+            Identifier.OVERDRIVE_ID,
+            identifier.identifier,
+            collection=overdrive_api_fixture.collection,
+        )
+
+        api.metadata_lookup = MagicMock(
+            return_value=MetadataResponse.model_validate({"id": identifier.identifier})
+        )
+        bibliographic = MagicMock()
+        bibliographic.apply.side_effect = KeyError("typo")
+
+        with patch.object(
+            OverdriveRepresentationExtractor,
+            "book_info_to_bibliographic",
+            return_value=bibliographic,
+        ):
+            with pytest.raises(KeyError):
+                api._ensure_bibliographic_coverage(pool)
 
     def test_update_new_licensepool(
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture

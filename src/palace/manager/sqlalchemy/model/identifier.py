@@ -1175,50 +1175,6 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
             )
         return champion, descriptions
 
-    @classmethod
-    def missing_coverage_from(
-        cls,
-        _db: Session,
-        identifier_types: list[str] | None,
-        coverage_data_source: DataSource | None,
-        operation: str | None = None,
-        count_as_covered: list[str] | None = None,
-        count_as_missing_before: datetime.datetime | None = None,
-        identifiers: list[Identifier] | None = None,
-        collection: Collection | None = None,
-    ) -> Query[Identifier]:
-        """Find identifiers of the given types which have no CoverageRecord
-        from `coverage_data_source`.
-        :param count_as_covered: Identifiers will be counted as
-        covered if their CoverageRecords have a status in this list.
-        :param identifiers: Restrict search to a specific set of identifier objects.
-        """
-        if collection:
-            collection_id = collection.id
-        else:
-            collection_id = None
-
-        data_source_id = None
-        if coverage_data_source:
-            data_source_id = coverage_data_source.id
-
-        clause = and_(
-            Identifier.id == CoverageRecord.identifier_id,
-            CoverageRecord.data_source_id == data_source_id,
-            CoverageRecord.operation == operation,
-            CoverageRecord.collection_id == collection_id,
-        )
-        qu = _db.query(Identifier).outerjoin(CoverageRecord, clause)
-        if identifier_types:
-            qu = qu.filter(Identifier.type.in_(identifier_types))
-        missing = CoverageRecord.not_covered(count_as_covered, count_as_missing_before)
-        qu = qu.filter(missing)
-
-        if identifiers:
-            qu = qu.filter(Identifier.id.in_([x.id for x in identifiers]))
-
-        return qu
-
     def __eq__(self, other: object) -> bool:
         """Equality implementation for total_ordering."""
         # We don't want an Identifier to be == an IdentifierData
