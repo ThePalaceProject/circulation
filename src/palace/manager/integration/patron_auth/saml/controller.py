@@ -1,6 +1,6 @@
 import json
 import logging
-from collections.abc import Mapping, MutableMapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import ClassVar
 from urllib.parse import (
@@ -88,6 +88,11 @@ class SAMLController:
     FORCE_AUTHN = "force_authn"
 
     VALID_FORCE_AUTHN_VALUES: ClassVar[frozenset[str]] = frozenset({"true", "false"})
+
+    # The parameters we add to the relay state before sending it to the IdP.
+    INTERNAL_RELAY_STATE_PARAMETERS: ClassVar[frozenset[str]] = frozenset(
+        {LIBRARY_SHORT_NAME, PROVIDER_NAME, IDP_ENTITY_ID}
+    )
 
     _SITE_WIDE_METADATA_CACHE_KEY: ClassVar[str | None] = None
     _sp_metadata_cache: ClassVar[dict[str | None, str | None]] = {}
@@ -225,14 +230,12 @@ class SAMLController:
 
     @staticmethod
     def _get_relay_state_parameter(
-        relay_parameters: MutableMapping[str, list[str]], name: str
+        relay_parameters: Mapping[str, list[str]], name: str
     ) -> str | ProblemDetail:
-        """Removes and returns a parameter from the parsed query string of the
-        relay state returned by the IdP
+        """Returns a parameter from the parsed query string of the relay state
+        returned by the IdP
 
-        :param relay_parameters: Parsed query string of the relay state; the named
-            parameter is removed from it so that only the client's own parameters
-            remain
+        :param relay_parameters: Parsed query string of the relay state
         :param name: Name of the parameter
 
         :return: Parameter's value, or a ProblemDetail if the parameter is missing
@@ -242,7 +245,7 @@ class SAMLController:
                 _(f"Required parameter {name} is missing from RelayState")
             )
 
-        return relay_parameters.pop(name)[0]
+        return relay_parameters[name][0]
 
     def _parse_relay_state(
         self, relay_state: str
@@ -276,13 +279,19 @@ class SAMLController:
         if isinstance(idp_entity_id, ProblemDetail):
             return idp_entity_id
 
+        # The client's redirect URI is the relay state without our own parameters.
+        client_parameters = {
+            name: values
+            for name, values in relay_state_parameters.items()
+            if name not in self.INTERNAL_RELAY_STATE_PARAMETERS
+        }
         redirect_uri = urlunparse(
             (
                 relay_state_parse_result.scheme,
                 relay_state_parse_result.netloc,
                 relay_state_parse_result.path,
                 relay_state_parse_result.params,
-                urlencode(relay_state_parameters, True),
+                urlencode(client_parameters, True),
                 relay_state_parse_result.fragment,
             )
         )
