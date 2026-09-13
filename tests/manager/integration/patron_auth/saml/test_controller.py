@@ -437,6 +437,22 @@ class TestSAMLController:
             pytest.param(
                 {
                     SAMLController.SAML_RESPONSE: "encoded",
+                    SAMLController.RELAY_STATE: "",
+                },
+                None,
+                None,
+                None,
+                None,
+                SAML_INVALID_RESPONSE.detailed(
+                    "Required parameter {} is missing from the response body".format(
+                        SAMLController.RELAY_STATE
+                    )
+                ),
+                id="with_empty_relay_state",
+            ),
+            pytest.param(
+                {
+                    SAMLController.SAML_RESPONSE: "encoded",
                     SAMLController.RELAY_STATE: "<>",
                 },
                 None,
@@ -551,6 +567,30 @@ class TestSAMLController:
                 "http://localhost?access_token=ABCDEFG&patron_info=%22%22",
                 None,
                 id="when_saml_callback_returns_correct_patron",
+            ),
+            # The client's own query parameters in the relay state must survive
+            # into the final redirect; only our three internal ones are removed.
+            pytest.param(
+                {
+                    SAMLController.SAML_RESPONSE: "encoded",
+                    SAMLController.RELAY_STATE: "http://localhost?"
+                    + urlencode(
+                        {
+                            "state": "xyz",
+                            SAMLController.LIBRARY_SHORT_NAME: "default",
+                            SAMLController.PROVIDER_NAME: SAMLWebSSOAuthenticationProvider.label(),
+                            SAMLController.IDP_ENTITY_ID: IDENTITY_PROVIDERS[
+                                0
+                            ].entity_id,
+                        }
+                    ),
+                },
+                None,
+                (create_autospec(spec=Credential), object(), create_patron_data_mock()),
+                "ABCDEFG",
+                "http://localhost?access_token=ABCDEFG&patron_info=%22%22&state=xyz",
+                None,
+                id="when_saml_callback_returns_correct_patron_with_client_parameters",
             ),
         ],
     )

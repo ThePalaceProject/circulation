@@ -419,7 +419,8 @@ class SAMLController:
         if isinstance(saml_response, ProblemDetail):
             return saml_response
 
-        if self.RELAY_STATE not in request.form:
+        relay_state = request.form.get(self.RELAY_STATE)
+        if not relay_state:
             return SAML_INVALID_RESPONSE.detailed(
                 _(
                     "Required parameter {} is missing from the response body".format(
@@ -428,7 +429,6 @@ class SAMLController:
                 )
             )
 
-        relay_state = request.form[self.RELAY_STATE]
         relay_params = self._parse_relay_state(relay_state)
         if isinstance(relay_params, ProblemDetail):
             return relay_params
