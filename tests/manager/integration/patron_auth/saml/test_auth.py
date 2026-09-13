@@ -1,6 +1,7 @@
 import logging
 from collections.abc import Callable
 from copy import copy
+from typing import Any
 from unittest.mock import MagicMock, create_autospec, patch
 from urllib.parse import parse_qs, urlsplit
 
@@ -16,6 +17,8 @@ from palace.manager.integration.patron_auth.saml.auth import (
     SAMLAuthenticationManagerFactory,
 )
 from palace.manager.integration.patron_auth.saml.configuration.model import (
+    SAMLAuthnContextClass,
+    SAMLAuthnContextComparison,
     SAMLOneLoginConfiguration,
     SAMLWebSSOAuthSettings,
 )
@@ -386,6 +389,95 @@ class TestSAMLAuthenticationManager:
         # The signature is computed from the request as sent, so it survives stripping.
         if service_provider.authn_requests_signed:
             assert "Signature" in query_items
+
+    @pytest.mark.parametrize(
+        "settings_kwargs, expected_class_refs, expected_comparison",
+        [
+            pytest.param(
+                {},
+                [SAMLAuthnContextClass.PASSWORD_PROTECTED_TRANSPORT.value],
+                "exact",
+                id="default-requests-password-protected-transport-exact",
+            ),
+            pytest.param(
+                {"requested_authn_context_classes": []},
+                None,
+                None,
+                id="empty-selection-omits-the-element",
+            ),
+            pytest.param(
+                {
+                    "requested_authn_context_classes": [
+                        SAMLAuthnContextClass.REFEDS_MFA,
+                        SAMLAuthnContextClass.SMARTCARD,
+                    ],
+                    "requested_authn_context_comparison": (
+                        SAMLAuthnContextComparison.MINIMUM
+                    ),
+                },
+                [
+                    SAMLAuthnContextClass.REFEDS_MFA.value,
+                    SAMLAuthnContextClass.SMARTCARD.value,
+                ],
+                "minimum",
+                id="selected-classes-and-comparison-reach-the-request",
+            ),
+        ],
+    )
+    def test_start_authentication_requested_authn_context_in_request(
+        self,
+        controller_fixture: ControllerFixture,
+        create_saml_configuration,
+        create_mock_onelogin_configuration: Callable[..., SAMLOneLoginConfiguration],
+        settings_kwargs: dict[str, Any],
+        expected_class_refs: list[str] | None,
+        expected_comparison: str | None,
+    ) -> None:
+        """The selected classes appear in the emitted AuthnRequest, in order.
+
+        An empty selection omits the RequestedAuthnContext element entirely,
+        leaving the choice of authentication method to the IdP. This pins the
+        toolkit's actual XML output, not just the settings dict handed to it.
+        """
+        configuration = create_saml_configuration(**settings_kwargs)
+        onelogin_configuration = create_mock_onelogin_configuration(
+            SERVICE_PROVIDER_WITH_UNSIGNED_REQUESTS, IDENTITY_PROVIDERS, configuration
+        )
+        authentication_manager = SAMLAuthenticationManager(
+            onelogin_configuration, SAMLSubjectParser()
+        )
+
+        with controller_fixture.app.test_request_context("/"):
+            result = authentication_manager.start_authentication(
+                controller_fixture.db.session, saml_strings.IDP_1_ENTITY_ID, ""
+            )
+
+        assert isinstance(result, str)
+        query_items = parse_qs(urlsplit(result).query)
+        decoded_saml_request = OneLogin_Saml2_Utils.decode_base64_and_inflate(
+            query_items["SAMLRequest"][0]
+        )
+
+        # The request must be schema-valid whether the element is present or absent.
+        validation_result = OneLogin_Saml2_XML.validate_xml(
+            decoded_saml_request, "saml-schema-protocol-2.0.xsd", False
+        )
+        assert isinstance(validation_result, OneLogin_Saml2_XML._element_class)
+
+        saml_request_dom = fromstring(decoded_saml_request)
+        context_nodes = OneLogin_Saml2_XML.query(
+            saml_request_dom, "./samlp:RequestedAuthnContext"
+        )
+        if expected_class_refs is None:
+            assert context_nodes == []
+        else:
+            [context_node] = context_nodes
+            assert context_node.get("Comparison") == expected_comparison
+            class_ref_nodes = OneLogin_Saml2_XML.query(
+                saml_request_dom,
+                "./samlp:RequestedAuthnContext/saml:AuthnContextClassRef",
+            )
+            assert [node.text for node in class_ref_nodes] == expected_class_refs
 
     def test_start_authentication_logs_that_no_acs_endpoint_is_named(
         self,

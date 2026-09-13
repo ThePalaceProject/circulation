@@ -138,6 +138,11 @@ class FormMetadata(LoggerMixin):
             return str(value).lower()
         if isinstance(value, int):
             return str(value)
+        if isinstance(value, (list, tuple)):
+            # Enum members are unwrapped to their stored values so the admin
+            # interface never receives raw Enum objects. Other element types are
+            # left alone so existing list defaults keep their exact shape.
+            return [item.value if isinstance(item, Enum) else item for item in value]
         return value
 
     def to_dict(

@@ -1,6 +1,7 @@
 import re
 from collections.abc import Mapping
 from datetime import datetime
+from enum import StrEnum
 from re import Pattern
 from threading import Lock
 from typing import Annotated, Any, Final
@@ -141,6 +142,89 @@ ACS_SELECTION_POLICY_LABELS: Final[Mapping[SAMLACSSelectionPolicy, str]] = froze
 )
 
 
+class SAMLAuthnContextClass(StrEnum):
+    """SAML authentication context class references offered in the admin interface.
+
+    The values are class reference URIs: most come from the SAML 2.0
+    authentication context specification, plus the REFEDS MFA and SFA profiles
+    (https URIs), which are common in InCommon and other academic federations.
+    They are stored in each integration's settings and sent to IdPs in
+    authentication requests, so they must not change.
+    """
+
+    PASSWORD_PROTECTED_TRANSPORT = (
+        "urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport"
+    )
+    PASSWORD = "urn:oasis:names:tc:SAML:2.0:ac:classes:Password"
+    MOBILE_TWO_FACTOR_CONTRACT = (
+        "urn:oasis:names:tc:SAML:2.0:ac:classes:MobileTwoFactorContract"
+    )
+    TIME_SYNC_TOKEN = "urn:oasis:names:tc:SAML:2.0:ac:classes:TimeSyncToken"
+    TLS_CLIENT = "urn:oasis:names:tc:SAML:2.0:ac:classes:TLSClient"
+    SMARTCARD = "urn:oasis:names:tc:SAML:2.0:ac:classes:Smartcard"
+    KERBEROS = "urn:oasis:names:tc:SAML:2.0:ac:classes:Kerberos"
+    REFEDS_MFA = "https://refeds.org/profile/mfa"
+    REFEDS_SFA = "https://refeds.org/profile/sfa"
+    UNSPECIFIED = "urn:oasis:names:tc:SAML:2.0:ac:classes:unspecified"
+
+
+class SAMLAuthnContextComparison(StrEnum):
+    """Comparison attribute values for a RequestedAuthnContext element.
+
+    The values are defined by the SAML 2.0 Core specification and are stored in
+    each integration's settings, so they must not change.
+    """
+
+    EXACT = "exact"
+    MINIMUM = "minimum"
+    BETTER = "better"
+    MAXIMUM = "maximum"
+
+
+# Names shown in the administrative interface. The technical class name is kept in
+# parentheses so admins can match a selection against IdP documentation.
+AUTHN_CONTEXT_CLASS_LABELS: Final[Mapping[SAMLAuthnContextClass, str]] = frozendict(
+    {
+        SAMLAuthnContextClass.PASSWORD_PROTECTED_TRANSPORT: (
+            "Password over a secure connection (PasswordProtectedTransport)"
+        ),
+        SAMLAuthnContextClass.PASSWORD: "Password (Password)",
+        SAMLAuthnContextClass.MOBILE_TWO_FACTOR_CONTRACT: (
+            "Mobile two-factor (MobileTwoFactorContract)"
+        ),
+        SAMLAuthnContextClass.TIME_SYNC_TOKEN: (
+            "One-time password token (TimeSyncToken)"
+        ),
+        SAMLAuthnContextClass.TLS_CLIENT: "TLS client certificate (TLSClient)",
+        SAMLAuthnContextClass.SMARTCARD: "Smart card (Smartcard)",
+        SAMLAuthnContextClass.KERBEROS: "Kerberos (Kerberos)",
+        SAMLAuthnContextClass.REFEDS_MFA: "Multi-factor (REFEDS MFA)",
+        SAMLAuthnContextClass.REFEDS_SFA: "Single-factor (REFEDS SFA)",
+        SAMLAuthnContextClass.UNSPECIFIED: "Unspecified (unspecified)",
+    }
+)
+
+AUTHN_CONTEXT_COMPARISON_LABELS: Final[Mapping[SAMLAuthnContextComparison, str]] = (
+    frozendict(
+        {
+            SAMLAuthnContextComparison.EXACT: (
+                "Exact: the authentication method must exactly match one of the "
+                "requested methods"
+            ),
+            SAMLAuthnContextComparison.MINIMUM: (
+                "Minimum: one of the requested methods, or stronger"
+            ),
+            SAMLAuthnContextComparison.BETTER: (
+                "Better: stronger than all of the requested methods"
+            ),
+            SAMLAuthnContextComparison.MAXIMUM: (
+                "Maximum: as strong as possible without exceeding the requested methods"
+            ),
+        }
+    )
+)
+
+
 class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
     """SAML Web SSO Authentication settings"""
 
@@ -198,6 +282,98 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
             },
         ),
     ] = None
+    requested_authn_context_classes: Annotated[
+        list[SAMLAuthnContextClass],
+        FormMetadata(
+            label="Requested Authentication Methods",
+            description=(
+                "Authentication methods (SAML authentication context classes) that the "
+                "Identity Provider will be asked to use, compared according to "
+                "<b>Requested Authentication Method Comparison</b>. "
+                "If none are selected, no requirement is sent and the Identity Provider "
+                "chooses how to authenticate the patron. Selecting none is the most "
+                "compatible choice for IdPs that offer passwordless methods such as "
+                "passkeys. By default, "
+                f"'{AUTHN_CONTEXT_CLASS_LABELS[SAMLAuthnContextClass.PASSWORD_PROTECTED_TRANSPORT]}' "
+                "is requested."
+                '<details style="margin-top: 0.5em;">'
+                '<summary style="cursor: pointer; text-decoration: underline;">'
+                "More details about these authentication methods"
+                "</summary>"
+                "<ul>"
+                "<li><b>Password over a secure connection</b>: username and password "
+                "over an encrypted connection. This is the traditional login form and "
+                "the default.</li>"
+                "<li><b>Password</b>: username and password without requiring an "
+                "encrypted connection. Rarely appropriate on its own.</li>"
+                "<li><b>Mobile two-factor</b>: two-factor authentication tied to a "
+                "mobile device contract.</li>"
+                "<li><b>One-time password token</b>: a time-synchronized hardware or "
+                "software token.</li>"
+                "<li><b>TLS client certificate</b>: a certificate presented by the "
+                "patron's browser or device.</li>"
+                "<li><b>Smart card</b>: a physical smart card.</li>"
+                "<li><b>Kerberos</b>: a Kerberos ticket.</li>"
+                "<li><b>Multi-factor (REFEDS MFA)</b>: the REFEDS multi-factor "
+                "profile, the common way to request MFA from InCommon and other "
+                "federated IdPs. Use it with the 'Exact' comparison.</li>"
+                "<li><b>Single-factor (REFEDS SFA)</b>: the REFEDS single-factor "
+                "profile. Use it with the 'Exact' comparison.</li>"
+                "<li><b>Unspecified</b>: requests the literal 'unspecified' class, "
+                "which some IdPs assert when no particular method applies. It does "
+                "NOT mean 'any method'. To let the IdP decide, select nothing "
+                "instead.</li>"
+                "</ul>"
+                "Passkeys and other passwordless methods have no dedicated SAML "
+                "class. To support them, select nothing, or ask the IdP operator "
+                "which class they assert."
+                "</details>"
+            ),
+            type=FormFieldType.MENU,
+            options={
+                authn_context_class.value: label
+                for authn_context_class, label in AUTHN_CONTEXT_CLASS_LABELS.items()
+            },
+            format="narrow",
+        ),
+    ] = [SAMLAuthnContextClass.PASSWORD_PROTECTED_TRANSPORT]
+    requested_authn_context_comparison: Annotated[
+        SAMLAuthnContextComparison,
+        FormMetadata(
+            label="Requested Authentication Method Comparison",
+            description=(
+                "How the Identity Provider should compare the authentication method it "
+                "uses against the <b>Requested Authentication Methods</b> list. The "
+                "comparison applies to the list as a whole. It has no effect when no "
+                "methods are selected."
+                '<details style="margin-top: 0.5em;">'
+                '<summary style="cursor: pointer; text-decoration: underline;">'
+                "More details about the comparison values"
+                "</summary>"
+                "<ul>"
+                "<li><b>Exact</b>: the method used must exactly match one of the "
+                "requested methods.</li>"
+                "<li><b>Minimum</b>: the method used must be at least as strong as "
+                "one of the requested methods.</li>"
+                "<li><b>Better</b>: the method used must be stronger than every "
+                "requested method.</li>"
+                "<li><b>Maximum</b>: the method used must be as strong as possible "
+                "without being stronger than a requested method.</li>"
+                "</ul>"
+                "The SAML specification does not define which methods are stronger "
+                "than others. Each Identity Provider decides its own ordering, so "
+                "the non-Exact comparisons behave differently from IdP to IdP. The "
+                "REFEDS MFA and SFA profiles are designed to be requested with the "
+                "'Exact' comparison."
+                "</details>"
+            ),
+            type=FormFieldType.SELECT,
+            options={
+                comparison.value: label
+                for comparison, label in AUTHN_CONTEXT_COMPARISON_LABELS.items()
+            },
+        ),
+    ] = SAMLAuthnContextComparison.EXACT
     federated_identity_provider_entity_ids: Annotated[
         list[str] | None,
         FormMetadata(
@@ -571,6 +747,8 @@ class SAMLOneLoginConfiguration(LoggerMixin):
 
     SECURITY = "security"
     AUTHN_REQUESTS_SIGNED = "authnRequestsSigned"
+    REQUESTED_AUTHN_CONTEXT = "requestedAuthnContext"
+    REQUESTED_AUTHN_CONTEXT_COMPARISON = "requestedAuthnContextComparison"
 
     def __init__(
         self,
@@ -933,6 +1111,19 @@ class SAMLOneLoginConfiguration(LoggerMixin):
             service_provider_settings[self.SECURITY][self.AUTHN_REQUESTS_SIGNED]
             or service_provider_settings[self.SECURITY][self.AUTHN_REQUESTS_SIGNED]
         )
+
+        # An empty selection means no RequestedAuthnContext element is sent at all
+        # (the OneLogin toolkit omits it when the value is False), leaving the choice
+        # of authentication method entirely to the IdP.
+        requested_classes = self._configuration.requested_authn_context_classes
+        onelogin_settings[self.SECURITY][self.REQUESTED_AUTHN_CONTEXT] = (
+            [authn_context_class.value for authn_context_class in requested_classes]
+            if requested_classes
+            else False
+        )
+        onelogin_settings[self.SECURITY][
+            self.REQUESTED_AUTHN_CONTEXT_COMPARISON
+        ] = self._configuration.requested_authn_context_comparison.value
 
         settings = OneLogin_Saml2_Settings(onelogin_settings)
 
