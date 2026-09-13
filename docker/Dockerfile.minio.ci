@@ -1,4 +1,4 @@
-FROM minio/minio:latest AS minio
+FROM quay.io/minio/minio:latest AS minio
 
 ENV MINIO_ROOT_USER=palace
 ENV MINIO_ROOT_PASSWORD=palace123
