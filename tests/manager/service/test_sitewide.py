@@ -122,6 +122,45 @@ class TestSitewideConfiguration:
             assert config.patron_web_hostnames == expected
 
     @pytest.mark.parametrize(
+        "patron_web_default_url, expected",
+        [
+            pytest.param(None, None, id="unset"),
+            pytest.param(
+                "https://catalog.example.com",
+                "https://catalog.example.com",
+                id="host-only",
+            ),
+            pytest.param(
+                "https://catalog.example.com/",
+                "https://catalog.example.com",
+                id="trailing-slash-stripped",
+            ),
+            pytest.param(
+                "https://catalog.example.com/lib/",
+                "https://catalog.example.com/lib",
+                id="path-allowed",
+            ),
+            pytest.param(
+                "catalog.example.com", CannotLoadConfiguration, id="missing-scheme"
+            ),
+        ],
+    )
+    def test_patron_web_default_url(
+        self,
+        sitewide_configuration_fixture: SitewideConfigurationFixture,
+        patron_web_default_url: str | None,
+        expected: str | None | type[Exception],
+    ) -> None:
+        sitewide_configuration_fixture.set(
+            "PALACE_PATRON_WEB_DEFAULT_URL", patron_web_default_url
+        )
+
+        context = sitewide_configuration_fixture.get_context_manager(expected)
+        with context:
+            config = SitewideConfiguration()
+            assert config.patron_web_default_url == expected
+
+    @pytest.mark.parametrize(
         "quicksight_authorized_arns, expected",
         [
             ("invalid json", CannotLoadConfiguration),

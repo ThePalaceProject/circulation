@@ -24,6 +24,7 @@ from palace.manager.integration.patron_auth.saml.configuration.problem_details i
 from palace.manager.integration.patron_auth.saml.controller import (
     SAML_INVALID_REQUEST,
     SAML_INVALID_RESPONSE,
+    SAML_UNSOLICITED_RESPONSE,
     SAMLController,
 )
 from palace.manager.integration.patron_auth.saml.metadata.model import (
@@ -42,8 +43,12 @@ from palace.manager.integration.patron_auth.saml.provider import (
     SAMLWebSSOAuthenticationProvider,
 )
 from palace.manager.sqlalchemy.model.credential import Credential
+from palace.manager.sqlalchemy.model.discovery_service_registration import (
+    DiscoveryServiceRegistration,
+)
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.model.library import Library
+from palace.manager.sqlalchemy.util import create
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.fixtures.api_controller import ControllerFixture
 from tests.mocks import saml_strings
@@ -367,6 +372,184 @@ class TestSAMLController:
                 )
 
     @pytest.mark.parametrize(
+        "relay_state, default_url, expected_location",
+        [
+            pytest.param(
+                None,
+                "https://catalog.example.com",
+                "https://catalog.example.com",
+                id="missing-relay-state-uses-default",
+            ),
+            pytest.param(
+                "",
+                "https://catalog.example.com",
+                "https://catalog.example.com",
+                id="empty-relay-state-uses-default",
+            ),
+            pytest.param(
+                "https://catalog.example.com/lib?x=1#top",
+                None,
+                "https://catalog.example.com/lib?x=1#top",
+                id="known-host-relay-state-is-used-as-is",
+            ),
+            pytest.param(
+                "HTTPS://CATALOG.EXAMPLE.COM/lib",
+                None,
+                "https://CATALOG.EXAMPLE.COM/lib",
+                id="known-host-match-is-case-insensitive",
+            ),
+            pytest.param(
+                "https://registered.example.com/other",
+                None,
+                "https://registered.example.com/other",
+                id="registered-web-client-host-is-known",
+            ),
+            # urlsplit drops tab, CR, and LF, and the input is stripped; the
+            # redirect must use the cleaned URL, since the raw one cannot be put
+            # in a Location header.
+            pytest.param(
+                "https://catalog.example.com\n/lib\t?x=1",
+                None,
+                "https://catalog.example.com/lib?x=1",
+                id="control-characters-are-stripped-before-redirect",
+            ),
+            pytest.param(
+                "  https://catalog.example.com/lib ",
+                None,
+                "https://catalog.example.com/lib",
+                id="surrounding-whitespace-is-stripped-before-redirect",
+            ),
+            pytest.param(
+                "https://catalog.example.com:8443/lib",
+                "https://catalog.example.com",
+                "https://catalog.example.com",
+                id="port-must-match",
+            ),
+            pytest.param(
+                "https://[catalog.example.com]/lib",
+                "https://catalog.example.com",
+                "https://catalog.example.com",
+                id="unparseable-host-falls-back-to-default",
+            ),
+            pytest.param(
+                "https://evil.example/",
+                "https://catalog.example.com",
+                "https://catalog.example.com",
+                id="unknown-host-falls-back-to-default",
+            ),
+            pytest.param(
+                "https://catalog.example.com@evil.example/",
+                "https://catalog.example.com",
+                "https://catalog.example.com",
+                id="userinfo-before-known-host-falls-back-to-default",
+            ),
+            pytest.param(
+                "http://catalog.example.com/",
+                "https://catalog.example.com",
+                "https://catalog.example.com",
+                id="scheme-must-match",
+            ),
+            pytest.param(
+                "javascript:alert(1)",
+                "https://catalog.example.com",
+                "https://catalog.example.com",
+                id="non-http-scheme-falls-back-to-default",
+            ),
+            pytest.param(
+                "<>",
+                "https://catalog.example.com",
+                "https://catalog.example.com",
+                id="garbage-relay-state-falls-back-to-default",
+            ),
+            pytest.param(
+                "https://evil.example/",
+                None,
+                None,
+                id="unknown-host-and-no-default-is-rejected",
+            ),
+            pytest.param(
+                None,
+                None,
+                None,
+                id="missing-relay-state-and-no-default-is-rejected",
+            ),
+        ],
+    )
+    def test_saml_authentication_callback_unsolicited(
+        self,
+        controller_fixture: ControllerFixture,
+        relay_state: str | None,
+        default_url: str | None,
+        expected_location: str | None,
+    ) -> None:
+        """An unsolicited response, one whose RelayState carries none of our
+        parameters, is never authenticated. The browser is sent to the IdP's
+        RelayState if it points at a known patron web client, else to the
+        sitewide default web catalog, else the response is rejected.
+        """
+        # Arrange
+        authentication_manager = create_autospec(spec=SAMLAuthenticationManager)
+        provider = create_autospec(spec=SAMLWebSSOAuthenticationProvider)
+        provider.label = MagicMock(
+            return_value=SAMLWebSSOAuthenticationProvider.label()
+        )
+        provider.get_authentication_manager = MagicMock(
+            return_value=authentication_manager
+        )
+        authenticator = Authenticator(
+            controller_fixture.db.session,
+            libraries=controller_fixture.db.session.query(Library),
+        )
+        authenticator.library_authenticators["default"].register_saml_provider(provider)
+        controller = SAMLController(controller_fixture.app.manager, authenticator)
+
+        # Known patron web clients are built the way CirculationManager builds
+        # them: a sitewide hostname plus a registered web client URL (which may
+        # carry a path). A "*" (development only) must never match anything, and
+        # an entry that cannot be parsed must be skipped, not fail the request.
+        controller_fixture.services_fixture.set_sitewide_config_option(
+            "patron_web_hostnames", ["https://catalog.example.com"]
+        )
+        create(
+            controller_fixture.db.session,
+            DiscoveryServiceRegistration,
+            library=controller_fixture.db.default_library(),
+            integration=controller_fixture.db.discovery_service_integration(),
+            web_client="https://registered.example.com/lib",
+        )
+        manager = controller_fixture.app.manager
+        manager.patron_web_domains = manager.get_patron_web_domains() | {
+            "*",
+            "https://[unparseable",
+        }
+        controller_fixture.services_fixture.set_sitewide_config_option(
+            "patron_web_default_url", default_url
+        )
+
+        data = {SAMLController.SAML_RESPONSE: "encoded"}
+        if relay_state is not None:
+            data[SAMLController.RELAY_STATE] = relay_state
+
+        with controller_fixture.app.test_request_context(
+            "/saml_callback", method="POST", data=data
+        ):
+            # Act
+            result = controller.saml_authentication_callback(
+                request, controller_fixture.db.session
+            )
+
+        # Assert
+        if expected_location is None:
+            assert isinstance(result, ProblemDetail)
+            assert result.uri == SAML_UNSOLICITED_RESPONSE.uri
+        else:
+            assert isinstance(result, wkResponse)
+            assert result.status_code == 303
+            assert result.headers.get("Location") == expected_location
+
+        authentication_manager.finish_authentication.assert_not_called()
+
+    @pytest.mark.parametrize(
         "data, finish_authentication_result, saml_callback_result, bearer_token, expected_authentication_redirect_uri, expected_problem,",
         [
             pytest.param(
@@ -421,17 +604,17 @@ class TestSAMLController:
                 ),
                 id="with_missing_saml_response_and_valid_relay_state",
             ),
+            # A RelayState that is missing, empty, or carries none of our parameters
+            # is an unsolicited response. With no patron web default URL configured
+            # (the test default), it is rejected. The redirect cases are covered by
+            # test_saml_authentication_callback_unsolicited.
             pytest.param(
                 {SAMLController.SAML_RESPONSE: "encoded"},
                 None,
                 None,
                 None,
                 None,
-                SAML_INVALID_RESPONSE.detailed(
-                    "Required parameter {} is missing from the response body".format(
-                        SAMLController.RELAY_STATE
-                    )
-                ),
+                SAML_UNSOLICITED_RESPONSE,
                 id="with_missing_relay_state",
             ),
             pytest.param(
@@ -443,11 +626,7 @@ class TestSAMLController:
                 None,
                 None,
                 None,
-                SAML_INVALID_RESPONSE.detailed(
-                    "Required parameter {} is missing from the response body".format(
-                        SAMLController.RELAY_STATE
-                    )
-                ),
+                SAML_UNSOLICITED_RESPONSE,
                 id="with_empty_relay_state",
             ),
             pytest.param(
@@ -459,11 +638,7 @@ class TestSAMLController:
                 None,
                 None,
                 None,
-                SAML_INVALID_RESPONSE.detailed(
-                    "Required parameter {} is missing from RelayState".format(
-                        SAMLController.LIBRARY_SHORT_NAME
-                    )
-                ),
+                SAML_UNSOLICITED_RESPONSE,
                 id="with_incorrect_relay_state",
             ),
             pytest.param(
@@ -1473,7 +1648,7 @@ class TestSAMLController:
     )
     def test_saml_logout_callback_missing_relay_state_param(
         self, controller_fixture: ControllerFixture, missing_param: str
-    ):
+    ) -> None:
         """Missing required relay state parameter returns ProblemDetail."""
         controller, *_ = self._make_controller_and_mocks(controller_fixture)
 
@@ -1492,6 +1667,40 @@ class TestSAMLController:
             )
 
         assert isinstance(result, ProblemDetail)
+        assert result.uri == SAML_INVALID_RESPONSE.uri
+        assert result.detail is not None
+        assert missing_param in result.detail
+
+    @pytest.mark.parametrize(
+        "relay_state_url",
+        [
+            pytest.param("https://app.example.com/logout", id="foreign"),
+            pytest.param("<>", id="garbage"),
+            pytest.param("https://[x]/", id="unparseable"),
+        ],
+    )
+    def test_saml_logout_callback_relay_state_not_ours(
+        self, controller_fixture: ControllerFixture, relay_state_url: str
+    ) -> None:
+        """A logout relay state carrying none of our parameters is reported the
+        same way as one missing its first parameter; unlike login, there is no
+        unsolicited-response redirect.
+        """
+        controller, mock_provider, mock_auth_manager, mock_credential_manager = (
+            self._make_controller_and_mocks(controller_fixture)
+        )
+        qs = urlencode({"SAMLResponse": "encoded", "RelayState": relay_state_url})
+
+        with controller_fixture.app.test_request_context(f"/saml/logout_callback?{qs}"):
+            result = controller.saml_logout_callback(
+                request, controller_fixture.db.session
+            )
+
+        assert isinstance(result, ProblemDetail)
+        assert result.uri == SAML_INVALID_RESPONSE.uri
+        assert result.detail is not None
+        assert SAMLController.LIBRARY_SHORT_NAME in result.detail
+        mock_auth_manager.finish_logout.assert_not_called()
 
     @pytest.mark.parametrize(
         "library_short_name, mock_provider_lookup",

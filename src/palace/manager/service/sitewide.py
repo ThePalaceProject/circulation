@@ -14,6 +14,10 @@ from palace.manager.util.pydantic import HttpUrl
 class SitewideConfiguration(ServiceConfiguration):
     base_url: HttpUrl | None = None
     patron_web_hostnames: list[HttpUrl] | Literal["*"] = []
+    # The web catalog to send a patron to when we have no better destination,
+    # such as an unsolicited SAML login. Unlike the hostnames above, this is a
+    # full URL and may include a path.
+    patron_web_default_url: HttpUrl | None = None
     quicksight_authorized_arns: dict[str, list[str]] | None = None
 
     @field_validator("patron_web_hostnames", mode="before")
