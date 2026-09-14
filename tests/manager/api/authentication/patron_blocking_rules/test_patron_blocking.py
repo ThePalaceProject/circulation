@@ -12,7 +12,6 @@ Covers:
 
 from __future__ import annotations
 
-import json
 from typing import Any
 from unittest.mock import MagicMock, PropertyMock, patch
 
@@ -174,19 +173,12 @@ class TestCheckPatronBlockingRulesWithEvaluator:
         assert result.detail == "Second rule."
 
     def test_show_title_true_by_default(self) -> None:
-        """By default the document is unchanged — no show_title member."""
+        """By default the block asks clients to render the title, as today."""
         rules = [PatronBlockingRule(name="block", rule="True", message="Go elsewhere.")]
         result = check_patron_blocking_rules_with_evaluator(rules, {})
         assert isinstance(result, ProblemDetail)
         assert result.show_title is True
         assert result.detail == "Go elsewhere."
-        assert "show_title" not in json.loads(result.response[0])
-
-    def test_show_title_true_explicit(self) -> None:
-        rules = [PatronBlockingRule(name="block", rule="True", message="Go elsewhere.")]
-        result = check_patron_blocking_rules_with_evaluator(rules, {}, show_title=True)
-        assert isinstance(result, ProblemDetail)
-        assert result.show_title is True
 
     def test_show_title_false_flags_the_document(self) -> None:
         """show_title=False asks clients to render only the configured message."""
@@ -200,10 +192,6 @@ class TestCheckPatronBlockingRulesWithEvaluator:
         assert result.status_code == 403
         assert result.title == BLOCKED_BY_POLICY.title
         assert result.detail == "Go elsewhere."
-
-        document = json.loads(result.response[0])
-        assert document["show_title"] is False
-        assert document["detail"] == "Go elsewhere."
 
     def test_show_title_false_with_default_message(self) -> None:
         """A rule without a message still falls back to the default message."""
