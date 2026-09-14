@@ -557,6 +557,48 @@ class TestBISACClassifier:
         assert Lowercased(fragment) not in BISACClassifier.TOP_LEVEL_HEADINGS
 
     @pytest.mark.parametrize(
+        "identifier,name,stored_fiction,expected",
+        [
+            pytest.param(
+                "INFEN000", "English literature", False, True, id="vendor_code_is_stale"
+            ),
+            pytest.param(
+                "FBZZZ000000", "Historical", False, True, id="unreal_code_is_stale"
+            ),
+            pytest.param(
+                "FBFIC014000",
+                "Historical",
+                False,
+                True,
+                id="real_fiction_code_is_stale",
+            ),
+            pytest.param("HIS027000", None, False, False, id="real_nonfiction_agrees"),
+            pytest.param("FBFIC014000", "Historical", True, False, id="fiction_agrees"),
+            pytest.param(
+                "INFEN000", "English literature", True, False, id="keyword_agrees"
+            ),
+            pytest.param(None, None, False, False, id="nothing_to_classify"),
+        ],
+    )
+    def test_contradicts_stored_fiction(
+        self,
+        identifier: str | None,
+        name: str | None,
+        stored_fiction: bool | None,
+        expected: bool,
+    ) -> None:
+        """The shared definition of a subject whose stored value went stale.
+
+        Subjects are only re-examined when `checked` is false, so the repairs
+        that reset it need one definition of which rows are affected. Both the
+        migration and the re-run task ask this.
+        """
+        assert (
+            BISACClassifier.contradicts_stored_fiction(identifier, name, stored_fiction)
+            is expected
+        )
+
+    @pytest.mark.parametrize(
         "identifier,stored_name",
         [
             pytest.param("FBFIC000000", "Fiction", id="fiction_general"),
