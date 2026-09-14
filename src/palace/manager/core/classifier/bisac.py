@@ -1,5 +1,7 @@
 import csv
 import re
+from collections.abc import Callable, Sequence
+from typing import TypeVar
 
 from frozendict import frozendict
 
@@ -237,6 +239,10 @@ class MatchingRule:
 def m(result, *ruleset):
     """Alias for the MatchingRule constructor with a short name."""
     return MatchingRule(result, *ruleset)
+
+
+# The value a ruleset yields: bool for fiction status, str for audience, etc.
+RulesetResult = TypeVar("RulesetResult")
 
 
 class BISACClassifier(Classifier):
@@ -682,35 +688,51 @@ class BISACClassifier(Classifier):
         return identifier not in cls.NAMES
 
     @classmethod
-    def is_fiction(cls, identifier, name):
-        # The rulesets below end in a catch-all that reads "not filed under a
-        # Fiction heading, therefore nonfiction". That inference is sound for a
-        # canonical BISAC name and unsound for anything else, so an unrecognized
-        # code skips them and goes straight to the keyword fallback, which
-        # abstains when the distributor's name carries no fiction signal.
+    def _apply_rulesets(
+        cls,
+        identifier: str | None,
+        name: list[str],
+        rulesets: Sequence[MatchingRule],
+        keyword_fallback: Callable[[str | None, str], RulesetResult | None],
+    ) -> RulesetResult | None:
+        """Match `name` against `rulesets`, falling back to keyword matching.
+
+        Both the FICTION and AUDIENCE rulesets end in a catch-all that reasons
+        from the top-level BISAC heading -- "not filed under Fiction, therefore
+        nonfiction", "no juvenile heading, therefore Adult". That inference
+        holds for a canonical BISAC name and for nothing else, so an
+        unrecognized code skips the rulesets entirely and is left to the keyword
+        classifier, which abstains when the distributor's name carries no
+        signal.
+
+        Only those two callers share this. `genre` must not skip its rulesets --
+        GENRE has no catch-all but does have rules that match a bare fragment,
+        so an unrecognized code named "Historical" is still a Historical Fiction
+        signal. Neither must `target_age`: its rules key off a juvenile first
+        token, and a name like "Juvenile Fiction / Early Readers" on an
+        unrecognized code yields (5, 7) from the rulesets where the keyword
+        classifier yields nothing.
+        """
         if not cls._unrecognized_code(identifier):
-            for ruleset in cls.FICTION:
-                fiction = ruleset.match(*name)
-                if fiction is cls.stop:
+            for ruleset in rulesets:
+                result = ruleset.match(*name)
+                if result is cls.stop:
                     return None
-                if fiction is not None:
-                    return fiction
-        keyword = "/".join(name)
-        return KeywordBasedClassifier.is_fiction(identifier, keyword)
+                if result is not None:
+                    return result
+        return keyword_fallback(identifier, "/".join(name))
+
+    @classmethod
+    def is_fiction(cls, identifier, name):
+        return cls._apply_rulesets(
+            identifier, name, cls.FICTION, KeywordBasedClassifier.is_fiction
+        )
 
     @classmethod
     def audience(cls, identifier, name):
-        # As in is_fiction: the catch-all rule infers Adult from the absence of
-        # a juvenile heading, which only holds for a canonical BISAC name.
-        if not cls._unrecognized_code(identifier):
-            for ruleset in cls.AUDIENCE:
-                audience = ruleset.match(*name)
-                if audience is cls.stop:
-                    return None
-                if audience is not None:
-                    return audience
-        keyword = "/".join(name)
-        return KeywordBasedClassifier.audience(identifier, keyword)
+        return cls._apply_rulesets(
+            identifier, name, cls.AUDIENCE, KeywordBasedClassifier.audience
+        )
 
     @classmethod
     def target_age(cls, identifier, name):
