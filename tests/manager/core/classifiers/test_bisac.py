@@ -465,22 +465,27 @@ class TestBISACClassifier:
         assert subject.fiction is expected_fiction
         assert subject.audience == Classifier.AUDIENCE_ADULT
 
-    def test_recognized_code_unaffected_by_abstention(self) -> None:
+    @pytest.mark.parametrize(
+        "identifier,stored_name",
+        [
+            pytest.param("FBFIC000000", "Fiction", id="fiction_general"),
+            pytest.param("FBFIC014000", "Historical", id="historical"),
+            pytest.param("FBFIC016000", "Humorous", id="humorous"),
+            pytest.param("FBFIC019000", "Literary", id="literary"),
+        ],
+    )
+    def test_recognized_code_unaffected_by_abstention(
+        self, identifier: str, stored_name: str
+    ) -> None:
         """Codes that do resolve are classified exactly as before.
 
         These are the Palace Marketplace codes whose partial names
         ("Historical", "Literary") would each vote nonfiction if the canonical
         lookup were ever to miss.
         """
-        for identifier, stored_name in [
-            ("FBFIC000000", "Fiction"),
-            ("FBFIC014000", "Historical"),
-            ("FBFIC016000", "Humorous"),
-            ("FBFIC019000", "Literary"),
-        ]:
-            subject = self._subject(identifier, stored_name)
-            assert subject.fiction is True
-            assert subject.audience == Classifier.AUDIENCE_ADULT
+        subject = self._subject(identifier, stored_name)
+        assert subject.fiction is True
+        assert subject.audience == Classifier.AUDIENCE_ADULT
 
     @pytest.mark.parametrize(
         "identifier,expected",
