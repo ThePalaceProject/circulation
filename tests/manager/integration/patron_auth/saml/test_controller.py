@@ -393,6 +393,12 @@ class TestSAMLController:
                 id="known-host-relay-state-is-used-as-is",
             ),
             pytest.param(
+                "https://catalog.example.com/lib",
+                "https://default.example.com",
+                "https://catalog.example.com/lib",
+                id="known-host-relay-state-wins-over-default",
+            ),
+            pytest.param(
                 "HTTPS://CATALOG.EXAMPLE.COM/lib",
                 None,
                 "https://CATALOG.EXAMPLE.COM/lib",
