@@ -419,18 +419,24 @@ class TestBISACClassifier:
         assert subject.fiction is None
         assert subject.audience is None
 
-    def test_unrecognized_code_still_uses_keyword_fallback(self) -> None:
+    @pytest.mark.parametrize(
+        "stored_name,expected_fiction",
+        [
+            pytest.param("Science Fiction", True, id="fiction_signal"),
+            pytest.param("Nonfiction", False, id="nonfiction_signal"),
+        ],
+    )
+    def test_unrecognized_code_still_uses_keyword_fallback(
+        self, stored_name: str, expected_fiction: bool
+    ) -> None:
         """Abstaining is not the same as ignoring the name.
 
         An unrecognized code skips the BISAC rulesets but still goes through
         the keyword classifier, so a distributor name that does carry a signal
         is honored.
         """
-        subject = self._subject("INFEN000", "Science Fiction")
-        assert subject.fiction is True
-
-        subject = self._subject("INFEN000", "Nonfiction")
-        assert subject.fiction is False
+        subject = self._subject("INFEN000", stored_name)
+        assert subject.fiction is expected_fiction
 
     @pytest.mark.parametrize(
         "identifier,expected_fiction",
