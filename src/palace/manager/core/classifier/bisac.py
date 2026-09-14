@@ -1,7 +1,6 @@
 import csv
 import re
 from collections.abc import Callable, Sequence
-from typing import TypeVar
 
 from frozendict import frozendict
 
@@ -239,10 +238,6 @@ class MatchingRule:
 def m(result, *ruleset):
     """Alias for the MatchingRule constructor with a short name."""
     return MatchingRule(result, *ruleset)
-
-
-# The value a ruleset yields: bool for fiction status, str for audience, etc.
-RulesetResult = TypeVar("RulesetResult")
 
 
 class BISACClassifier(Classifier):
@@ -688,7 +683,7 @@ class BISACClassifier(Classifier):
         return identifier not in cls.NAMES
 
     @classmethod
-    def _apply_rulesets(
+    def _apply_rulesets[RulesetResult](
         cls,
         identifier: str | None,
         name: list[str],
