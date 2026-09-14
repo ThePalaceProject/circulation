@@ -274,6 +274,16 @@ Celery and caching, we recommend that you use a separate database for each purpo
    authentication document, and operational endpoints like `/version.json`) allow all web origins and do not use
    this setting; on those endpoints, patron-specific results are available only by sending the `Authorization`
    header.
+- `PALACE_PATRON_WEB_DEFAULT_URL`: The URL of the web catalog to send a patron to when the application has no
+   better destination. Currently used when a SAML identity provider sends an unsolicited login response: the
+   application does not sign the patron in from such a response, but redirects them to this web catalog so they
+   can sign in from there. A `RelayState` supplied by the identity provider is used instead when its scheme,
+   host, and port match one of the hosts in `PALACE_PATRON_WEB_HOSTNAMES` or a registered library web client (a
+   `*` in `PALACE_PATRON_WEB_HOSTNAMES` is never honored here). This is a full URL and may include a path
+   (`https://catalog.library.org/lib`). Its host is automatically treated as a patron web host, as if it were
+   listed in `PALACE_PATRON_WEB_HOSTNAMES`, so the catalog can call the patron endpoints it needs to sign the
+   patron in. If unset, unsolicited login responses without a usable `RelayState` are rejected with an error
+   (optional).
 
 #### Storage Service
 

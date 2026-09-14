@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from typing import TYPE_CHECKING
+from urllib.parse import urlsplit
 
 import flask
 from dependency_injector.wiring import Provide, inject
@@ -228,6 +229,14 @@ class CirculationManager(LoggerMixin):
             )
         ]
         patron_web_domains.update(registry_patron_web_domains)
+
+        # The default web catalog is a place we send patrons, so it must also be
+        # allowed to call the patron endpoints. Only its origin is added, since
+        # CORS matches entries against the Origin header, which carries no path.
+        default_url = self.services.config.sitewide.patron_web_default_url()
+        if default_url:
+            parts = urlsplit(default_url)
+            patron_web_domains.add(f"{parts.scheme}://{parts.netloc}")
 
         return patron_web_domains
 

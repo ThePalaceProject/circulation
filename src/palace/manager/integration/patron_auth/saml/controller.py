@@ -2,7 +2,7 @@ import json
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 from urllib.parse import (
     SplitResult,
     parse_qs,
@@ -44,6 +44,10 @@ from palace.manager.util.problem_detail import (
     json as pd_json,
 )
 
+if TYPE_CHECKING:
+    from palace.manager.api.authenticator import Authenticator
+    from palace.manager.api.circulation_manager import CirculationManager
+
 SAML_INVALID_REQUEST = pd(
     "http://palaceproject.io/terms/problem/auth/unrecoverable/saml/invalid-request",
     status_code=401,
@@ -56,6 +60,16 @@ SAML_INVALID_RESPONSE = pd(
     status_code=401,
     title=_("SAML invalid response."),
     detail=_("SAML invalid response."),
+)
+
+SAML_UNSOLICITED_RESPONSE = pd(
+    "http://palaceproject.io/terms/problem/auth/unrecoverable/saml/unsolicited-response",
+    status_code=400,
+    title=_("Unsolicited SAML response."),
+    detail=_(
+        "This sign-in did not start from the Palace app or web catalog. "
+        "Please sign in from one of those instead."
+    ),
 )
 
 
@@ -136,14 +150,15 @@ class SAMLController:
             cls._sp_metadata_cache[key] = None
         return cls._sp_metadata_cache[key]
 
-    def __init__(self, circulation_manager, authenticator):
+    def __init__(
+        self,
+        circulation_manager: "CirculationManager",
+        authenticator: "Authenticator",
+    ) -> None:
         """Initializes a new instance of SAMLController class
 
         :param circulation_manager: Circulation Manager
-        :type circulation_manager: CirculationManager
-
         :param authenticator: Authenticator object used to route requests to the appropriate LibraryAuthenticator
-        :type authenticator: Authenticator
         """
         self._circulation_manager = circulation_manager
         self._authenticator = authenticator
@@ -241,25 +256,42 @@ class SAMLController:
         :return: Parameter's value, or a ProblemDetail if the parameter is missing
         """
         if name not in relay_parameters:
-            return SAML_INVALID_RESPONSE.detailed(
-                _(f"Required parameter {name} is missing from RelayState")
-            )
+            return SAMLController._missing_relay_state_parameter(name)
 
         return relay_parameters[name][0]
 
+    @staticmethod
+    def _missing_relay_state_parameter(name: str) -> ProblemDetail:
+        """Returns the ProblemDetail for a relay state that lacks one of our
+        parameters
+
+        :param name: Name of the missing parameter
+        """
+        return SAML_INVALID_RESPONSE.detailed(
+            _(f"Required parameter {name} is missing from RelayState")
+        )
+
     def _parse_relay_state(
         self, relay_state: str
-    ) -> SAMLRelayStateParameters | ProblemDetail:
+    ) -> SAMLRelayStateParameters | ProblemDetail | None:
         """Extracts the parameters that saml_authentication_redirect and
         saml_logout_redirect add to the relay state before sending it to the IdP,
         and the client's redirect URI that remains once they are removed.
 
         :param relay_state: Relay state returned by the IdP
 
-        :return: The parameters, or a ProblemDetail if any of them is missing
+        :return: The parameters; a ProblemDetail if some but not all of them are
+            present; or None if none of them are, meaning the relay state is not
+            one of ours (an unsolicited response, or one we cannot parse at all)
         """
-        relay_state_parse_result = urlparse(relay_state)
+        try:
+            relay_state_parse_result = urlparse(relay_state)
+        except ValueError:
+            return None
         relay_state_parameters = parse_qs(relay_state_parse_result.query)
+
+        if self.INTERNAL_RELAY_STATE_PARAMETERS.isdisjoint(relay_state_parameters):
+            return None
 
         library_short_name = self._get_relay_state_parameter(
             relay_state_parameters, self.LIBRARY_SHORT_NAME
@@ -302,6 +334,83 @@ class SAMLController:
             idp_entity_id=idp_entity_id,
             redirect_uri=redirect_uri,
         )
+
+    def _patron_web_url(self, url: str) -> str | None:
+        """Returns the URL, re-serialized from its parsed parts, if its scheme,
+        host, and port match a known patron web client, so it is safe to send a
+        browser there. Otherwise returns None.
+
+        :param url: URL to check
+        """
+        try:
+            parts = urlsplit(url.strip())
+        except ValueError:
+            return None
+        if parts.scheme not in ("http", "https") or not parts.netloc:
+            return None
+
+        # Match on the whole netloc, so a URL with userinfo in front of a known
+        # host does not pass. A "*" entry (development only) never matches, since
+        # honoring it would make this an open redirect. A known entry we cannot
+        # parse is skipped rather than failing the request.
+        origin = (parts.scheme, parts.netloc.lower())
+        for known_url in self._circulation_manager.patron_web_domains:
+            try:
+                known = urlsplit(known_url)
+            except ValueError:
+                continue
+            if origin == (known.scheme, known.netloc.lower()):
+                # Serialize from the parsed parts. urlsplit drops tab, CR, and LF,
+                # and strip() removed surrounding whitespace, so the characters a
+                # Location header cannot carry are gone. Werkzeug percent-encodes
+                # any other control character.
+                return parts.geturl()
+
+        return None
+
+    def _redirect_unsolicited_response(
+        self, relay_state: str | None
+    ) -> wkResponse | ProblemDetail:
+        """Sends the browser that delivered an unsolicited SAML response to a web
+        catalog, where the patron can sign in.
+
+        The IdP may supply its own relay state. It is honored only when it points
+        at a known patron web client; its path and query pass through as-is, so
+        it can land the patron on a specific library. Otherwise the sitewide
+        default web catalog is used. The response itself is not validated: no
+        token is issued, and the only destinations are hosts we already trust.
+
+        :param relay_state: Relay state returned by the IdP, if any
+
+        :return: Redirection response, or a ProblemDetail if there is nowhere to send
+            the patron
+        """
+        destination: str | None = (
+            self._circulation_manager.services.config.sitewide.patron_web_default_url()
+        )
+
+        if relay_state:
+            patron_web_url = self._patron_web_url(relay_state)
+            if patron_web_url is not None:
+                destination = patron_web_url
+            else:
+                self._logger.warning(
+                    "Ignoring the RelayState of an unsolicited SAML response because "
+                    f"it is not a known patron web client: {relay_state!r}"
+                )
+
+        if destination is None:
+            self._logger.warning(
+                "Rejecting an unsolicited SAML response: no patron web default URL "
+                "is configured"
+            )
+            return SAML_UNSOLICITED_RESPONSE
+
+        self._logger.info(
+            f"Redirecting an unsolicited SAML response to {destination!r}"
+        )
+        # The response arrives as a POST; 303 makes the browser follow with a GET.
+        return redirect(destination, code=303)
 
     def _redirect_with_error(self, redirect_uri, problem_detail):
         """Redirects the patron to the given URL, with the given ProblemDetail encoded into the fragment identifier
@@ -406,18 +515,16 @@ class SAMLController:
 
         return redirect(redirect_uri)
 
-    def saml_authentication_callback(self, request, db):
+    def saml_authentication_callback(
+        self, request: Request, db: sqlalchemy.orm.session.Session
+    ) -> wkResponse | ProblemDetail:
         """Creates a Patron object and a bearer token for a patron who has just
         authenticated with one of our SAML IdPs
 
         :param request: Flask request
-        :type request: Request
-
         :param db: Database session
-        :type db: sqlalchemy.orm.session.Session
 
         :return: Redirection response or a ProblemDetail if the response is not correct
-        :rtype: Union[Response, ProblemDetail]
         """
         # SAMLResponse is what makes this request a SAML response. Check for it before
         # RelayState, which is optional in the SAML POST binding and holds only our own
@@ -428,17 +535,14 @@ class SAMLController:
         if isinstance(saml_response, ProblemDetail):
             return saml_response
 
+        # A response whose RelayState carries none of the parameters we add in
+        # saml_authentication_redirect did not start with us, so it is unsolicited.
+        # We cannot sign the patron in from it, since no client is waiting for a
+        # token, so we send them to a web catalog to sign in from there.
         relay_state = request.form.get(self.RELAY_STATE)
-        if not relay_state:
-            return SAML_INVALID_RESPONSE.detailed(
-                _(
-                    "Required parameter {} is missing from the response body".format(
-                        self.RELAY_STATE
-                    )
-                )
-            )
-
-        relay_params = self._parse_relay_state(relay_state)
+        relay_params = self._parse_relay_state(relay_state) if relay_state else None
+        if relay_params is None:
+            return self._redirect_unsolicited_response(relay_state)
         if isinstance(relay_params, ProblemDetail):
             return relay_params
 
@@ -631,7 +735,12 @@ class SAMLController:
                 )
             )
 
+        # Unlike login, an unsolicited logout response has nowhere useful to go,
+        # so a relay state that is not ours is reported the same way as one that
+        # is missing its first parameter.
         relay_params = self._parse_relay_state(relay_state)
+        if relay_params is None:
+            return self._missing_relay_state_parameter(self.LIBRARY_SHORT_NAME)
         if isinstance(relay_params, ProblemDetail):
             return relay_params
 

@@ -140,6 +140,19 @@ class TestCirculationManager:
             "http://registration",
         } == manager.patron_web_domains
 
+        # The default web catalog's origin is added too, without its path.
+        services_fixture.set_sitewide_config_option(
+            "patron_web_default_url", "https://catalog.4.com/lib"
+        )
+        circulation_fixture.manager.load_settings()
+        assert {
+            "https://1.com",
+            "http://2.com",
+            "http://subdomain.3.com",
+            "http://registration",
+            "https://catalog.4.com",
+        } == manager.patron_web_domains
+
     def test_load_settings_calls_clear_settings_caches(
         self,
         circulation_fixture: CirculationControllerFixture,
