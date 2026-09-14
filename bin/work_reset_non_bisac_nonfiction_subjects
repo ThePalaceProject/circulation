@@ -1,0 +1,11 @@
+#!/usr/bin/env python
+"""Queue the reset_non_bisac_nonfiction_subjects Celery task.
+
+Convenience wrapper that manually dispatches the repair for BISAC subjects
+stored as nonfiction in error (the `reset_non_bisac_nonfiction_subjects` Celery
+task) for a worker to process.
+"""
+
+from palace.manager.scripts.work import ResetNonBisacNonfictionSubjectsScript
+
+ResetNonBisacNonfictionSubjectsScript().run()
