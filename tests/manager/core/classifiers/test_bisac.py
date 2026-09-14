@@ -420,23 +420,35 @@ class TestBISACClassifier:
         assert subject.audience is None
 
     @pytest.mark.parametrize(
-        "stored_name,expected_fiction",
+        "stored_name,expected_fiction,expected_audience",
         [
-            pytest.param("Science Fiction", True, id="fiction_signal"),
-            pytest.param("Nonfiction", False, id="nonfiction_signal"),
+            pytest.param("Science Fiction", True, None, id="fiction_signal"),
+            pytest.param("Nonfiction", False, None, id="nonfiction_signal"),
+            pytest.param(
+                "Juvenile Fiction", True, Classifier.AUDIENCE_CHILDREN, id="juvenile"
+            ),
+            pytest.param(
+                "Young Adult Fiction",
+                True,
+                Classifier.AUDIENCE_YOUNG_ADULT,
+                id="young_adult",
+            ),
         ],
     )
     def test_unrecognized_code_still_uses_keyword_fallback(
-        self, stored_name: str, expected_fiction: bool
+        self, stored_name: str, expected_fiction: bool, expected_audience: str | None
     ) -> None:
         """Abstaining is not the same as ignoring the name.
 
         An unrecognized code skips the BISAC rulesets but still goes through
         the keyword classifier, so a distributor name that does carry a signal
-        is honored.
+        is honored -- for audience as well as fiction status. A juvenile or YA
+        heading keeps its audience; a name with no audience signal abstains
+        rather than falling to the rulesets' Adult catch-all.
         """
         subject = self._subject("INFEN000", stored_name)
         assert subject.fiction is expected_fiction
+        assert subject.audience == expected_audience
 
     @pytest.mark.parametrize(
         "identifier,expected_fiction",
