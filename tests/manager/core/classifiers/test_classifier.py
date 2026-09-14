@@ -857,7 +857,7 @@ class TestWorkClassifier:
                 source, Subject.BISAC, "FBFIC014000", "Historical", weight=1
             )
         )
-        assert True == data.classifier.fiction()
+        assert data.classifier.fiction() is True
 
     def test_genres_consolidated_before_classification(
         self, work_classifier_fixture: TestWorkClassifierFixture
