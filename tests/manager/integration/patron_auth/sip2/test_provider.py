@@ -1208,22 +1208,29 @@ class TestSIP2AuthenticateWithBlockingRules:
 
         assert provider.patron_blocking_rules_show_title is False
 
-    def test_authenticate_blocked_flags_document_when_disabled(
+    @pytest.mark.parametrize(
+        "show_title_setting, title_shown",
+        [
+            ({}, True),
+            ({"patron_blocking_rules_show_title": False}, False),
+        ],
+    )
+    def test_authenticate_blocked_honors_show_title_setting(
         self,
+        show_title_setting: dict[str, bool],
+        title_shown: bool,
         create_provider: Callable[..., SIP2AuthenticationProvider],
         create_library_settings: Callable[..., SIP2LibrarySettings],
     ) -> None:
-        """With the title suppressed, the blocked patron's problem detail document
-        carries show_title=False so clients render only the library's message."""
+        """The library's setting decides whether the blocked patron's problem
+        detail document asks clients to render the standard title.  Unset is
+        the behaviour patrons see today."""
+        message = "Please sign in at your local library instead."
         library_settings = create_library_settings(
             patron_blocking_rules=[
-                {
-                    "name": "block-all",
-                    "rule": "True",
-                    "message": "Please sign in at your local library instead.",
-                }
+                {"name": "block-all", "rule": "True", "message": message}
             ],
-            patron_blocking_rules_show_title=False,
+            **show_title_setting,
         )
         provider = create_provider(library_settings=library_settings)
 
@@ -1235,37 +1242,17 @@ class TestSIP2AuthenticateWithBlockingRules:
 
         assert isinstance(result, ProblemDetail)
         assert result.status_code == 403
-        assert result.show_title is False
-        assert result.detail == "Please sign in at your local library instead."
-
-        document = json.loads(result.response[0])
-        assert document["show_title"] is False
-        assert document["detail"] == "Please sign in at your local library instead."
-
-    def test_authenticate_blocked_shows_title_by_default(
-        self,
-        create_provider: Callable[..., SIP2AuthenticationProvider],
-        create_library_settings: Callable[..., SIP2LibrarySettings],
-    ) -> None:
-        """Without the option, the document is exactly what it is today."""
-        library_settings = create_library_settings(
-            patron_blocking_rules=[
-                {"name": "block-all", "rule": "True", "message": "Library A blocks."}
-            ]
-        )
-        provider = create_provider(library_settings=library_settings)
-
-        mock_patron = MagicMock(spec=Patron)
-        with patch(self._PATCH_TARGET, return_value=(mock_patron, {})):
-            result = provider.authenticate(
-                MagicMock(), {"username": "u", "password": "p"}
-            )
-
-        assert isinstance(result, ProblemDetail)
-        assert result.show_title is True
+        assert result.show_title is title_shown
         assert result.title == BLOCKED_BY_POLICY.title
-        assert result.detail == "Library A blocks."
-        assert "show_title" not in json.loads(result.response[0])
+        assert result.detail == message
+
+        # The document as the patron's client receives it.
+        document = json.loads(result.response[0])
+        assert document["detail"] == message
+        if title_shown:
+            assert "show_title" not in document
+        else:
+            assert document["show_title"] is False
 
     # ------------------------------------------------------------------
     # simpleeval runtime evaluation tests
