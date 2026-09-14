@@ -1,6 +1,6 @@
 import pytest
 
-from palace.manager.core.classifier import Classifier
+from palace.manager.core.classifier import Classifier, Lowercased
 from palace.manager.core.classifier.bisac import (
     RE,
     BISACClassifier,
@@ -461,21 +461,100 @@ class TestBISACClassifier:
             pytest.param(
                 "Antiques & Collectibles / Kitchenware", False, id="mixed_case_heading"
             ),
+            # 29 of the 56 top-level headings are a single unpunctuated word,
+            # so a heading in the identifier field does not always look like a
+            # heading. "Juvenile" is the one whose full canonical name is a
+            # single word (JUV037020).
+            pytest.param("Juvenile", False, id="single_word_juvenile"),
+            pytest.param("Fiction", True, id="single_word_fiction"),
+            # Uppercase is what Boundless sends, and these end in "N" -- the
+            # suffix scrub_identifier strips from codes like FBJUV000000N.
+            pytest.param("FICTION", True, id="single_word_uppercase"),
+            pytest.param("RELIGION", False, id="single_word_uppercase_religion"),
+            pytest.param("History", False, id="single_word_history"),
+            pytest.param("Humor", None, id="single_word_stop_rule"),
         ],
     )
     def test_heading_in_identifier_field_is_matched_as_a_name(
-        self, identifier: str, expected_fiction: bool
+        self, identifier: str, expected_fiction: bool | None
     ) -> None:
         """Some distributors put the BISAC heading in the identifier field.
 
         Boundless sends e.g. "FICTION / Horror" as the subject identifier rather
         than "FIC015000". That is a name, not a code that failed to resolve, so
-        it must still be matched against the rulesets. Regression guard for the
-        abstention introduced alongside it.
+        it must still be matched against the rulesets -- including when the
+        heading is a single word and so is indistinguishable from a code by
+        shape alone.
         """
         subject = self._subject(identifier, None)
         assert subject.fiction is expected_fiction
         assert subject.audience == Classifier.AUDIENCE_ADULT
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            pytest.param("Action & Adventure", id="bibliotheca_fiction_genre"),
+            pytest.param("Magic", id="bibliotheca_magic"),
+            pytest.param("Health", id="bibliotheca_nonfiction_genre"),
+            pytest.param("Horror", id="bare_subheading"),
+        ],
+    )
+    def test_name_only_subject_still_reaches_the_rulesets(self, name: str) -> None:
+        """A subject with no identifier keeps the behaviour it always had.
+
+        The heading gate exists to stop the rulesets being applied to the
+        fragment left behind when a code fails to resolve. A subject that never
+        carried a code has no such fragment, and some distributors classify
+        entirely this way -- Bibliotheca sends every genre as a bare name with
+        no code, so gating these would leave its titles with no fiction
+        evidence at all and a NULL fiction status on first import.
+
+        Whether a bare sub-heading should carry the rulesets' top-level
+        inference is a real question, but a distributor-wide one that is not
+        this change's to answer.
+        """
+        subject = self._subject("", name)
+        assert subject.fiction is False
+        assert subject.audience == Classifier.AUDIENCE_ADULT
+
+    @pytest.mark.parametrize(
+        "heading",
+        [
+            pytest.param("Fiction", id="fiction"),
+            pytest.param("Juvenile Nonfiction", id="two_words"),
+            pytest.param("Antiques & Collectibles", id="punctuated"),
+            pytest.param("Psychology & Psychiatry", id="deprecated_spelling"),
+            pytest.param(
+                "Literary Criticism & Collections", id="deprecated_spelling_lit_crit"
+            ),
+        ],
+    )
+    def test_top_level_headings_recognized(self, heading: str) -> None:
+        """TOP_LEVEL_HEADINGS is what decides whether the rulesets apply.
+
+        It is derived from bisac.csv, plus the former spellings of renamed
+        categories that are no longer in the file but that distributors still
+        send -- those have Interchangeable tokens in the rulesets, so the set
+        has to agree with them.
+        """
+        assert Lowercased(heading) in BISACClassifier.TOP_LEVEL_HEADINGS
+
+    @pytest.mark.parametrize(
+        "fragment",
+        [
+            pytest.param("Historical", id="subheading_only"),
+            pytest.param("English literature", id="vendor_language_category"),
+            pytest.param("infen000", id="raw_code"),
+        ],
+    )
+    def test_fragments_are_not_top_level_headings(self, fragment: str) -> None:
+        """The leftovers from an unresolvable code are not headings.
+
+        These are exactly the values the rulesets must not be applied to: the
+        catch-alls would read them as "not filed under Fiction" and vote
+        nonfiction.
+        """
+        assert Lowercased(fragment) not in BISACClassifier.TOP_LEVEL_HEADINGS
 
     @pytest.mark.parametrize(
         "identifier,stored_name",
