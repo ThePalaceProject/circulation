@@ -849,7 +849,7 @@ class TestWorkClassifier:
         # No vote either way, so no determination.
         assert 0 == data.classifier.fiction_weights[False]
         assert 0 == data.classifier.fiction_weights[True]
-        assert None == data.classifier.fiction()
+        assert data.classifier.fiction() is None
 
         # A single code that does resolve is now decisive.
         data.classifier.add(
