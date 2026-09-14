@@ -655,32 +655,40 @@ class BISACClassifier(Classifier):
         m(classifier.Life_Strategies, nonfiction, social_topics),
     ]
 
-    # A BISAC code is a single unpunctuated token (e.g. "FIC014000"). Some
-    # distributors instead put the BISAC *heading* in the identifier field
-    # (e.g. Boundless sends "FICTION / Horror"), which is not a failed code --
-    # it is a name, and is matched as one.
-    _CODE_SHAPED = re.compile(r"^[A-Za-z0-9]+$")
+    # The top-level headings a canonical BISAC name can begin with ("Fiction",
+    # "Juvenile Nonfiction", "Antiques & Collectibles", ...).
+    TOP_LEVEL_HEADINGS: frozenset[str] = frozenset(
+        Lowercased(name.split("/")[0].strip()) for name in NAMES.values()
+    ) | frozenset(
+        # Renamed categories whose former top-level spelling is no longer in
+        # bisac.csv but which distributors still send. The Interchangeable
+        # tokens above let the rulesets match these, so this set has to agree.
+        Lowercased(name)
+        for name in (
+            "Mind & Spirit",
+            "Psychology & Psychiatry",
+            "Technology",
+            "Foreign Language Study",
+            "Literary Criticism & Collections",
+        )
+    )
 
     @classmethod
-    def _unrecognized_code(cls, identifier: str | None) -> bool:
-        """Was a BISAC code supplied that cannot be resolved to a real one?
+    def _has_canonical_heading(cls, name: list[str]) -> bool:
+        """Does `name` begin with a real BISAC top-level heading?
 
-        By the time a classification method runs, `scrub_identifier` has already
-        stripped the "FB" prefix and "N" suffix used by some distributors and
-        applied `NON_STANDARD_CODE_ALIASES`, so a code-shaped identifier that is
-        still absent from `NAMES` is not a BISAC code at all. That matters
-        because it also means `name` is whatever fragment the distributor
-        supplied (e.g. "Historical", "English literature") rather than a
-        canonical BISAC heading.
+        This is the premise the FICTION and AUDIENCE catch-all rules rest on,
+        so it is what has to be checked before running them. It holds for a
+        name that came from `NAMES`, and for one a distributor supplied in
+        either the name or the identifier field -- Boundless sends headings
+        like "FICTION / Horror" as the identifier, and a bare top-level
+        heading such as "Juvenile" is equally a heading.
 
-        Two kinds of subject are deliberately excluded, because for both of them
-        `name` is expected to be a real BISAC heading and is matched as one: a
-        subject with no identifier, and a subject whose identifier is a heading
-        rather than a code.
+        It does not hold for the fragment left over when a code cannot be
+        resolved ("Historical", "English literature"), which is the case these
+        rulesets must not be applied to.
         """
-        if not identifier or not cls._CODE_SHAPED.match(identifier):
-            return False
-        return identifier not in cls.NAMES
+        return bool(name) and name[0] in cls.TOP_LEVEL_HEADINGS
 
     @classmethod
     def _apply_rulesets[RulesetResult](
@@ -700,15 +708,22 @@ class BISACClassifier(Classifier):
         classifier, which abstains when the distributor's name carries no
         signal.
 
-        Only those two callers share this. `genre` must not skip its rulesets --
+        Only those two callers share this. `genre` must not skip its rulesets:
         GENRE has no catch-all but does have rules that match a bare fragment,
-        so an unrecognized code named "Historical" is still a Historical Fiction
-        signal. Neither must `target_age`: its rules key off a juvenile first
-        token, and a name like "Juvenile Fiction / Early Readers" on an
-        unrecognized code yields (5, 7) from the rulesets where the keyword
-        classifier yields nothing.
+        so a subject named "Historical" is still a Historical Fiction signal
+        even though "Historical" is not a top-level heading. `target_age` is
+        left out for scope rather than correctness -- its rules key off a
+        juvenile first token, which only a real heading produces, so routing it
+        through here would be safe.
         """
-        if not cls._unrecognized_code(identifier):
+        # A subject with no identifier had no code that could fail to resolve,
+        # so there is nothing here to protect it from -- and some distributors
+        # classify entirely this way. Bibliotheca sends every genre as a bare
+        # name ("Action & Adventure", "Magic") with no code at all; gating
+        # those on the heading would leave its titles with no fiction evidence
+        # whatsoever. Whether a bare sub-heading should carry the rulesets'
+        # top-level inference is a real question, but a separate one.
+        if not identifier or cls._has_canonical_heading(name):
             for ruleset in rulesets:
                 result = ruleset.match(*name)
                 if result is cls.stop:
@@ -778,10 +793,14 @@ class BISACClassifier(Classifier):
         identifier = identifier.removeprefix("FB")
         # Some distributors (e.g. Palace Marketplace) append an "N" suffix to
         # standard BISAC codes (e.g. "FBJUV000000N" becomes "JUV000000N" after
-        # FB-stripping). Official BISAC codes always end with digits, so a
-        # trailing "N" is always a non-standard extension; strip it so the code
-        # resolves to its canonical entry.
-        identifier = identifier.removesuffix("N")
+        # FB-stripping). Strip it only when doing so produces a code we know,
+        # because the identifier field does not always hold a code: a heading
+        # can arrive there too, and stripping unconditionally would turn
+        # "FICTION" into "FICTIO" (likewise RELIGION, EDUCATION, DESIGN,
+        # TRANSPORTATION) and stop it being recognized as a heading.
+        stripped = identifier.removesuffix("N")
+        if stripped in cls.NAMES or stripped in cls.NON_STANDARD_CODE_ALIASES:
+            identifier = stripped
         # Remap any remaining non-standard codes to their canonical equivalents.
         identifier = cls.NON_STANDARD_CODE_ALIASES.get(identifier, identifier)
         if identifier in cls.NAMES:
