@@ -280,8 +280,10 @@ Celery and caching, we recommend that you use a separate database for each purpo
    can sign in from there. A `RelayState` supplied by the identity provider is used instead when its scheme,
    host, and port match one of the hosts in `PALACE_PATRON_WEB_HOSTNAMES` or a registered library web client (a
    `*` in `PALACE_PATRON_WEB_HOSTNAMES` is never honored here). This is a full URL and may include a path
-   (`https://catalog.library.org/lib`). If unset, unsolicited login responses without a usable `RelayState` are
-   rejected with an error (optional).
+   (`https://catalog.library.org/lib`). Its host is automatically treated as a patron web host, as if it were
+   listed in `PALACE_PATRON_WEB_HOSTNAMES`, so the catalog can call the patron endpoints it needs to sign the
+   patron in. If unset, unsolicited login responses without a usable `RelayState` are rejected with an error
+   (optional).
 
 #### Storage Service
 
