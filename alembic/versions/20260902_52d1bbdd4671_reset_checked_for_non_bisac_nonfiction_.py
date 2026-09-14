@@ -1,34 +1,25 @@
 """reset_checked_for_non_bisac_nonfiction_subjects
 
-Everything on the Palace Marketplace / Feedbooks category scheme is stored with
-type='BISAC', including codes that are not BISAC at all -- language and
-territory categories such as INFEN000 ("English literature") and INFENUSA
-("American and Canadian literature"), plus vendor codes like FBSACT000000.
+Resets checked=False on BISAC subjects whose stored fiction=False no longer
+matches what BISACClassifier scores them as, so classify_unchecked_subjects
+re-scores them and recalculates the works they are attached to.
 
-Those codes cannot be resolved to a canonical BISAC heading, so classification
-fell back to the distributor's name and hit the catch-all rule at the end of
-BISACClassifier.FICTION, which reads "not filed under a Fiction heading,
-therefore nonfiction". Each such subject was therefore stored with
-fiction=False and cast a nonfiction vote on every work it was attached to --
-outvoting the genuine FBFIC* fiction codes on the same book.
+These are subjects whose identifier is not a resolvable BISAC code. The Palace
+Marketplace / Feedbooks scheme is stored as type='BISAC' but includes
+non-subject codes such as INFEN000 ("English literature"), and classification
+used to infer nonfiction from the distributor's name for those. It no longer
+does, which leaves the stored values stale.
 
-The classifier no longer applies the BISAC rulesets to an unresolvable code; it
-defers to the keyword classifier instead, which recognises "literature" and
-scores the INF* family as fiction. This migration resets checked=False on the
-affected subjects so classify_unchecked_subjects re-scores them and recalculates
-the works they are attached to.
+Selection asks the classifier rather than pattern-matching the identifier, so
+the migration and the runtime cannot disagree about which codes are real.
 
-Rather than approximating "not a real BISAC code" with a pattern, the selection
-asks BISACClassifier itself and resets every subject stored as nonfiction that
-the classifier no longer scores that way. That keeps the two definitions from
-drifting apart: a pattern match on the identifier would, for instance, accept a
-shape-valid but non-existent code like FBZZZ000000 that the classifier rejects,
-leaving its fabricated nonfiction vote in place forever.
+Only subjects currently holding fiction=False are examined; most of those are
+legitimate nonfiction BISAC codes and are left untouched.
 
-Scope stays narrow: only subjects currently holding fiction=False are examined,
-so codes already scored as fiction or as unknown are left alone. The great
-majority of the rows examined are legitimate nonfiction BISAC codes and are
-untouched.
+Must ship in the same release as the classifier change. Run against the old
+code, classify_unchecked_subjects would re-score these subjects under the old
+rules and re-stamp checked=True, paying for a full reindex that changes
+nothing.
 
 Revision ID: 52d1bbdd4671
 Revises: 912c566f3383
@@ -66,6 +57,10 @@ def upgrade() -> None:
         )
     ).all()
 
+    # Ask the classifier rather than matching a pattern against the identifier.
+    # A pattern would accept a shape-valid but non-existent code such as
+    # FBZZZ000000, which the classifier rejects, and its fabricated nonfiction
+    # value would survive this repair.
     stale_ids = []
     for row in candidates:
         if not row.identifier and not row.name:
