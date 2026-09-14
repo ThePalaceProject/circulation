@@ -119,3 +119,64 @@ def test_reclassify_null_audience_works(
         policy = call_obj[1]["policy"]
         assert policy.classify is True
         assert policy.choose_edition is False
+
+
+def test_reset_non_bisac_nonfiction_subjects(
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+):
+    """The task re-applies the reset for subjects stored as nonfiction in error.
+
+    Re-runnable stand-in for migration 52d1bbdd4671, for when that migration's
+    reset was consumed by old code before the new classifier was live.
+    """
+    stale = db.subject(Subject.BISAC, "INFEN000")
+    stale.name = "English literature"
+    stale.fiction = False
+    stale.checked = True
+
+    # A real nonfiction code the classifier still agrees with.
+    agrees = db.subject(Subject.BISAC, "HIS027000")
+    agrees.fiction = False
+    agrees.checked = True
+
+    # Already scored as fiction, so outside the set the task examines.
+    scored_fiction = db.subject(Subject.BISAC, "INFENUSA")
+    scored_fiction.name = "American and Canadian literature"
+    scored_fiction.fiction = True
+    scored_fiction.checked = True
+
+    # Same identifier, but not a BISAC subject.
+    other_type = db.subject(Subject.TAG, "INFEN000")
+    other_type.fiction = False
+    other_type.checked = True
+
+    db.session.commit()
+
+    work_tasks.reset_non_bisac_nonfiction_subjects.delay().wait()
+    db.session.expire_all()
+
+    assert stale.checked is False
+    assert agrees.checked is True
+    assert scored_fiction.checked is True
+    assert other_type.checked is True
+
+
+def test_reset_non_bisac_nonfiction_subjects_is_idempotent(
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+):
+    """A second run finds nothing left to do and leaves the reset in place."""
+    subject = db.subject(Subject.BISAC, "INFEN000")
+    subject.name = "English literature"
+    subject.fiction = False
+    subject.checked = True
+    db.session.commit()
+
+    work_tasks.reset_non_bisac_nonfiction_subjects.delay().wait()
+    db.session.expire_all()
+    assert subject.checked is False
+
+    work_tasks.reset_non_bisac_nonfiction_subjects.delay().wait()
+    db.session.expire_all()
+    assert subject.checked is False
