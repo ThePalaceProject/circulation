@@ -24,9 +24,11 @@ to dispatch it here, because by now there is no old code to lose the reset to.
 This is the same shape as the null-audience repair, where startup task
 2026_06_17 re-ran what 2026_05_12 had dispatched a release earlier.
 
-TODO: Remove this task, the release N startup task, and
-reset_non_bisac_nonfiction_subjects once this has run on all deployments
-(PP-5129)."""
+TODO: Remove the whole repair once this has run on all deployments (PP-5129):
+this task, the release N startup task, ``reset_non_bisac_nonfiction_subjects``
+with its script and bin wrapper, and
+``BISACClassifier.contradicts_stored_fiction``, whose only non-test caller is
+that task."""
 
 from __future__ import annotations
 
