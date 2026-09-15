@@ -1,24 +1,34 @@
-"""Re-score the subjects that migration 52d1bbdd4671 marked unchecked.
+"""Repair BISAC subjects stored as nonfiction because their code did not resolve.
 
-That migration resets ``checked=False`` on BISAC subjects stored as nonfiction
-because an unresolvable code fell through the ruleset catch-all. It only resets;
-``classify_unchecked_subjects`` is what re-scores them and recalculates their
-works, and left to itself that does not happen until the nightly run.
+Everything on the Palace Marketplace / Feedbooks category scheme is stored with
+``type='BISAC'``, including codes that are not BISAC at all -- language and
+territory categories such as ``INFEN000`` ("English literature"). Those cannot
+be resolved to a canonical heading, so classification used to infer nonfiction
+from the distributor's name and store ``fiction=False``. The classifier no
+longer does that, which leaves the stored values stale.
 
-The gap between the two is where the repair is exposed. Anything that reaches
-``Subject.assign_to_genre`` in the meantime consumes the reset -- and if it is
-running the superseded rules, it re-stamps ``checked=True`` with the same wrong
-value. Nothing errors and nothing revisits the subject afterwards, so the repair
-silently did nothing, having paid for a reindex to do it.
+Subjects are only re-examined when ``checked`` is false, so this dispatches two
+steps: ``reset_non_bisac_nonfiction_subjects`` marks the stale ones unchecked,
+then ``classify_unchecked_subjects`` re-scores them and recalculates their
+works. The second signature is immutable so the chain does not pass the first
+task's return value into it.
 
-Dispatching here closes that gap to seconds. This runs from the migrate
-container immediately after the migration, at a point in the deploy where the
-Celery workers have been stopped and will come back on the new image, so the
-task is picked up by new code.
+Doing both here matters. The reset on its own is exposed: anything reaching
+``Subject.assign_to_genre`` before the re-score consumes it, and code running
+the superseded rules re-stamps ``checked=True`` with the same wrong value.
+Nothing errors and nothing revisits the subject afterwards, so the repair
+silently did nothing, having paid for a reindex to do it. Chaining the re-score
+closes that gap to seconds rather than waiting for the nightly run.
 
-The remaining exposure is the web containers, which the deploy recycles after
-the migration and which can reach ``assign_to_genre`` through a presentation
-recalculation. A later startup task re-applies the reset once no old code is
+The timing works out. ``helpers/migrate.yml`` stops the scripts container --
+where every Celery worker and beat run -- before migrating, and starts it again
+from the new image afterwards, so the worker that picks this up is necessarily
+new code.
+
+Web containers are the remaining exposure: the deploy recycles them after the
+migration step, and they can reach ``assign_to_genre`` through a presentation
+recalculation. Fargate deployments are not governed by that playbook at all. A
+second startup task re-applies the reset a release later, once no old code is
 running anywhere.
 
 TODO: Remove this task once it has run on all deployments (PP-5129)."""
@@ -27,12 +37,18 @@ from __future__ import annotations
 
 import logging
 
-from celery.canvas import Signature
+from celery.canvas import Signature, chain
 from sqlalchemy.orm import Session
 
-from palace.manager.celery.tasks.work import classify_unchecked_subjects
+from palace.manager.celery.tasks.work import (
+    classify_unchecked_subjects,
+    reset_non_bisac_nonfiction_subjects,
+)
 from palace.manager.service.container import Services
 
 
 def run(services: Services, session: Session, log: logging.Logger) -> Signature | None:
-    return classify_unchecked_subjects.s()
+    return chain(
+        reset_non_bisac_nonfiction_subjects.s(),
+        classify_unchecked_subjects.si(),
+    )
