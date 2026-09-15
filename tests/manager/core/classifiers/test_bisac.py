@@ -1,6 +1,6 @@
 import pytest
 
-from palace.manager.core.classifier import Classifier
+from palace.manager.core.classifier import Classifier, Lowercased
 from palace.manager.core.classifier.bisac import (
     RE,
     BISACClassifier,
@@ -391,6 +391,192 @@ class TestBISACClassifier:
         subject = self._subject(identifier, stored_name)
         assert subject.audience == Classifier.AUDIENCE_CHILDREN
         assert subject.fiction is True
+
+    @pytest.mark.parametrize(
+        "identifier,stored_name",
+        [
+            pytest.param("INFEN000", None, id="no_name"),
+            pytest.param("INFEN000", "English", id="language_name"),
+            pytest.param("INFENUSA", "USA", id="territory_name"),
+            pytest.param("FBINFEN000", "English", id="fb_prefixed"),
+            pytest.param("FBZZZ000000", "Historical", id="partial_bisac_heading"),
+        ],
+    )
+    def test_unrecognized_code_abstains(
+        self, identifier: str, stored_name: str | None
+    ) -> None:
+        """A code that is not BISAC carries no fiction or audience signal.
+
+        Everything on the Feedbooks/Palace Marketplace category scheme arrives
+        typed as BISAC, including codes that describe language or territory
+        rather than subject matter. When such a code cannot be resolved, the
+        name we fall back on is a distributor fragment, so the rulesets' "not
+        filed under Fiction, therefore nonfiction" and "no juvenile heading,
+        therefore Adult" inferences do not apply. Abstaining keeps an
+        unresolvable code from voting against the codes that did resolve.
+        """
+        subject = self._subject(identifier, stored_name)
+        assert subject.fiction is None
+        assert subject.audience is None
+
+    @pytest.mark.parametrize(
+        "stored_name,expected_fiction,expected_audience",
+        [
+            pytest.param("Science Fiction", True, None, id="fiction_signal"),
+            pytest.param("Nonfiction", False, None, id="nonfiction_signal"),
+            pytest.param(
+                "Juvenile Fiction", True, Classifier.AUDIENCE_CHILDREN, id="juvenile"
+            ),
+            pytest.param(
+                "Young Adult Fiction",
+                True,
+                Classifier.AUDIENCE_YOUNG_ADULT,
+                id="young_adult",
+            ),
+        ],
+    )
+    def test_unrecognized_code_still_uses_keyword_fallback(
+        self, stored_name: str, expected_fiction: bool, expected_audience: str | None
+    ) -> None:
+        """Abstaining is not the same as ignoring the name.
+
+        An unrecognized code skips the BISAC rulesets but still goes through
+        the keyword classifier, so a distributor name that does carry a signal
+        is honored -- for audience as well as fiction status. A juvenile or YA
+        heading keeps its audience; a name with no audience signal abstains
+        rather than falling to the rulesets' Adult catch-all.
+        """
+        subject = self._subject("INFEN000", stored_name)
+        assert subject.fiction is expected_fiction
+        assert subject.audience == expected_audience
+
+    @pytest.mark.parametrize(
+        "identifier,expected_fiction",
+        [
+            pytest.param("FICTION / Horror", True, id="fiction_heading"),
+            pytest.param(
+                "FICTION / Science Fiction / Time Travel", True, id="deep_heading"
+            ),
+            pytest.param("HISTORY / General", False, id="nonfiction_heading"),
+            pytest.param(
+                "Antiques & Collectibles / Kitchenware", False, id="mixed_case_heading"
+            ),
+            # 29 of the 56 top-level headings are a single unpunctuated word,
+            # so a heading in the identifier field does not always look like a
+            # heading. "Juvenile" is the one whose full canonical name is a
+            # single word (JUV037020).
+            pytest.param("Juvenile", False, id="single_word_juvenile"),
+            pytest.param("Fiction", True, id="single_word_fiction"),
+            # Uppercase is what Boundless sends, and these end in "N" -- the
+            # suffix scrub_identifier strips from codes like FBJUV000000N.
+            pytest.param("FICTION", True, id="single_word_uppercase"),
+            pytest.param("RELIGION", False, id="single_word_uppercase_religion"),
+            pytest.param("History", False, id="single_word_history"),
+            pytest.param("Humor", None, id="single_word_stop_rule"),
+        ],
+    )
+    def test_heading_in_identifier_field_is_matched_as_a_name(
+        self, identifier: str, expected_fiction: bool | None
+    ) -> None:
+        """Some distributors put the BISAC heading in the identifier field.
+
+        Boundless sends e.g. "FICTION / Horror" as the subject identifier rather
+        than "FIC015000". That is a name, not a code that failed to resolve, so
+        it must still be matched against the rulesets -- including when the
+        heading is a single word and so is indistinguishable from a code by
+        shape alone.
+        """
+        subject = self._subject(identifier, None)
+        assert subject.fiction is expected_fiction
+        assert subject.audience == Classifier.AUDIENCE_ADULT
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            pytest.param("Action & Adventure", id="bibliotheca_fiction_genre"),
+            pytest.param("Magic", id="bibliotheca_magic"),
+            pytest.param("Health", id="bibliotheca_nonfiction_genre"),
+            pytest.param("Horror", id="bare_subheading"),
+        ],
+    )
+    def test_name_only_subject_still_reaches_the_rulesets(self, name: str) -> None:
+        """A subject with no identifier keeps the behaviour it always had.
+
+        The heading gate exists to stop the rulesets being applied to the
+        fragment left behind when a code fails to resolve. A subject that never
+        carried a code has no such fragment, and some distributors classify
+        entirely this way -- Bibliotheca sends every genre as a bare name with
+        no code, so gating these would leave its titles with no fiction
+        evidence at all and a NULL fiction status on first import.
+
+        Whether a bare sub-heading should carry the rulesets' top-level
+        inference is a real question, but a distributor-wide one that is not
+        this change's to answer.
+        """
+        subject = self._subject("", name)
+        assert subject.fiction is False
+        assert subject.audience == Classifier.AUDIENCE_ADULT
+
+    @pytest.mark.parametrize(
+        "heading",
+        [
+            pytest.param("Fiction", id="fiction"),
+            pytest.param("Juvenile Nonfiction", id="two_words"),
+            pytest.param("Antiques & Collectibles", id="punctuated"),
+            pytest.param("Psychology & Psychiatry", id="deprecated_spelling"),
+            pytest.param(
+                "Literary Criticism & Collections", id="deprecated_spelling_lit_crit"
+            ),
+        ],
+    )
+    def test_top_level_headings_recognized(self, heading: str) -> None:
+        """TOP_LEVEL_HEADINGS is what decides whether the rulesets apply.
+
+        It is derived from bisac.csv, plus the former spellings of renamed
+        categories that are no longer in the file but that distributors still
+        send -- those have Interchangeable tokens in the rulesets, so the set
+        has to agree with them.
+        """
+        assert Lowercased(heading) in BISACClassifier.TOP_LEVEL_HEADINGS
+
+    @pytest.mark.parametrize(
+        "fragment",
+        [
+            pytest.param("Historical", id="subheading_only"),
+            pytest.param("English literature", id="vendor_language_category"),
+            pytest.param("infen000", id="raw_code"),
+        ],
+    )
+    def test_fragments_are_not_top_level_headings(self, fragment: str) -> None:
+        """The leftovers from an unresolvable code are not headings.
+
+        These are exactly the values the rulesets must not be applied to: the
+        catch-alls would read them as "not filed under Fiction" and vote
+        nonfiction.
+        """
+        assert Lowercased(fragment) not in BISACClassifier.TOP_LEVEL_HEADINGS
+
+    @pytest.mark.parametrize(
+        "identifier,stored_name",
+        [
+            pytest.param("FBFIC000000", "Fiction", id="fiction_general"),
+            pytest.param("FBFIC014000", "Historical", id="historical"),
+            pytest.param("FBFIC016000", "Humorous", id="humorous"),
+            pytest.param("FBFIC019000", "Literary", id="literary"),
+        ],
+    )
+    def test_recognized_code_unaffected_by_abstention(
+        self, identifier: str, stored_name: str
+    ) -> None:
+        """Codes that do resolve are classified exactly as before.
+
+        These are the Palace Marketplace codes whose partial names
+        ("Historical", "Literary") would each vote nonfiction if the canonical
+        lookup were ever to miss.
+        """
+        subject = self._subject(identifier, stored_name)
+        assert subject.fiction is True
+        assert subject.audience == Classifier.AUDIENCE_ADULT
 
     @pytest.mark.parametrize(
         "identifier,expected",

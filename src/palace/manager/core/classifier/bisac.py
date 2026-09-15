@@ -1,5 +1,6 @@
 import csv
 import re
+from collections.abc import Callable, Sequence
 
 from frozendict import frozendict
 
@@ -654,27 +655,94 @@ class BISACClassifier(Classifier):
         m(classifier.Life_Strategies, nonfiction, social_topics),
     ]
 
+    # The top-level headings a canonical BISAC name can begin with ("Fiction",
+    # "Juvenile Nonfiction", "Antiques & Collectibles", ...).
+    TOP_LEVEL_HEADINGS: frozenset[str] = frozenset(
+        Lowercased(name.split("/")[0].strip()) for name in NAMES.values()
+    ) | frozenset(
+        # Renamed categories whose former top-level spelling is no longer in
+        # bisac.csv but which distributors still send. The Interchangeable
+        # tokens above let the rulesets match these, so this set has to agree.
+        Lowercased(name)
+        for name in (
+            "Mind & Spirit",
+            "Psychology & Psychiatry",
+            "Technology",
+            "Foreign Language Study",
+            "Literary Criticism & Collections",
+        )
+    )
+
+    @classmethod
+    def _has_canonical_heading(cls, name: list[str]) -> bool:
+        """Does `name` begin with a real BISAC top-level heading?
+
+        This is the premise the FICTION and AUDIENCE catch-all rules rest on,
+        so it is what has to be checked before running them. It holds for a
+        name that came from `NAMES`, and for one a distributor supplied in
+        either the name or the identifier field -- Boundless sends headings
+        like "FICTION / Horror" as the identifier, and a bare top-level
+        heading such as "Juvenile" is equally a heading.
+
+        It does not hold for the fragment left over when a code cannot be
+        resolved ("Historical", "English literature"), which is the case these
+        rulesets must not be applied to.
+        """
+        return bool(name) and name[0] in cls.TOP_LEVEL_HEADINGS
+
+    @classmethod
+    def _apply_rulesets[RulesetResult](
+        cls,
+        identifier: str | None,
+        name: list[str],
+        rulesets: Sequence[MatchingRule],
+        keyword_fallback: Callable[[str | None, str], RulesetResult | None],
+    ) -> RulesetResult | None:
+        """Match `name` against `rulesets`, falling back to keyword matching.
+
+        Both the FICTION and AUDIENCE rulesets end in a catch-all that reasons
+        from the top-level BISAC heading -- "not filed under Fiction, therefore
+        nonfiction", "no juvenile heading, therefore Adult". That inference
+        holds for a canonical BISAC name and for nothing else, so an
+        unrecognized code skips the rulesets entirely and is left to the keyword
+        classifier, which abstains when the distributor's name carries no
+        signal.
+
+        Only those two callers share this. `genre` must not skip its rulesets:
+        GENRE has no catch-all but does have rules that match a bare fragment,
+        so a subject named "Historical" is still a Historical Fiction signal
+        even though "Historical" is not a top-level heading. `target_age` is
+        left out for scope rather than correctness -- its rules key off a
+        juvenile first token, which only a real heading produces, so routing it
+        through here would be safe.
+        """
+        # A subject with no identifier had no code that could fail to resolve,
+        # so there is nothing here to protect it from -- and some distributors
+        # classify entirely this way. Bibliotheca sends every genre as a bare
+        # name ("Action & Adventure", "Magic") with no code at all; gating
+        # those on the heading would leave its titles with no fiction evidence
+        # whatsoever. Whether a bare sub-heading should carry the rulesets'
+        # top-level inference is a real question, but a separate one.
+        if not identifier or cls._has_canonical_heading(name):
+            for ruleset in rulesets:
+                result = ruleset.match(*name)
+                if result is cls.stop:
+                    return None
+                if result is not None:
+                    return result
+        return keyword_fallback(identifier, "/".join(name))
+
     @classmethod
     def is_fiction(cls, identifier, name):
-        for ruleset in cls.FICTION:
-            fiction = ruleset.match(*name)
-            if fiction is cls.stop:
-                return None
-            if fiction is not None:
-                return fiction
-        keyword = "/".join(name)
-        return KeywordBasedClassifier.is_fiction(identifier, keyword)
+        return cls._apply_rulesets(
+            identifier, name, cls.FICTION, KeywordBasedClassifier.is_fiction
+        )
 
     @classmethod
     def audience(cls, identifier, name):
-        for ruleset in cls.AUDIENCE:
-            audience = ruleset.match(*name)
-            if audience is cls.stop:
-                return None
-            if audience is not None:
-                return audience
-        keyword = "/".join(name)
-        return KeywordBasedClassifier.audience(identifier, keyword)
+        return cls._apply_rulesets(
+            identifier, name, cls.AUDIENCE, KeywordBasedClassifier.audience
+        )
 
     @classmethod
     def target_age(cls, identifier, name):
@@ -725,10 +793,14 @@ class BISACClassifier(Classifier):
         identifier = identifier.removeprefix("FB")
         # Some distributors (e.g. Palace Marketplace) append an "N" suffix to
         # standard BISAC codes (e.g. "FBJUV000000N" becomes "JUV000000N" after
-        # FB-stripping). Official BISAC codes always end with digits, so a
-        # trailing "N" is always a non-standard extension; strip it so the code
-        # resolves to its canonical entry.
-        identifier = identifier.removesuffix("N")
+        # FB-stripping). Strip it only when doing so produces a code we know,
+        # because the identifier field does not always hold a code: a heading
+        # can arrive there too, and stripping unconditionally would turn
+        # "FICTION" into "FICTIO" (likewise RELIGION, EDUCATION, DESIGN,
+        # TRANSPORTATION) and stop it being recognized as a heading.
+        stripped = identifier.removesuffix("N")
+        if stripped in cls.NAMES or stripped in cls.NON_STANDARD_CODE_ALIASES:
+            identifier = stripped
         # Remap any remaining non-standard codes to their canonical equivalents.
         identifier = cls.NON_STANDARD_CODE_ALIASES.get(identifier, identifier)
         if identifier in cls.NAMES:

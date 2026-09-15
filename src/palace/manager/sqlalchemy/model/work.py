@@ -1368,6 +1368,15 @@ class Work(Base, LoggerMixin):
         if new_quality != self.quality:
             self.quality = new_quality
 
+    @staticmethod
+    def _keep_known_value[T](old_value: T | None, new_value: T | None) -> T | None:
+        """Prefer `new_value`, but never replace a known value with None.
+
+        A recalculation that gathered no usable classifications should leave an
+        existing determination alone rather than erasing it.
+        """
+        return old_value if new_value is None else new_value
+
     def assign_genres(
         self,
         identifier_ids,
@@ -1400,14 +1409,11 @@ class Work(Base, LoggerMixin):
         if self.target_age != new_target_age:
             self.target_age = new_target_age
 
+        new_fiction = self._keep_known_value(old_fiction, new_fiction)
         if new_fiction != old_fiction:
             self.fiction = new_fiction
-        # Never let a recalculation erase a known audience. If the classifier
-        # came back with no audience (e.g. it gathered no usable
-        # classifications on this pass), keep whatever we already had rather
-        # than writing NULL over a previously-determined audience.
-        if new_audience is None and old_audience is not None:
-            new_audience = old_audience
+
+        new_audience = self._keep_known_value(old_audience, new_audience)
         if new_audience != old_audience:
             self.audience = new_audience
 
