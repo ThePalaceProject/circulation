@@ -17,6 +17,7 @@ from palace.manager.api.authentication.basic import (
     LibraryIdentifierRestriction,
 )
 from palace.manager.api.problem_details import (
+    BLOCKED_BY_POLICY,
     INVALID_CREDENTIALS,
     PATRON_OF_ANOTHER_LIBRARY,
 )
@@ -1184,6 +1185,74 @@ class TestSIP2AuthenticateWithBlockingRules:
         assert provider.patron_blocking_rules[0].name == "r1"
         assert provider.patron_blocking_rules[0].rule == "True"
         assert provider.patron_blocking_rules[1].name == "r2"
+
+    def test_show_title_defaults_to_true_on_provider(
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+    ) -> None:
+        """Libraries that never set the option keep today's behaviour."""
+        provider = create_provider()
+        assert provider.patron_blocking_rules_show_title is True
+
+    def test_show_title_stored_on_provider(
+        self,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+        create_library_settings: Callable[..., SIP2LibrarySettings],
+    ) -> None:
+        """patron_blocking_rules_show_title is populated from library_settings."""
+        library_settings = create_library_settings(
+            patron_blocking_rules=[{"name": "r1", "rule": "True"}],
+            patron_blocking_rules_show_title=False,
+        )
+        provider = create_provider(library_settings=library_settings)
+
+        assert provider.patron_blocking_rules_show_title is False
+
+    @pytest.mark.parametrize(
+        "show_title_setting, title_shown",
+        [
+            ({}, True),
+            ({"patron_blocking_rules_show_title": False}, False),
+        ],
+    )
+    def test_authenticate_blocked_honors_show_title_setting(
+        self,
+        show_title_setting: dict[str, bool],
+        title_shown: bool,
+        create_provider: Callable[..., SIP2AuthenticationProvider],
+        create_library_settings: Callable[..., SIP2LibrarySettings],
+    ) -> None:
+        """The library's setting decides whether the blocked patron's problem
+        detail document asks clients to render the standard title.  Unset is
+        the behaviour patrons see today."""
+        message = "Please sign in at your local library instead."
+        library_settings = create_library_settings(
+            patron_blocking_rules=[
+                {"name": "block-all", "rule": "True", "message": message}
+            ],
+            **show_title_setting,
+        )
+        provider = create_provider(library_settings=library_settings)
+
+        mock_patron = MagicMock(spec=Patron)
+        with patch(self._PATCH_TARGET, return_value=(mock_patron, {})):
+            result = provider.authenticate(
+                MagicMock(), {"username": "u", "password": "p"}
+            )
+
+        assert isinstance(result, ProblemDetail)
+        assert result.status_code == 403
+        assert result.show_title is title_shown
+        assert result.title == BLOCKED_BY_POLICY.title
+        assert result.detail == message
+
+        # The document as the patron's client receives it.
+        document = json.loads(result.response[0])
+        assert document["detail"] == message
+        if title_shown:
+            assert "show_title" not in document
+        else:
+            assert document["show_title"] is False
 
     # ------------------------------------------------------------------
     # simpleeval runtime evaluation tests
