@@ -11,6 +11,7 @@ from palace.util.exceptions import PalaceValueError
 from palace.manager.celery.tasks.work import (
     classify_unchecked_subjects,
     reclassify_null_audience_works,
+    reset_non_bisac_nonfiction_subjects,
 )
 from palace.manager.data_layer.policy.presentation import (
     PresentationCalculationPolicy,
@@ -250,6 +251,25 @@ class WorkOPDSScript(WorkPresentationScript):
         choose_cover=False,
         update_search_index=True,
     )
+
+
+class ResetNonBisacNonfictionSubjectsScript(Script):
+    """Manually dispatch the ``reset_non_bisac_nonfiction_subjects`` Celery task.
+
+    The work itself happens in the Celery task; this script just queues it. It
+    exists so the repair can be applied again on demand, in case its reset was
+    consumed by old code before the new classifier was live everywhere.
+
+    TODO: Remove this script when the ``reset_non_bisac_nonfiction_subjects``
+    Celery task is removed.
+    """
+
+    def do_run(self, *args: Any, **kwargs: Any) -> None:
+        reset_non_bisac_nonfiction_subjects.delay()
+        self.log.info(
+            'The "reset_non_bisac_nonfiction_subjects" task has been queued for '
+            "execution. See the celery logs for details about task execution."
+        )
 
 
 class ReclassifyNullAudienceWorksScript(Script):

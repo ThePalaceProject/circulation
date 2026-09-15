@@ -10,6 +10,7 @@ from palace.util.exceptions import PalaceValueError
 from palace.manager.scripts.work import (
     ReclassifyNullAudienceWorksScript,
     ReclassifyWorksForUncheckedSubjectsScript,
+    ResetNonBisacNonfictionSubjectsScript,
     WorkProcessingScript,
 )
 from palace.manager.sqlalchemy.model.datasource import DataSource
@@ -197,4 +198,14 @@ class TestReclassifyNullAudienceWorksScript:
             "palace.manager.scripts.work.reclassify_null_audience_works"
         ) as task:
             ReclassifyNullAudienceWorksScript(db.session).run()
+            assert task.delay.call_count == 1
+
+
+class TestResetNonBisacNonfictionSubjectsScript:
+    def test_run(self, db: DatabaseTransactionFixture):
+        """The script queues the reset_non_bisac_nonfiction_subjects Celery task."""
+        with patch(
+            "palace.manager.scripts.work.reset_non_bisac_nonfiction_subjects"
+        ) as task:
+            ResetNonBisacNonfictionSubjectsScript(db.session).run()
             assert task.delay.call_count == 1

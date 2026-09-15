@@ -691,6 +691,36 @@ class BISACClassifier(Classifier):
         return bool(name) and name[0] in cls.TOP_LEVEL_HEADINGS
 
     @classmethod
+    def contradicts_stored_fiction(
+        cls,
+        identifier: str | None,
+        name: str | None,
+        stored_fiction: bool | None,
+    ) -> bool:
+        """Does this classifier disagree with a subject's stored fiction status?
+
+        Subjects are only re-examined when `checked` is false, so a value
+        scored under superseded rules persists indefinitely. Repairs that
+        reset `checked` need to identify those rows, and they need to agree
+        with each other about which rows they are. Expressing the question
+        here keeps that definition in one place: a subject is stale when the
+        classifier, run now, does not return what is stored.
+
+        :param identifier: The subject's identifier, as stored.
+        :param name: The subject's name, as stored.
+        :param stored_fiction: The subject's current `fiction` value.
+        :return: True when the classifier no longer agrees with `stored_fiction`.
+        """
+        if not identifier and not name:
+            # Nothing to classify. Subject.lookup will not create such a row,
+            # but both columns are nullable, so do not assume.
+            return False
+        scrubbed_identifier, scrubbed_name = cls.scrub_identifier_and_name(
+            identifier, name
+        )
+        return cls.is_fiction(scrubbed_identifier, scrubbed_name) is not stored_fiction
+
+    @classmethod
     def _apply_rulesets[RulesetResult](
         cls,
         identifier: str | None,
