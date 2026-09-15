@@ -1,16 +1,16 @@
 """Re-apply the non-BISAC nonfiction reset now that no old code is running.
 
-Release N repaired these subjects: migration 52d1bbdd4671 reset checked=False
+Release N repaired these subjects: startup task
+``2026_09_14_reclassify_non_bisac_nonfiction_subjects`` reset ``checked=False``
 on BISAC subjects stored as nonfiction because an unresolvable code fell
-through the ruleset catch-all, and startup task
-2026_09_14_reclassify_non_bisac_nonfiction_subjects dispatched the re-score.
+through the ruleset catch-all, and chained the re-score behind it.
 
 That repair is exposed for as long as any old code is still running. Anything
 reaching Subject.assign_to_genre before the re-score lands consumes the reset,
 and code running the superseded rules re-stamps checked=True with the same
 wrong value -- silently, and with nothing to revisit the subject afterwards.
-The deploy stops the Celery workers before migrating, so they are safe, but the
-web containers are recycled after the migration and Fargate deployments are not
+The deploy stops the Celery workers before the migrate step, so they are safe,
+but the web containers are recycled after it and Fargate deployments are not
 governed by that playbook at all.
 
 This task exists to close that off. Running it a release later means no old
