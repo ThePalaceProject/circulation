@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 import boto3
 from boto3.exceptions import Boto3Error
 from botocore.exceptions import BotoCoreError
+from celery import Celery
 from celery.events.snapshot import Polaroid
 from celery.events.state import State
 from kombu.transport.redis import PrefixedStrictRedis
@@ -96,37 +97,36 @@ class _PrefixedRedis(PrefixedStrictRedis):
     ]
 
 
-class Cloudwatch(Polaroid):
+class QueueStatsReporter:
     """
-    Implements a Celery custom camera that sends queue statistics to Cloudwatch.
+    Collects per-queue depth and oldest-message age from the broker Redis and
+    publishes them to Cloudwatch as the ``QueueWaiting`` / ``QueueOldestAge``
+    metrics.
 
-    See Celery documentation for more information on custom cameras:
-    https://docs.celeryq.dev/en/stable/userguide/monitoring.html#custom-camera
+    This is independent of Celery's event machinery, so it can be driven either by
+    the periodic ``publish_queue_stats`` task (see
+    :mod:`palace.manager.celery.tasks.monitoring`) or by the :class:`Cloudwatch`
+    events camera below. Both paths read the same config off the Celery app, so
+    they produce identical metrics (same namespace, ``Manager``/``QueueName``
+    dimensions).
     """
 
-    clear_after = True  # clear after flush (incl, state.event_count).
-
-    def __init__(
-        self,
-        *args: Any,
-        **kwargs: Any,
-    ):
-        super().__init__(*args, **kwargs)
+    def __init__(self, app: Celery):
         # We use logger_for_cls instead of just inheriting from LoggerMixin
-        # because the base class Polaroid already defines a logger attribute,
-        # which conflicts with the logger() method in LoggerMixin.
+        # because the Cloudwatch subclass's Polaroid base already defines a logger
+        # attribute, which conflicts with the logger() method in LoggerMixin.
         self.logger = logger_for_cls(self.__class__)
-        broker_url = self.app.conf.get("broker_url")
+        broker_url = app.conf.get("broker_url")
         broker_type = urlparse(broker_url).scheme if broker_url else None
         if broker_type != "redis":
             raise PalaceValueError(f"Broker type '{broker_type}' is not supported.")
 
-        region = self.app.conf.get("cloudwatch_statistics_region")
-        dryrun = self.app.conf.get("cloudwatch_statistics_dryrun")
+        region = app.conf.get("cloudwatch_statistics_region")
+        dryrun = app.conf.get("cloudwatch_statistics_dryrun")
         self.cloudwatch_client = (
             boto3.client("cloudwatch", region_name=region) if not dryrun else None
         )
-        broker_transport_options = self.app.conf.get("broker_transport_options", {})
+        broker_transport_options = app.conf.get("broker_transport_options", {})
         self.manager_name = broker_transport_options.get("global_keyprefix")
         self.redis_client = self.get_redis_client(
             broker_url,
@@ -135,9 +135,9 @@ class Cloudwatch(Polaroid):
             # value keeps health checks on rather than silently disabling them.
             broker_transport_options.get("health_check_interval", 30),
         )
-        self.namespace = self.app.conf.get("cloudwatch_statistics_namespace")
-        self.upload_size = self.app.conf.get("cloudwatch_statistics_upload_size")
-        self.queues = {queue.name for queue in self.app.conf.get("task_queues")}
+        self.namespace = app.conf.get("cloudwatch_statistics_namespace")
+        self.upload_size = app.conf.get("cloudwatch_statistics_upload_size")
+        self.queues = {queue.name for queue in app.conf.get("task_queues")}
 
     @classmethod
     def get_redis_client(
@@ -193,9 +193,9 @@ class Cloudwatch(Polaroid):
             for queue in self.queues
         }
 
-    def on_shutter(self, state: State) -> None:
-        timestamp = utc_now()
-        self.publish(self.get_queue_stats(), timestamp)
+    def run(self) -> None:
+        """Snapshot every queue and publish its metrics to Cloudwatch once."""
+        self.publish(self.get_queue_stats(), utc_now())
 
     def publish(
         self,
@@ -224,3 +224,26 @@ class Cloudwatch(Polaroid):
                 self.logger.info("Dry run enabled. Not sending metrics to Cloudwatch.")
                 for data in chunk:
                     self.logger.info(f"Data: {data}")
+
+
+class Cloudwatch(QueueStatsReporter, Polaroid):
+    """
+    A Celery custom camera that publishes queue statistics to Cloudwatch on the
+    events-snapshot interval.
+
+    This is retained for the ``celery events`` deployment used by the circ-scripts
+    container. New deployments publish the same metrics from the periodic
+    ``publish_queue_stats`` task instead, which does not require an always-on
+    events process. See Celery's custom-camera documentation:
+    https://docs.celeryq.dev/en/stable/userguide/monitoring.html#custom-camera
+    """
+
+    clear_after = True  # clear after flush (incl, state.event_count).
+
+    def __init__(self, *args: Any, **kwargs: Any):
+        # Polaroid.__init__ sets self.app; QueueStatsReporter reads its config.
+        Polaroid.__init__(self, *args, **kwargs)
+        QueueStatsReporter.__init__(self, self.app)
+
+    def on_shutter(self, state: State) -> None:
+        self.run()

@@ -61,6 +61,7 @@ def beat_schedule() -> dict[str, Any]:
         equivalents,
         license_expiration,
         marc,
+        monitoring,
         notifications,
         novelist,
         nyt,
@@ -91,6 +92,10 @@ def beat_schedule() -> dict[str, Any]:
         },
         "search_indexing": {
             "task": search.search_indexing.name,
+            "schedule": crontab(minute="*"),  # Run every minute
+        },
+        "publish_queue_stats": {
+            "task": monitoring.publish_queue_stats.name,
             "schedule": crontab(minute="*"),  # Run every minute
         },
         "marc_export": {
