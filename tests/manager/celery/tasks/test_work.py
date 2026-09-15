@@ -125,10 +125,10 @@ def test_reset_non_bisac_nonfiction_subjects(
     db: DatabaseTransactionFixture,
     celery_fixture: CeleryFixture,
 ):
-    """The task re-applies the reset for subjects stored as nonfiction in error.
+    """The task resets subjects whose stored nonfiction status went stale.
 
-    Re-runnable stand-in for migration 52d1bbdd4671, for when that migration's
-    reset was consumed by old code before the new classifier was live.
+    Re-runnable, so the repair can be applied again when its reset was consumed
+    by old code before the new classifier was live everywhere.
     """
     stale = db.subject(Subject.BISAC, "INFEN000")
     stale.name = "English literature"
