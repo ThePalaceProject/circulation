@@ -257,8 +257,8 @@ class ResetNonBisacNonfictionSubjectsScript(Script):
     """Manually dispatch the ``reset_non_bisac_nonfiction_subjects`` Celery task.
 
     The work itself happens in the Celery task; this script just queues it. It
-    exists so the repair in migration 52d1bbdd4671 can be applied again, in
-    case its reset was consumed by old code before the new classifier was live.
+    exists so the repair can be applied again on demand, in case its reset was
+    consumed by old code before the new classifier was live everywhere.
 
     TODO: Remove this script when the ``reset_non_bisac_nonfiction_subjects``
     Celery task is removed.

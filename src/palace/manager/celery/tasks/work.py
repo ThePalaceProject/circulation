@@ -42,21 +42,20 @@ def reclassify_null_audience_works(task: Task) -> None:
 
 @shared_task(queue=QueueNames.default, bind=True)
 def reset_non_bisac_nonfiction_subjects(task: Task) -> None:
-    """Re-apply the reset that repairs subjects stored as nonfiction in error.
+    """Mark BISAC subjects unchecked when their stored fiction status went stale.
 
-    Migration 52d1bbdd4671 marks these subjects unchecked so that
-    classify_unchecked_subjects re-scores them. That reset can be consumed
-    before it takes effect: if old code reaches the subjects first -- a
-    still-running scripts server, or a host that redeploys itself -- it
-    re-scores them under the superseded rules and re-stamps checked=True.
-    Nothing errors, and nothing revisits them afterwards, so the repair
-    quietly did nothing. This task exists to run the reset again.
+    A code that cannot be resolved to a canonical BISAC heading used to be
+    read as nonfiction by the ruleset catch-all, so those subjects carry a
+    fabricated fiction=False. Subjects are only re-examined when checked is
+    false, so repairing them means resetting that flag.
 
-    It resets only. The re-scoring stays with classify_unchecked_subjects,
-    which picks these subjects up on its next nightly run; trigger
-    bin/work_classify_unchecked_subjects to have it happen sooner.
+    This resets only. Re-scoring is classify_unchecked_subjects' job: the
+    startup task that runs this at deploy chains the two together, and the
+    nightly run picks up anything left over.
 
-    Idempotent: a second run finds nothing to do.
+    Idempotent and self-selecting -- it recomputes which subjects the
+    classifier no longer agrees with, so a second run finds nothing to do.
+    That is what lets a later release re-apply it safely.
     """
     with task.session() as session:
         candidates = (
