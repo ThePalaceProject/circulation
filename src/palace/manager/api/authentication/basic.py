@@ -331,16 +331,23 @@ class BasicAuthProviderLibrarySettings(AuthProviderLibrarySettings):
     def reject_patron_blocking_rules_if_not_supported(
         cls, data: dict[str, Any] | AuthProviderLibrarySettings
     ) -> dict[str, Any] | AuthProviderLibrarySettings:
-        """Reject patron_blocking_rules when this settings class does not support them."""
+        """Reject blocking-rule settings when this class does not support them."""
         if "patron_blocking_rules" in getattr(cls, "model_fields", {}):
             return data
-        if isinstance(data, dict) and data.get("patron_blocking_rules"):
-            raise SettingsValidationError(
-                INVALID_CONFIGURATION_OPTION.detailed(
-                    "Patron blocking rules are not supported by this authentication "
-                    "provider. Rules are ignored at runtime."
+        if isinstance(data, dict):
+            # `extra="allow"` means an unsupported provider would otherwise
+            # accept and store these keys, then ignore them at runtime. Test
+            # the title option for presence rather than truthiness: `False` is
+            # both falsy and the only value worth setting, and the admin
+            # interface sends an empty string for "not set".
+            show_title = data.get("patron_blocking_rules_show_title")
+            if data.get("patron_blocking_rules") or show_title not in (None, ""):
+                raise SettingsValidationError(
+                    INVALID_CONFIGURATION_OPTION.detailed(
+                        "Patron blocking rules are not supported by this authentication "
+                        "provider. Rules are ignored at runtime."
+                    )
                 )
-            )
         return data
 
     # When multiple libraries share an ILS, a person may be able to
@@ -471,8 +478,25 @@ class BasicAuthenticationProvider[
                 library_settings.library_identifier_restriction_criteria
             )
         )
-        self.patron_blocking_rules: list[PatronBlockingRule] = []
-        self.patron_blocking_rules_show_title: bool = True
+        # Wire the blocking-rule settings here, once, rather than leaving each
+        # provider to copy them across: a provider that mixes in
+        # PatronBlockingRulesSetting but copies only some of these would
+        # silently ignore what the library saved, with nothing to catch it.
+        self.patron_blocking_rules: list[PatronBlockingRule]
+        self.patron_blocking_rules_show_title: bool
+        # Narrowed from `object` because mypy will not form the intersection of
+        # LibrarySettingsType and PatronBlockingRulesSetting, and reports the
+        # isinstance branch as unreachable -- SIP2LibrarySettings inherits from
+        # both, so it is reached.
+        blocking_settings: object = library_settings
+        if isinstance(blocking_settings, PatronBlockingRulesSetting):
+            self.patron_blocking_rules = blocking_settings.patron_blocking_rules
+            self.patron_blocking_rules_show_title = (
+                blocking_settings.patron_blocking_rules_show_title
+            )
+        else:
+            self.patron_blocking_rules = []
+            self.patron_blocking_rules_show_title = True
 
     def process_library_identifier_restriction_criteria(
         self, criteria: str | None

@@ -328,6 +328,28 @@ class TestBasicAuthLibrarySettingsBlockingRules:
         assert entry["default"] == "true"
         assert [option["key"] for option in entry["options"]] == ["true", "false"]
 
+    def test_show_title_rejected_when_rules_are_not_supported(self) -> None:
+        """A provider without the mixin must not silently store the option.
+
+        `extra="allow"` would otherwise accept and persist the key through the
+        settings API, leaving a saved value that never takes effect.
+        """
+        with raises_problem_detail() as info:
+            BasicAuthProviderLibrarySettings(patron_blocking_rules_show_title=False)
+        assert info.value.detail is not None
+        assert "not supported by this authentication provider" in info.value.detail
+
+    def test_show_title_rejection_survives_a_falsy_value(self) -> None:
+        """`False` is the value worth setting and is falsy, so presence is what counts."""
+        for value in (False, "false", True):
+            with raises_problem_detail():
+                BasicAuthProviderLibrarySettings(patron_blocking_rules_show_title=value)
+
+    def test_unset_show_title_is_not_rejected(self) -> None:
+        """An absent or empty value is 'not set' and must not trip the guard."""
+        BasicAuthProviderLibrarySettings()
+        BasicAuthProviderLibrarySettings(patron_blocking_rules_show_title="")
+
     def test_show_title_not_on_base_library_settings(self) -> None:
         settings = BasicAuthProviderLibrarySettings()
         assert not hasattr(settings, "patron_blocking_rules_show_title")
@@ -516,6 +538,37 @@ class TestBasicAuthenticationProvider:
         assert result.uri == BLOCKED_BY_POLICY.uri
         assert result.detail == "Blocked by policy."
         mock_log.info.assert_any_call("Patron blocking rules evaluation attempted")
+
+    def test_base_class_wires_blocking_settings_without_provider_help(self) -> None:
+        """A provider that never copies the settings still honors them.
+
+        The wiring lives in BasicAuthenticationProvider.__init__ rather than in
+        each provider, so a provider that mixes in PatronBlockingRulesSetting
+        cannot silently ignore what the library saved.
+        """
+        library_settings = ConcreteSettings(
+            patron_blocking_rules=[
+                {"name": "block-all", "rule": "True", "message": "Go elsewhere."}
+            ],
+            patron_blocking_rules_show_title=False,
+        )
+
+        provider = _ConcreteBlockingProvider(
+            0, 0, BasicAuthProviderSettings(), library_settings
+        )
+
+        assert len(provider.patron_blocking_rules) == 1
+        assert provider.patron_blocking_rules[0].name == "block-all"
+        assert provider.patron_blocking_rules_show_title is False
+
+    def test_settings_without_the_mixin_fall_back_to_defaults(self) -> None:
+        """Library settings that do not support blocking rules get the defaults."""
+        provider = _ConcreteBlockingProvider(
+            0, 0, BasicAuthProviderSettings(), BasicAuthProviderLibrarySettings()
+        )
+
+        assert provider.patron_blocking_rules == []
+        assert provider.patron_blocking_rules_show_title is True
 
     def test_show_title_defaults_to_true_on_provider(self) -> None:
         provider = _ConcreteBlockingProvider(
