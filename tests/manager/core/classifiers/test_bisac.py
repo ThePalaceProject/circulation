@@ -478,11 +478,12 @@ class TestBISACClassifier:
     def test_heading_in_identifier_field_is_matched_as_a_name(
         self, identifier: str, expected_fiction: bool | None
     ) -> None:
-        """Some distributors put the BISAC heading in the identifier field.
+        """A BISAC heading can arrive in the identifier field.
 
-        Boundless sends e.g. "FICTION / Horror" as the subject identifier rather
-        than "FIC015000". That is a name, not a code that failed to resolve, so
-        it must still be matched against the rulesets -- including when the
+        An OPDS `<category term="FICTION / Horror">` with no `label` lands that
+        way: the OPDS1 extractor maps `term` to the identifier and `label` to
+        the name. That is a heading, not a code that failed to resolve, so it
+        must still be matched against the rulesets -- including when the
         heading is a single word and so is indistinguishable from a code by
         shape alone.
         """

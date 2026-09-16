@@ -660,9 +660,14 @@ class BISACClassifier(Classifier):
     TOP_LEVEL_HEADINGS: frozenset[str] = frozenset(
         Lowercased(name.split("/")[0].strip()) for name in NAMES.values()
     ) | frozenset(
-        # Renamed categories whose former top-level spelling is no longer in
-        # bisac.csv but which distributors still send. The Interchangeable
-        # tokens above let the rulesets match these, so this set has to agree.
+        # Former top-level spellings of renamed categories, which distributors
+        # still send and bisac.csv no longer lists. They belong here so that a
+        # name beginning with one still reaches the catch-all rules: without
+        # the entry, a deprecated spelling carried by a code that does not
+        # resolve abstains instead of being read as nonfiction/Adult. That is
+        # the test for whether a new entry belongs -- not whether the rulesets
+        # have an Interchangeable for it, which is a separate mechanism in
+        # GENRE, and GENRE does not consult this set.
         Lowercased(name)
         for name in (
             "Mind & Spirit",
@@ -679,10 +684,11 @@ class BISACClassifier(Classifier):
 
         This is the premise the FICTION and AUDIENCE catch-all rules rest on,
         so it is what has to be checked before running them. It holds for a
-        name that came from `NAMES`, and for one a distributor supplied in
-        either the name or the identifier field -- Boundless sends headings
-        like "FICTION / Horror" as the identifier, and a bare top-level
-        heading such as "Juvenile" is equally a heading.
+        name that came from `NAMES`, and for a heading a distributor supplied
+        in the identifier field -- an OPDS `<category term="FICTION / Horror">`
+        with no `label` arrives that way, since the OPDS1 extractor maps `term`
+        to the identifier and `label` to the name. A bare top-level heading
+        such as "Juvenile" is equally a heading.
 
         It does not hold for the fragment left over when a code cannot be
         resolved ("Historical", "English literature"), which is the case these
