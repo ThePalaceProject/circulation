@@ -1190,7 +1190,7 @@ class TestSIP2AuthenticateWithBlockingRules:
         self,
         create_provider: Callable[..., SIP2AuthenticationProvider],
     ) -> None:
-        """Libraries that never set the option keep today's behaviour."""
+        """Libraries that never set the option keep today's behavior."""
         provider = create_provider()
         assert provider.patron_blocking_rules_show_title is True
 
