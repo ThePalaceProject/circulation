@@ -1224,7 +1224,7 @@ class TestSIP2AuthenticateWithBlockingRules:
     ) -> None:
         """The library's setting decides whether the blocked patron's problem
         detail document asks clients to render the standard title.  Unset is
-        the behaviour patrons see today."""
+        the behavior patrons see today."""
         message = "Please sign in at your local library instead."
         library_settings = create_library_settings(
             patron_blocking_rules=[
