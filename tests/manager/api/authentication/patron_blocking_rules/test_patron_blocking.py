@@ -302,7 +302,7 @@ class TestBasicAuthLibrarySettingsBlockingRules:
         assert settings.patron_blocking_rules == []
 
     def test_show_title_defaults_to_true(self) -> None:
-        """The default preserves the behaviour patrons see today."""
+        """The default preserves the behavior patrons see today."""
         settings = ConcreteSettings()
         assert settings.patron_blocking_rules_show_title is True
 
