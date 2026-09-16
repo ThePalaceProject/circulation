@@ -294,7 +294,6 @@ class SIP2AuthenticationProvider(
         self.institution_id = library_settings.institution_id
         self.timeout = settings.timeout
         self._client = client
-        self.patron_blocking_rules = library_settings.patron_blocking_rules
 
         # Check if patrons should be blocked based on SIP status
         if settings.patron_status_block:

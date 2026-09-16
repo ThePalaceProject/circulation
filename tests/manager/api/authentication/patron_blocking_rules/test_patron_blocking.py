@@ -172,6 +172,35 @@ class TestCheckPatronBlockingRulesWithEvaluator:
         assert isinstance(result, ProblemDetail)
         assert result.detail == "Second rule."
 
+    def test_show_title_true_by_default(self) -> None:
+        """By default the block asks clients to render the title, as today."""
+        rules = [PatronBlockingRule(name="block", rule="True", message="Go elsewhere.")]
+        result = check_patron_blocking_rules_with_evaluator(rules, {})
+        assert isinstance(result, ProblemDetail)
+        assert result.show_title is True
+        assert result.detail == "Go elsewhere."
+
+    def test_show_title_false_flags_the_document(self) -> None:
+        """show_title=False asks clients to render only the configured message."""
+        rules = [PatronBlockingRule(name="block", rule="True", message="Go elsewhere.")]
+        result = check_patron_blocking_rules_with_evaluator(rules, {}, show_title=False)
+        assert isinstance(result, ProblemDetail)
+        assert result.show_title is False
+        # Everything else about the problem detail is unchanged, so clients that
+        # do not honor the flag behave exactly as they do today.
+        assert result.uri == BLOCKED_BY_POLICY.uri
+        assert result.status_code == 403
+        assert result.title == BLOCKED_BY_POLICY.title
+        assert result.detail == "Go elsewhere."
+
+    def test_show_title_false_with_default_message(self) -> None:
+        """A rule without a message still falls back to the default message."""
+        rules = [PatronBlockingRule(name="block", rule="True")]
+        result = check_patron_blocking_rules_with_evaluator(rules, {}, show_title=False)
+        assert isinstance(result, ProblemDetail)
+        assert result.show_title is False
+        assert result.detail == "Patron is blocked by library policy."
+
     def test_error_is_logged(self) -> None:
         """Evaluation errors are logged server-side."""
         rules = [PatronBlockingRule(name="bad", rule="{missing_key} == 1")]
@@ -271,6 +300,75 @@ class TestBasicAuthLibrarySettingsBlockingRules:
         """A settings dict without the key deserialises to an empty list."""
         settings = ConcreteSettings.model_validate({})
         assert settings.patron_blocking_rules == []
+
+    def test_show_title_defaults_to_true(self) -> None:
+        """The default preserves the behavior patrons see today."""
+        settings = ConcreteSettings()
+        assert settings.patron_blocking_rules_show_title is True
+
+    def test_show_title_can_be_disabled(self) -> None:
+        settings = ConcreteSettings(patron_blocking_rules_show_title=False)
+        assert settings.patron_blocking_rules_show_title is False
+
+    def test_show_title_accepts_admin_ui_string_value(self) -> None:
+        """The admin UI submits select values as strings."""
+        settings = ConcreteSettings(patron_blocking_rules_show_title="false")
+        assert settings.patron_blocking_rules_show_title is False
+
+    def test_show_title_in_configuration_form(self) -> None:
+        """The option is a visible select, so the Admin UI renders it from the
+        settings schema without any admin-side change."""
+        form = {
+            item["key"]: item
+            for item in ConcreteSettings.configuration_form(MagicMock())
+        }
+        entry = form["patron_blocking_rules_show_title"]
+        assert entry["hidden"] is False
+        assert entry["type"] == "select"
+        assert entry["default"] == "true"
+        assert [option["key"] for option in entry["options"]] == ["true", "false"]
+
+    def test_show_title_rejected_when_rules_are_not_supported(self) -> None:
+        """A provider without the mixin must not silently store the option.
+
+        `extra="allow"` would otherwise accept and persist the key through the
+        settings API, leaving a saved value that never takes effect.
+        """
+        with raises_problem_detail() as info:
+            BasicAuthProviderLibrarySettings(patron_blocking_rules_show_title=False)
+        assert info.value.detail is not None
+        assert "not supported by this authentication provider" in info.value.detail
+
+    def test_show_title_rejection_survives_a_falsy_value(self) -> None:
+        """`False` is the value worth setting and is falsy, so presence is what counts."""
+        for value in (False, "false", True):
+            with raises_problem_detail():
+                BasicAuthProviderLibrarySettings(patron_blocking_rules_show_title=value)
+
+    def test_unset_show_title_is_not_rejected(self) -> None:
+        """An absent or empty value is 'not set' and must not trip the guard."""
+        BasicAuthProviderLibrarySettings()
+        BasicAuthProviderLibrarySettings(patron_blocking_rules_show_title="")
+
+    def test_show_title_not_on_base_library_settings(self) -> None:
+        settings = BasicAuthProviderLibrarySettings()
+        assert not hasattr(settings, "patron_blocking_rules_show_title")
+
+    def test_show_title_default_excluded_from_model_dump(self) -> None:
+        """Existing configurations are untouched: the default is not stored."""
+        settings = ConcreteSettings()
+        assert "patron_blocking_rules_show_title" not in settings.model_dump()
+
+    def test_show_title_included_in_model_dump_when_disabled(self) -> None:
+        settings = ConcreteSettings(patron_blocking_rules_show_title=False)
+        assert settings.model_dump()["patron_blocking_rules_show_title"] is False
+
+    def test_show_title_missing_from_stored_settings_produces_default(self) -> None:
+        """Settings saved before this option existed deserialize to the default."""
+        settings = ConcreteSettings.model_validate(
+            {"patron_blocking_rules": [{"name": "r", "rule": "True"}]}
+        )
+        assert settings.patron_blocking_rules_show_title is True
 
     def test_validate_empty_name_raises(self) -> None:
         with raises_problem_detail() as info:
@@ -440,6 +538,72 @@ class TestBasicAuthenticationProvider:
         assert result.uri == BLOCKED_BY_POLICY.uri
         assert result.detail == "Blocked by policy."
         mock_log.info.assert_any_call("Patron blocking rules evaluation attempted")
+
+    def test_base_class_wires_blocking_settings_without_provider_help(self) -> None:
+        """A provider that never copies the settings still honors them.
+
+        The wiring lives in BasicAuthenticationProvider.__init__ rather than in
+        each provider, so a provider that mixes in PatronBlockingRulesSetting
+        cannot silently ignore what the library saved.
+        """
+        library_settings = ConcreteSettings(
+            patron_blocking_rules=[
+                {"name": "block-all", "rule": "True", "message": "Go elsewhere."}
+            ],
+            patron_blocking_rules_show_title=False,
+        )
+
+        provider = _ConcreteBlockingProvider(
+            0, 0, BasicAuthProviderSettings(), library_settings
+        )
+
+        assert len(provider.patron_blocking_rules) == 1
+        assert provider.patron_blocking_rules[0].name == "block-all"
+        assert provider.patron_blocking_rules_show_title is False
+
+    def test_settings_without_the_mixin_fall_back_to_defaults(self) -> None:
+        """Library settings that do not support blocking rules get the defaults."""
+        provider = _ConcreteBlockingProvider(
+            0, 0, BasicAuthProviderSettings(), BasicAuthProviderLibrarySettings()
+        )
+
+        assert provider.patron_blocking_rules == []
+        assert provider.patron_blocking_rules_show_title is True
+
+    def test_show_title_defaults_to_true_on_provider(self) -> None:
+        provider = _ConcreteBlockingProvider(
+            0, 0, BasicAuthProviderSettings(), BasicAuthProviderLibrarySettings()
+        )
+        assert provider.patron_blocking_rules_show_title is True
+
+    def test_blocking_flags_document_when_show_title_disabled(self) -> None:
+        """With the title suppressed, the block asks clients to hide it."""
+        mock_patron = MagicMock(spec=Patron)
+
+        provider = _ConcreteBlockingProvider(
+            0, 0, BasicAuthProviderSettings(), BasicAuthProviderLibrarySettings()
+        )
+        provider.patron_blocking_rules = [
+            PatronBlockingRule(
+                name="block-all",
+                rule="True",
+                message="Please visit your local library instead.",
+            )
+        ]
+        provider.patron_blocking_rules_show_title = False
+
+        with patch.object(
+            _ConcreteBlockingProvider,
+            "_do_authenticate",
+            return_value=(mock_patron, {}),
+        ):
+            result = provider.authenticate(MagicMock(), {})
+
+        assert isinstance(result, ProblemDetail)
+        assert result.status_code == 403
+        assert result.uri == BLOCKED_BY_POLICY.uri
+        assert result.show_title is False
+        assert result.detail == "Please visit your local library instead."
 
     def test_blocking_not_applied_when_do_authenticate_returns_none(self) -> None:
         """
