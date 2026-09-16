@@ -34,7 +34,7 @@ from palace.manager.sqlalchemy.constants import EditionConstants
 from palace.manager.sqlalchemy.hassessioncache import HasSessionCache
 from palace.manager.sqlalchemy.hybrid import hybrid_property
 from palace.manager.sqlalchemy.model.base import Base
-from palace.manager.sqlalchemy.model.coverage import CoverageRecord, Timestamp
+from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.integration import (
@@ -131,12 +131,6 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
 
     catalog: Mapped[list[Identifier]] = relationship(
         "Identifier", secondary="collections_identifiers", back_populates="collections"
-    )
-
-    # A Collection can be associated with multiple CoverageRecords
-    # for Identifiers in its catalog.
-    coverage_records: Mapped[list[CoverageRecord]] = relationship(
-        "CoverageRecord", back_populates="collection", cascade="all"
     )
 
     # A collection may be associated with one or more custom lists.
