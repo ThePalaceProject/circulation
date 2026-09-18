@@ -1,5 +1,7 @@
 from unittest.mock import patch
 
+import pytest
+
 from palace.manager.celery.tasks import work as work_tasks
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.work import Work
@@ -119,3 +121,95 @@ def test_reclassify_null_audience_works(
         policy = call_obj[1]["policy"]
         assert policy.classify is True
         assert policy.choose_edition is False
+
+
+@pytest.mark.parametrize(
+    "identifier,name",
+    [
+        pytest.param("INFEN000", "English literature", id="language_category"),
+        pytest.param(
+            "INFENUSA", "American and Canadian literature", id="territory_category"
+        ),
+        pytest.param("FBSACT000000", "News and investigations", id="vendor_code"),
+        pytest.param("FSHUM000000N", "Human science", id="vendor_code_with_n_suffix"),
+        pytest.param("SOCO32000", None, id="malformed_code_without_name"),
+        pytest.param("FBZZZ000000", "Historical", id="shape_valid_but_nonexistent"),
+        pytest.param("FBFIC014000", "Historical", id="stale_canonical_fiction_code"),
+    ],
+)
+def test_reset_non_bisac_nonfiction_subjects(
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+    identifier: str,
+    name: str | None,
+) -> None:
+    """Subjects stored as nonfiction that the classifier no longer scores that
+    way are marked unchecked, so classify_unchecked_subjects re-scores them.
+
+    Covers both codes that are not BISAC at all and codes that merely look like
+    one (FBZZZ000000), which a pattern-based predicate would wrongly accept.
+    """
+    subject = db.subject(Subject.BISAC, identifier)
+    subject.name = name
+    subject.fiction = False
+    subject.checked = True
+    db.session.commit()
+
+    work_tasks.reset_non_bisac_nonfiction_subjects.delay().wait()
+    db.session.expire_all()
+
+    assert subject.checked is False
+
+
+@pytest.mark.parametrize(
+    "subject_type,identifier,fiction",
+    [
+        pytest.param(Subject.BISAC, "HIS027000", False, id="real_nonfiction_code"),
+        pytest.param(Subject.BISAC, "HIS000000", False, id="real_nonfiction_general"),
+        pytest.param(
+            Subject.BISAC, "HISTORY / General", False, id="nonfiction_heading"
+        ),
+        pytest.param(Subject.BISAC, "INFEN000", True, id="already_scored_fiction"),
+        pytest.param(Subject.BISAC, "INFEN000", None, id="already_scored_unknown"),
+        pytest.param(Subject.TAG, "INFEN000", False, id="not_a_bisac_subject"),
+    ],
+)
+def test_reset_non_bisac_nonfiction_subjects_leaves_everything_else_checked(
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+    subject_type: str,
+    identifier: str,
+    fiction: bool | None,
+) -> None:
+    """Legitimate nonfiction codes keep their value, and subjects outside the
+    examined set -- already scored as fiction or unknown, or not BISAC-typed --
+    are not touched."""
+    subject = db.subject(subject_type, identifier)
+    subject.fiction = fiction
+    subject.checked = True
+    db.session.commit()
+
+    work_tasks.reset_non_bisac_nonfiction_subjects.delay().wait()
+    db.session.expire_all()
+
+    assert subject.checked is True
+
+
+def test_reset_non_bisac_nonfiction_subjects_is_idempotent(
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+):
+    """A second run finds nothing left to do and leaves the reset in place."""
+    subject = db.subject(Subject.BISAC, "INFEN000")
+    subject.name = "English literature"
+    subject.fiction = False
+    subject.checked = True
+    db.session.commit()
+
+    work_tasks.reset_non_bisac_nonfiction_subjects.delay().wait()
+    db.session.expire_all()
+    assert subject.checked is False
+
+    work_tasks.reset_non_bisac_nonfiction_subjects.delay().wait()
+    db.session.expire_all()
+    assert subject.checked is False

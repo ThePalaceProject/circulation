@@ -1368,6 +1368,16 @@ class Work(Base, LoggerMixin):
         if new_quality != self.quality:
             self.quality = new_quality
 
+    @staticmethod
+    def _keep_known_value[T](old_value: T | None, new_value: T | None) -> T | None:
+        """Prefer `new_value`, but never replace a known value with None.
+
+        Handed to the classifier as its default, this leaves an existing
+        determination alone when a recalculation gathers no usable
+        classifications, rather than erasing it.
+        """
+        return old_value if new_value is None else new_value
+
     def assign_genres(
         self,
         identifier_ids,
@@ -1392,8 +1402,16 @@ class Work(Base, LoggerMixin):
         for classification in classifications:
             classifier.add(classification)
 
+        # Hand the retained values to the classifier as its defaults rather
+        # than restoring them after it has run. classify() derives the genres
+        # from the fiction status and the target age from the audience, so a
+        # value restored afterwards arrives too late to be consulted: the genre
+        # filter would already have run with None -- which disables it, keeping
+        # genres of either fiction status -- and we would then stamp the
+        # retained status back onto a work whose own genres now contradict it.
         (genre_weights, new_fiction, new_audience, target_age) = classifier.classify(
-            default_fiction=default_fiction, default_audience=default_audience
+            default_fiction=self._keep_known_value(old_fiction, default_fiction),
+            default_audience=self._keep_known_value(old_audience, default_audience),
         )
 
         new_target_age = tuple_to_numericrange(target_age)
@@ -1402,12 +1420,7 @@ class Work(Base, LoggerMixin):
 
         if new_fiction != old_fiction:
             self.fiction = new_fiction
-        # Never let a recalculation erase a known audience. If the classifier
-        # came back with no audience (e.g. it gathered no usable
-        # classifications on this pass), keep whatever we already had rather
-        # than writing NULL over a previously-determined audience.
-        if new_audience is None and old_audience is not None:
-            new_audience = old_audience
+
         if new_audience != old_audience:
             self.audience = new_audience
 

@@ -389,6 +389,54 @@ class TestWork:
 
         assert work.audience == Classifier.AUDIENCE_CHILDREN
 
+    def test_assign_genres_does_not_overwrite_fiction_with_null(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        # Defensive invariant: when a recalculation pass reaches no fiction
+        # determination (e.g. every classification it gathered abstained), a
+        # previously-determined fiction status must be kept rather than
+        # overwritten with NULL. This matters more now that an unresolvable
+        # BISAC code abstains instead of voting nonfiction.
+        work = db.work(with_license_pool=True)
+        work.fiction = True
+        db.session.commit()
+
+        # Force the no-evidence + null-default path directly.
+        work.assign_genres(work._direct_identifier_ids, default_fiction=None)
+
+        assert work.fiction is True
+
+    @pytest.mark.parametrize(
+        "stored_fiction,expected_genres",
+        [
+            pytest.param(False, [], id="nonfiction-work-drops-the-fiction-genre"),
+            pytest.param(True, ["Horror"], id="fiction-work-keeps-the-fiction-genre"),
+        ],
+    )
+    def test_assign_genres_filters_genres_against_the_retained_fiction_status(
+        self,
+        db: DatabaseTransactionFixture,
+        stored_fiction: bool,
+        expected_genres: list[str],
+    ) -> None:
+        # A tag contributes a genre without voting on fiction status, so a work
+        # whose BISAC codes all abstain reaches the genre filter with no fiction
+        # determination at all -- and the filter is a no-op when fiction is
+        # None, keeping genres of either status. The retained status therefore
+        # has to be in hand *before* the filter runs; restoring it afterwards
+        # would leave the work stamped with a status its own genres contradict.
+        work = db.work(with_license_pool=True)
+        work.fiction = stored_fiction
+        work.license_pools[0].identifier.classify(
+            DataSource.lookup(db.session, DataSource.OCLC), Subject.TAG, "Horror"
+        )
+        db.session.commit()
+
+        work.assign_genres(work._direct_identifier_ids, default_fiction=None)
+
+        assert work.fiction is stored_fiction
+        assert sorted(genre.name for genre in work.genres) == expected_genres
+
     def test__choose_summary(self, db: DatabaseTransactionFixture):
         # Test the _choose_summary helper method, called by
         # calculate_presentation().

@@ -4,6 +4,7 @@ from celery import shared_task
 from sqlalchemy.orm import Session
 
 from palace.manager.celery.task import Task
+from palace.manager.core.classifier.bisac import BISACClassifier
 from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.sqlalchemy.model.classification import Classification, Subject
@@ -37,6 +38,54 @@ def reclassify_null_audience_works(task: Task) -> None:
             last_id = work.id
             work.calculate_presentation(policy=policy)
             session.commit()
+
+
+@shared_task(queue=QueueNames.default, bind=True)
+def reset_non_bisac_nonfiction_subjects(task: Task) -> None:
+    """Mark BISAC subjects unchecked when their stored fiction status went stale.
+
+    A code that cannot be resolved to a canonical BISAC heading used to be
+    read as nonfiction by the ruleset catch-all, so those subjects carry a
+    fabricated fiction=False. Subjects are only re-examined when checked is
+    false, so repairing them means resetting that flag.
+
+    This resets only. Re-scoring is classify_unchecked_subjects' job: the
+    startup task that runs this at deploy chains the two together, and the
+    nightly run picks up anything left over.
+
+    Idempotent and self-selecting -- it recomputes which subjects the
+    classifier no longer agrees with, so a second run finds nothing to do.
+    That is what lets a later release re-apply it safely.
+    """
+    with task.session() as session:
+        candidates = (
+            session.query(Subject.id, Subject.identifier, Subject.name)
+            .filter(
+                Subject.type == Subject.BISAC,
+                Subject.checked == True,  # noqa: E712
+                Subject.fiction == False,  # noqa: E712
+            )
+            .all()
+        )
+
+        stale_ids = [
+            row.id
+            for row in candidates
+            if BISACClassifier.contradicts_stored_fiction(
+                row.identifier, row.name, False
+            )
+        ]
+
+        if stale_ids:
+            session.query(Subject).filter(Subject.id.in_(stale_ids)).update(
+                {Subject.checked: False}, synchronize_session=False
+            )
+            session.commit()
+
+        task.log.info(
+            f"Reset checked=False for {len(stale_ids)} of {len(candidates)} "
+            f"BISAC subjects stored as nonfiction."
+        )
 
 
 @shared_task(queue=QueueNames.default, bind=True)
