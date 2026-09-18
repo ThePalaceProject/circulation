@@ -60,11 +60,19 @@ This repository is a [`uv` workspace](https://docs.astral.sh/uv/concepts/project
     - `/admin` - Administrative API endpoints for the web dashboard
   - `/celery` - Background worker processes and task definitions
   - `/core` - Legacy miscellaneous components (**deprecated - no new code**)
+    - Exception: `/core/classifier` is the active home of classification logic (the BISAC
+      rulesets and code table, keyword matching, `WorkClassifier`). It has no replacement
+      elsewhere in the tree, so classification changes belong here.
   - `/customlists` - CLI tools for managing custom book collections
   - `/data_layer` - Pydantic models for content import and validation
   - `/feed` - OPDS (Open Publication Distribution System) feed generation
   - `/integration` - Third-party service integrations and content provider APIs
-  - `/scripts` - Legacy CLI utilities (**deprecated - no new code**)
+  - `/scripts` - Legacy CLI utilities (**deprecated - put new logic in `/celery/tasks`**)
+    - The package is deprecated for *logic*, not for entry points. A thin `Script` subclass
+      here plus a `bin/` wrapper is still the only supported way to run something on demand,
+      and is still the expected pattern for dispatching a Celery task by hand. There is no
+      replacement framework: `palace-startup-task` is the only console script the project
+      ships, and it resolves into this package.
   - `/search` - OpenSearch integration and indexing logic
   - `/service` - Dependency injection container and service layer
   - `/sqlalchemy` - Database models and schema definitions
