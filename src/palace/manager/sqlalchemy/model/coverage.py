@@ -364,11 +364,21 @@ class CoverageRecord(Base, BaseCoverageRecord):
 
     Dormant model retained only so the ``coveragerecords`` table stays in the
     schema for one more release. The CoverageProvider machinery that read and
-    wrote these records has been retired; nothing in the current code reads or
-    writes this table. Per our online-migration convention the table cannot be
-    dropped in the same release that stops using it (N-1 app servers still write
-    here during a rolling deploy), so this model and the table will be removed in
-    a follow-up PR that ships after this release.
+    wrote these records has been retired, and the ``coverage_records``
+    relationships on Identifier, DataSource and Collection have been removed, so
+    nothing in the current code reads or writes this table.
+
+    Removing those relationships is what actually stops the reads: a mapped
+    relationship is loaded by SQLAlchemy whenever its parent is deleted (to
+    cascade the delete, or to null the child's foreign key), so while they
+    existed every ``session.delete(collection)`` still SELECTed from this table.
+
+    The model is kept for one more release because the schema of a freshly
+    initialized database is built with ``create_all`` from these models, not by
+    replaying migrations -- dropping the class would remove the table from new
+    installs immediately, while N-1 app servers still expect it. The model and
+    the table are removed together in a follow-up PR that ships after this
+    release.
     """
 
     __tablename__ = "coveragerecords"
@@ -381,16 +391,12 @@ class CoverageRecord(Base, BaseCoverageRecord):
 
     id: Mapped[int] = Column(Integer, primary_key=True)
     identifier_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
-    identifier: Mapped[Identifier | None] = relationship(
-        "Identifier", back_populates="coverage_records"
-    )
+    identifier: Mapped[Identifier | None] = relationship("Identifier")
 
     # If applicable, this is the ID of the data source that took the
     # Identifier as input.
     data_source_id = Column(Integer, ForeignKey("datasources.id"))
-    data_source: Mapped[DataSource | None] = relationship(
-        "DataSource", back_populates="coverage_records"
-    )
+    data_source: Mapped[DataSource | None] = relationship("DataSource")
     operation = Column(String(255), default=None)
 
     timestamp = Column(DateTime(timezone=True), index=True)
@@ -402,9 +408,7 @@ class CoverageRecord(Base, BaseCoverageRecord):
     # coverage has taken place. This is currently only applicable
     # for Metadata Wrangler coverage.
     collection_id = Column(Integer, ForeignKey("collections.id"), nullable=True)
-    collection: Mapped[Collection | None] = relationship(
-        "Collection", back_populates="coverage_records"
-    )
+    collection: Mapped[Collection | None] = relationship("Collection")
 
     __table_args__ = (
         Index(

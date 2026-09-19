@@ -6,7 +6,6 @@ from unittest.mock import patch
 
 import pytest
 from freezegun import freeze_time
-from sqlalchemy import select
 
 from palace.util.datetime_helpers import utc_now
 from palace.util.exceptions import PalaceValueError
@@ -25,7 +24,6 @@ from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.data_layer.subject import SubjectData
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.contributor import Contributor
-from palace.manager.sqlalchemy.model.coverage import CoverageRecord
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
@@ -713,21 +711,6 @@ class TestBibliographicData:
         assert edition_new.imprint == edition_old.imprint
         assert edition_new.published == edition_old.published
         assert edition_new.issued == edition_old.issued
-
-    def test_apply_does_not_create_coverage_records(
-        self, db: DatabaseTransactionFixture
-    ):
-        edition, pool = db.edition(with_license_pool=True)
-
-        bibliographic = BibliographicData(
-            data_source_name=DataSource.OVERDRIVE, title=db.fresh_str()
-        )
-
-        bibliographic.apply(db.session, edition, pool.collection)
-
-        # No coverage records were created.
-        records = db.session.scalars(select(CoverageRecord)).all()
-        assert len(records) == 0
 
     def test_apply_no_changes_needed(self, db: DatabaseTransactionFixture):
         edition, pool = db.edition(with_license_pool=True)
