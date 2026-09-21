@@ -1035,6 +1035,37 @@ class TestCustomListsController:
         assert s.list.shared_locally is True
 
     @pytest.mark.parametrize(
+        "list_exists",
+        [
+            pytest.param(False, id="nonexistent-list"),
+            pytest.param(True, id="not-a-staff-list"),
+        ],
+    )
+    def test_share_locally_missing_list(
+        self,
+        admin_librarian_fixture: AdminLibrarianFixture,
+        list_exists: bool,
+    ):
+        """Only an existing list created by library staff can be shared."""
+        db = admin_librarian_fixture.ctrl.db
+
+        # The request library owns this list, but library staff did not create it.
+        custom_list, _ = db.customlist(data_source_name=DataSource.NYT, num_entries=0)
+        custom_list.library = db.default_library()
+        assert isinstance(custom_list.id, int)
+        list_id = custom_list.id if list_exists else custom_list.id + 1000
+
+        with admin_librarian_fixture.request_context_with_library_and_admin(
+            "/", method="POST"
+        ):
+            response = admin_librarian_fixture.manager.admin_custom_lists_controller.share_locally(
+                list_id
+            )
+
+        assert response == MISSING_CUSTOM_LIST
+        assert custom_list.shared_locally is False
+
+    @pytest.mark.parametrize(
         "method, from_owner_library",
         [
             pytest.param("POST", True, id="post-no-role-on-owner-library"),
@@ -1058,6 +1089,7 @@ class TestCustomListsController:
         # got through would change the flag.
         initially_shared = method == "DELETE"
         s.list.shared_locally = initially_shared
+        db.session.flush()
 
         # A request through the owning library comes from an admin with no role
         # there, which raises. A request through a library where the admin is a

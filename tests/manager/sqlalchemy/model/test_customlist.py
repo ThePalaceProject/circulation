@@ -415,6 +415,7 @@ class TestCustomList:
         custom_list, _ = db.customlist(num_entries=0)
         custom_list.library = libraries[owner] if owner else None
         custom_list.shared_locally = shared
+        db.session.flush()
 
         assert custom_list.is_owned_by(library) is expected_owned
         assert custom_list.is_usable_by(library) is expected_usable
