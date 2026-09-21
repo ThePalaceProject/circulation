@@ -166,6 +166,28 @@ class CustomList(Base):
             cls.library_id.is_distinct_from(library.id),
         )
 
+    def is_owned_by(self, library: Library) -> bool:
+        """Does this library own the list?
+
+        An ownerless list (one whose library was deleted) is owned by no library.
+
+        :param library: The library to check.
+        :return: True if ``library`` owns this list.
+        """
+        return self.library is not None and self.library == library
+
+    def is_usable_by(self, library: Library) -> bool:
+        """May this library read the list and build lanes on it?
+
+        A library can use the lists it owns plus the lists that
+        :meth:`shared_with_library` returns for it: the lists shared on this Palace
+        Manager, including shared lists that no longer have an owner.
+
+        :param library: The library to check.
+        :return: True if ``library`` owns this list or the list is shared.
+        """
+        return self.shared_locally or self.is_owned_by(library)
+
     @classmethod
     def all_from_data_sources(cls, _db, data_sources):
         """All custom lists from the given data sources."""

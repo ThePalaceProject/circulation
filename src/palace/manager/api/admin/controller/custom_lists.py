@@ -155,7 +155,7 @@ class CustomListsController(
             list = get_one(self._db, CustomList, id=int(id), data_source=data_source)
             if list is None:
                 return MISSING_CUSTOM_LIST
-            if list.library != library:
+            if not list.is_owned_by(library):
                 return CANNOT_CHANGE_LIBRARY_FOR_CUSTOM_LIST
             if old_list_with_name and old_list_with_name != list:
                 return CUSTOM_LIST_NAME_ALREADY_IN_USE
@@ -348,6 +348,11 @@ class CustomListsController(
             return MISSING_CUSTOM_LIST
 
         if flask.request.method == "GET":
+            # A list this library neither owns nor may use is reported as missing,
+            # so the response does not reveal which list ids exist.
+            if not list.is_usable_by(library):
+                return MISSING_CUSTOM_LIST
+
             pagination = load_pagination_from_request()
             if isinstance(pagination, ProblemDetail):
                 return pagination
@@ -391,9 +396,17 @@ class CustomListsController(
             )
 
         elif flask.request.method == "DELETE":
-            # Deleting requires a library manager.
-            self.require_library_manager(get_request_library())
+            # Only the owning library may delete a list. This check comes before
+            # the role and shared checks so that another library's list is
+            # reported as missing, whatever the admin's role and whether or not
+            # the list is shared.
+            if not list.is_owned_by(library):
+                return MISSING_CUSTOM_LIST
 
+            # Deleting requires a library manager.
+            self.require_library_manager(library)
+
+            # Not even the owning library may delete a shared list.
             if list.shared_locally:
                 return CANNOT_DELETE_SHARED_LIST
 
@@ -415,12 +428,15 @@ class CustomListsController(
         self, customlist_id: int
     ) -> ProblemDetail | dict[str, int] | Response:
         """Share this customlist with all libraries on this local CM"""
+        library = get_request_library()
+        self.require_librarian(library)
+
         if not customlist_id:
             return INVALID_INPUT
         customlist = get_one(self._db, CustomList, id=customlist_id)
         if not customlist:
             return MISSING_CUSTOM_LIST
-        if customlist.library != get_request_library():
+        if not customlist.is_owned_by(library):
             return ADMIN_NOT_AUTHORIZED.detailed(
                 _("This library does not have permissions on this customlist.")
             )

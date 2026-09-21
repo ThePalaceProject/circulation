@@ -1,4 +1,5 @@
 import json
+from contextlib import nullcontext
 from typing import Any, Literal
 from unittest import mock
 
@@ -11,6 +12,7 @@ from werkzeug.datastructures import ImmutableMultiDict
 from palace.manager.api.admin.exceptions import AdminNotAuthorized
 from palace.manager.api.admin.model.custom_lists import CustomListPostRequest
 from palace.manager.api.admin.problem_details import (
+    ADMIN_NOT_AUTHORIZED,
     AUTO_UPDATE_CUSTOM_LIST_CANNOT_HAVE_ENTRIES,
     CANNOT_CHANGE_LIBRARY_FOR_CUSTOM_LIST,
     COLLECTION_NOT_ACTIVE_FOR_LIST_LIBRARY,
@@ -838,6 +840,7 @@ class TestCustomListsController:
             admin_librarian_fixture.ctrl.db.session,
             CustomList,
             name=admin_librarian_fixture.ctrl.db.fresh_str(),
+            library=admin_librarian_fixture.ctrl.db.default_library(),
             data_source=data_source,
         )
         with admin_librarian_fixture.request_context_with_library_and_admin(
@@ -848,6 +851,24 @@ class TestCustomListsController:
                 admin_librarian_fixture.manager.admin_custom_lists_controller.custom_list,
                 list.id,
             )
+
+        # A librarian who is not a library manager gets the same answer for
+        # another library's list as for a list that does not exist.
+        other_library_list, ignore = create(
+            admin_librarian_fixture.ctrl.db.session,
+            CustomList,
+            name=admin_librarian_fixture.ctrl.db.fresh_str(),
+            library=admin_librarian_fixture.ctrl.db.library(),
+            data_source=data_source,
+        )
+        with admin_librarian_fixture.request_context_with_library_and_admin(
+            "/", method="DELETE"
+        ):
+            assert isinstance(other_library_list.id, int)
+            response = admin_librarian_fixture.manager.admin_custom_lists_controller.custom_list(
+                other_library_list.id
+            )
+            assert MISSING_CUSTOM_LIST == response
 
         admin_librarian_fixture.admin.add_role(
             AdminRole.LIBRARY_MANAGER, admin_librarian_fixture.ctrl.db.default_library()
@@ -872,6 +893,79 @@ class TestCustomListsController:
             )
             assert response == CANNOT_DELETE_SHARED_LIST
 
+    @pytest.mark.parametrize(
+        "method, has_owner, shared, allowed",
+        [
+            pytest.param("GET", True, False, False, id="get-unshared-other-library"),
+            pytest.param("GET", True, True, True, id="get-shared-other-library"),
+            pytest.param("GET", False, False, False, id="get-unshared-ownerless"),
+            pytest.param("GET", False, True, True, id="get-shared-ownerless"),
+            pytest.param(
+                "DELETE", True, False, False, id="delete-unshared-other-library"
+            ),
+            pytest.param("DELETE", True, True, False, id="delete-shared-other-library"),
+            pytest.param("DELETE", False, False, False, id="delete-unshared-ownerless"),
+            pytest.param("DELETE", False, True, False, id="delete-shared-ownerless"),
+        ],
+    )
+    def test_custom_list_not_owned_by_request_library(
+        self,
+        admin_librarian_fixture: AdminLibrarianFixture,
+        method: str,
+        has_owner: bool,
+        shared: bool,
+        allowed: bool,
+    ):
+        """A library can read only the lists it may use, and delete only its own."""
+        db = admin_librarian_fixture.ctrl.db
+        admin_librarian_fixture.admin.add_role(
+            AdminRole.LIBRARY_MANAGER, db.default_library()
+        )
+
+        other_library = db.library()
+        custom_list, _ = create(
+            db.session,
+            CustomList,
+            name=db.fresh_str(),
+            library=other_library if has_owner else None,
+            data_source=DataSource.lookup(db.session, DataSource.LIBRARY_STAFF),
+            shared_locally=shared,
+        )
+        custom_list.add_entry(db.work(with_license_pool=True))
+        list_id = custom_list.id
+        assert isinstance(list_id, int)
+
+        # This lane draws only on the list, so a delete of the list would take
+        # the lane with it.
+        lane = db.lane(library=other_library)
+        lane.customlists = [custom_list]
+        lane_id = lane.id
+
+        with admin_librarian_fixture.request_context_with_library_and_admin(
+            "/", method=method
+        ):
+            response = admin_librarian_fixture.manager.admin_custom_lists_controller.custom_list(
+                list_id
+            )
+
+        if allowed:
+            assert isinstance(response, flask.Response)
+            assert response.status_code == 200
+            feed = feedparser.parse(response.get_data())
+            assert feed.feed.title == custom_list.name
+            assert len(feed.entries) == 1
+        else:
+            assert response == MISSING_CUSTOM_LIST
+
+        assert get_one(db.session, CustomList, id=list_id) is not None
+        assert get_one(db.session, Lane, id=lane_id) is not None
+        assert (
+            db.session.query(CustomListEntry)
+            .filter(CustomListEntry.list_id == list_id)
+            .count()
+            == 1
+        )
+
     @define
     class ShareLocallySetup:
         shared_with: Library | None = None
@@ -884,6 +978,7 @@ class TestCustomListsController:
         primary_library = admin_librarian_fixture.ctrl.db.library("primary")
         collection1 = admin_librarian_fixture.ctrl.db.collection("c1")
         collection1.associated_libraries.append(primary_library)
+        admin_librarian_fixture.admin.add_role(AdminRole.LIBRARIAN, primary_library)
 
         data_source = DataSource.lookup(
             admin_librarian_fixture.ctrl.db.session, DataSource.LIBRARY_STAFF
@@ -938,6 +1033,64 @@ class TestCustomListsController:
         assert response["successes"] == 2
         assert response["failures"] == 0
         assert s.list.shared_locally is True
+
+    @pytest.mark.parametrize(
+        "method, from_owner_library",
+        [
+            pytest.param("POST", True, id="post-no-role-on-owner-library"),
+            pytest.param("DELETE", True, id="delete-no-role-on-owner-library"),
+            pytest.param("POST", False, id="post-from-other-library"),
+            pytest.param("DELETE", False, id="delete-from-other-library"),
+        ],
+    )
+    def test_share_locally_not_authorized(
+        self,
+        admin_librarian_fixture: AdminLibrarianFixture,
+        method: str,
+        from_owner_library: bool,
+    ):
+        """Only a librarian of the owning library can share or unshare a list."""
+        db = admin_librarian_fixture.ctrl.db
+        s = self._setup_share_locally(admin_librarian_fixture)
+        assert s.list is not None and s.primary_library is not None
+
+        # An unshare request starts from a shared list, so that a request which
+        # got through would change the flag.
+        initially_shared = method == "DELETE"
+        s.list.shared_locally = initially_shared
+
+        # A request through the owning library comes from an admin with no role
+        # there, which raises. A request through a library where the admin is a
+        # librarian fails the ownership check, which returns a problem detail.
+        if from_owner_library:
+            admin_librarian_fixture.admin.remove_role(
+                AdminRole.LIBRARIAN, s.primary_library
+            )
+        request_library = (
+            s.primary_library if from_owner_library else db.default_library()
+        )
+        context_manager = (
+            pytest.raises(AdminNotAuthorized) if from_owner_library else nullcontext()
+        )
+
+        response = None
+        with (
+            admin_librarian_fixture.request_context_with_library_and_admin(
+                "/", library=request_library, method=method
+            ),
+            context_manager,
+        ):
+            response = admin_librarian_fixture.manager.admin_custom_lists_controller.share_locally(
+                s.list.id
+            )
+
+        if not from_owner_library:
+            assert isinstance(response, ProblemDetail)
+            assert response.uri == ADMIN_NOT_AUTHORIZED.uri
+            assert response.status_code == 403
+
+        db.session.refresh(s.list)
+        assert s.list.shared_locally is initially_shared
 
     def test_share_locally_without_licensed_works(
         self, admin_librarian_fixture: AdminLibrarianFixture
