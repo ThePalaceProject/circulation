@@ -8,6 +8,7 @@ from unittest.mock import create_autospec, patch
 import pytest
 
 from palace.manager.scripts.suppress import SuppressResult, SuppressWorkForLibraryScript
+from palace.manager.sqlalchemy.model.datasource import DataSource
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
@@ -379,6 +380,76 @@ class TestSuppressWorkForLibraryScript:
 
         assert result == SuppressResult.NOT_FOUND
 
+    def test_suppress_work_resolves_via_equivalent_identifier(
+        self, db: DatabaseTransactionFixture
+    ):
+        """A librarian will typically have an ISBN in hand, but the
+        LicensePool is often keyed on a vendor identifier (e.g. an
+        Overdrive ID) with the ISBN linked only via identifier
+        equivalency. The script must resolve the work through that
+        equivalency instead of requiring the ISBN to be the
+        LicensePool's own identifier."""
+        test_library = db.library(short_name="test")
+        work = db.work(with_license_pool=True)
+        pool_identifier = work.presentation_edition.primary_identifier
+
+        isbn = db.identifier(identifier_type="ISBN")
+        source = DataSource.lookup(db.session, DataSource.OCLC)
+        isbn.equivalent_to(source, pool_identifier, 1)
+
+        script = SuppressWorkForLibraryScript(db.session)
+        result = script.suppress_work(test_library, isbn)
+
+        assert result == SuppressResult.NEWLY_SUPPRESSED
+        assert work.suppressed_for == [test_library]
+
+    def test_suppress_work_equivalent_identifier_only_affects_specified_library(
+        self, db: DatabaseTransactionFixture
+    ):
+        """Resolving the work via identifier equivalency must never
+        broaden *which libraries* get the work suppressed -- only the
+        library explicitly passed in should end up in
+        `work.suppressed_for`."""
+        library_a = db.library(short_name="lib_a")
+        library_b = db.library(short_name="lib_b")
+        work = db.work(with_license_pool=True)
+        pool_identifier = work.presentation_edition.primary_identifier
+
+        isbn = db.identifier(identifier_type="ISBN")
+        source = DataSource.lookup(db.session, DataSource.OCLC)
+        isbn.equivalent_to(source, pool_identifier, 1)
+
+        script = SuppressWorkForLibraryScript(db.session)
+        result = script.suppress_work(library_a, isbn)
+
+        assert result == SuppressResult.NEWLY_SUPPRESSED
+        assert work.suppressed_for == [library_a]
+        assert library_b not in work.suppressed_for
+
+    def test_suppress_work_ambiguous_equivalent_identifier(
+        self, db: DatabaseTransactionFixture
+    ):
+        """If an identifier resolves to more than one distinct Work via
+        equivalency, the script must not guess -- it should report
+        AMBIGUOUS and suppress nothing."""
+        test_library = db.library(short_name="test")
+        work1 = db.work(with_license_pool=True)
+        work2 = db.work(with_license_pool=True)
+        id1 = work1.presentation_edition.primary_identifier
+        id2 = work2.presentation_edition.primary_identifier
+
+        isbn = db.identifier(identifier_type="ISBN")
+        source = DataSource.lookup(db.session, DataSource.OCLC)
+        isbn.equivalent_to(source, id1, 1)
+        isbn.equivalent_to(source, id2, 1)
+
+        script = SuppressWorkForLibraryScript(db.session)
+        result = script.suppress_work(test_library, isbn)
+
+        assert result == SuppressResult.AMBIGUOUS
+        assert work1.suppressed_for == []
+        assert work2.suppressed_for == []
+
     def test_suppress_work_dry_run(self, db: DatabaseTransactionFixture):
         test_library = db.library(short_name="test")
         work = db.work(with_license_pool=True)
@@ -438,6 +509,25 @@ class TestSuppressWorkForLibraryScript:
         assert "[ALREADY SUPPRESSED] ISBN/222" in out
         assert "[NOT FOUND] ISBN/333" in out
         assert "[DRY RUN]" not in out
+
+    def test_print_results_ambiguous(self, db: DatabaseTransactionFixture, capsys):
+        test_library = db.library(short_name="mylib", name="My Library")
+        script = SuppressWorkForLibraryScript(db.session)
+        results = {
+            ("ISBN", "111"): SuppressResult.AMBIGUOUS,
+        }
+        started_at = datetime(2026, 2, 26, 12, 0, 0, tzinfo=timezone.utc)
+        script._print_results(
+            results,
+            dry_run=False,
+            library=test_library,
+            started_at=started_at,
+            duration_seconds=1.23,
+        )
+
+        out = capsys.readouterr().out
+        assert re.search(r"Ambiguous:\s+1", out)
+        assert "[AMBIGUOUS] ISBN/111" in out
 
     def test_print_results_dry_run(self, db: DatabaseTransactionFixture, capsys):
         test_library = db.library(short_name="mylib", name="My Library")
