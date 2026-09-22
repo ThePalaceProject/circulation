@@ -13,12 +13,14 @@ from palace.util.exceptions import PalaceValueError
 from palace.manager.scripts.base import Script, _normalize_cmd_args
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.library import Library
+from palace.manager.sqlalchemy.model.work import Work
 
 
 class SuppressResult(Enum):
     NEWLY_SUPPRESSED = auto()
     ALREADY_SUPPRESSED = auto()
     NOT_FOUND = auto()
+    AMBIGUOUS = auto()
 
 
 class SuppressWorkForLibraryScript(Script):
@@ -142,21 +144,53 @@ class SuppressWorkForLibraryScript(Script):
             raise PalaceValueError(f"CSV file not found: {file_path}")
         return identifiers
 
+    def load_works(self, identifier: Identifier) -> list[Work]:
+        """Find the Work(s) reachable from an identifier.
+
+        This looks past LicensePools whose own identifier matches, to
+        also include LicensePools reachable through identifier
+        equivalency -- e.g. an ISBN a librarian has on hand is often
+        linked to a vendor's LicensePool via metadata equivalency
+        rather than being that LicensePool's own identifier. This uses
+        the same strict, high-confidence equivalency policy that
+        `Work.from_identifiers` applies by default everywhere else in
+        the codebase, so it won't walk into loosely-related works.
+        """
+        query = Work.from_identifiers(self._db, [identifier])
+        if query is None:
+            return []
+        return cast(list[Work], query.distinct().all())
+
     def suppress_work(
         self,
         library: Library,
         identifier: Identifier,
         dry_run: bool = False,
     ) -> SuppressResult:
-        work = identifier.work
-        if not work:
+        works = self.load_works(identifier)
+        if not works:
             self.log.warning(f"No work found for {identifier}")
             return SuppressResult.NOT_FOUND
+
+        if len(works) > 1:
+            self.log.warning(
+                f"{identifier.type}/{identifier.identifier} resolves to "
+                f"{len(works)} different works via identifier equivalency; "
+                "skipping rather than guessing which one to suppress."
+            )
+            return SuppressResult.AMBIGUOUS
+
+        work = works[0]
 
         if library in work.suppressed_for:
             return SuppressResult.ALREADY_SUPPRESSED
 
         if not dry_run:
+            # Suppression is scoped to exactly this one library. Resolving
+            # the work via identifier equivalency only changes *which work*
+            # we find -- it never changes *which libraries* it's suppressed
+            # for, since only the `library` argument passed in is ever
+            # appended to `suppressed_for`.
             work.suppressed_for.append(library)
 
         self.log.info(
@@ -225,6 +259,7 @@ class SuppressWorkForLibraryScript(Script):
             k for k, v in results.items() if v == SuppressResult.ALREADY_SUPPRESSED
         ]
         not_found = [k for k, v in results.items() if v == SuppressResult.NOT_FOUND]
+        ambiguous = [k for k, v in results.items() if v == SuppressResult.AMBIGUOUS]
 
         prefix = "[DRY RUN] " if dry_run else ""
         suppress_label = "Would suppress" if dry_run else "Newly suppressed"
@@ -236,6 +271,7 @@ class SuppressWorkForLibraryScript(Script):
             (suppress_label + ":", len(newly_suppressed)),
             ("Already suppressed:", len(already_suppressed)),
             ("Not found:", len(not_found)),
+            ("Ambiguous:", len(ambiguous)),
         ]
         col = max(len(label) for label, _ in summary_rows)
         print(f"\n{prefix}Suppression Results Summary:")
@@ -249,6 +285,7 @@ class SuppressWorkForLibraryScript(Script):
             ),
             SuppressResult.ALREADY_SUPPRESSED: "ALREADY SUPPRESSED",
             SuppressResult.NOT_FOUND: "NOT FOUND",
+            SuppressResult.AMBIGUOUS: "AMBIGUOUS",
         }
         for (id_type, id_value), result in results.items():
             status = status_map[result]
