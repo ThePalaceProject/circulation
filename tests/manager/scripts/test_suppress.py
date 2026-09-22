@@ -258,8 +258,9 @@ class TestSuppressWorkForLibraryScript:
         import logging
 
         test_library = db.library(short_name="test")
-        work1 = db.work(with_license_pool=True)
-        work2 = db.work(with_license_pool=True)
+        collection = db.collection(library=test_library)
+        work1 = db.work(with_license_pool=True, collection=collection)
+        work2 = db.work(with_license_pool=True, collection=collection)
         id1 = work1.presentation_edition.primary_identifier
         id2 = work2.presentation_edition.primary_identifier
 
@@ -367,8 +368,9 @@ class TestSuppressWorkForLibraryScript:
 
     def test_do_run_with_file(self, db: DatabaseTransactionFixture, tmp_path, capsys):
         test_library = db.library(short_name="test")
-        work1 = db.work(with_license_pool=True)
-        work2 = db.work(with_license_pool=True)
+        collection = db.collection(library=test_library)
+        work1 = db.work(with_license_pool=True, collection=collection)
+        work2 = db.work(with_license_pool=True, collection=collection)
         id1 = work1.presentation_edition.primary_identifier
         id2 = work2.presentation_edition.primary_identifier
 
@@ -399,7 +401,8 @@ class TestSuppressWorkForLibraryScript:
 
     def test_suppress_work(self, db: DatabaseTransactionFixture):
         test_library = db.library(short_name="test")
-        work = db.work(with_license_pool=True)
+        collection = db.collection(library=test_library)
+        work = db.work(with_license_pool=True, collection=collection)
 
         assert work.suppressed_for == []
 
@@ -409,12 +412,13 @@ class TestSuppressWorkForLibraryScript:
         )
 
         assert result.result == SuppressResult.NEWLY_SUPPRESSED
-        assert result.title == f"{work.title} (work id: {work.id})"
+        assert result.description == f"{work.title} (work id: {work.id})"
         assert work.suppressed_for == [test_library]
 
     def test_suppress_work_already_suppressed(self, db: DatabaseTransactionFixture):
         test_library = db.library(short_name="test")
-        work = db.work(with_license_pool=True)
+        collection = db.collection(library=test_library)
+        work = db.work(with_license_pool=True, collection=collection)
         work.suppressed_for.append(test_library)
 
         script = SuppressWorkForLibraryScript(db.session)
@@ -423,18 +427,35 @@ class TestSuppressWorkForLibraryScript:
         )
 
         assert result.result == SuppressResult.ALREADY_SUPPRESSED
-        assert result.title == f"{work.title} (work id: {work.id})"
+        assert result.description == f"{work.title} (work id: {work.id})"
         assert work.suppressed_for == [test_library]
 
     def test_suppress_work_no_work_for_identifier(self, db: DatabaseTransactionFixture):
         test_library = db.library(short_name="test")
+        db.collection(library=test_library)
         identifier = db.identifier()
 
         script = SuppressWorkForLibraryScript(db.session)
         result = script.suppress_work(test_library, identifier)
 
         assert result.result == SuppressResult.NOT_FOUND
-        assert result.title is None
+        assert result.description is None
+
+    def test_suppress_work_library_with_no_collections(
+        self, db: DatabaseTransactionFixture
+    ):
+        """A library that carries no collections carries no works, so
+        there is nothing for it to suppress."""
+        test_library = db.library(short_name="test")
+        work = db.work(with_license_pool=True)
+
+        script = SuppressWorkForLibraryScript(db.session)
+        result = script.suppress_work(
+            test_library, work.presentation_edition.primary_identifier
+        )
+
+        assert result.result == SuppressResult.NOT_FOUND
+        assert work.suppressed_for == []
 
     def test_suppress_work_resolves_via_equivalent_identifier(
         self, db: DatabaseTransactionFixture
@@ -458,7 +479,7 @@ class TestSuppressWorkForLibraryScript:
         result = script.suppress_work(test_library, isbn)
 
         assert result.result == SuppressResult.NEWLY_SUPPRESSED
-        assert result.title == f"{work.title} (work id: {work.id})"
+        assert result.description == f"{work.title} (work id: {work.id})"
         assert work.suppressed_for == [test_library]
 
     def test_suppress_work_equivalent_identifier_only_affects_specified_library(
@@ -507,8 +528,8 @@ class TestSuppressWorkForLibraryScript:
         result = script.suppress_work(test_library, isbn)
 
         assert result.result == SuppressResult.AMBIGUOUS
-        assert result.title is not None
-        parts = result.title.split("; ")
+        assert result.description is not None
+        parts = result.description.split("; ")
         assert f"{work1.title} (work id: {work1.id})" in parts
         assert f"{work2.title} (work id: {work2.id})" in parts
         assert work1.suppressed_for == []
@@ -541,9 +562,70 @@ class TestSuppressWorkForLibraryScript:
         result = script.suppress_work(library_a, isbn)
 
         assert result.result == SuppressResult.NEWLY_SUPPRESSED
-        assert result.title == f"{work_a.title} (work id: {work_a.id})"
+        assert result.description == f"{work_a.title} (work id: {work_a.id})"
         assert work_a.suppressed_for == [library_a]
         assert work_b.suppressed_for == []
+
+    def test_suppress_work_work_with_pools_in_several_collections(
+        self, db: DatabaseTransactionFixture
+    ):
+        """A Work can own pools in more than one collection (open-access
+        pools are merged across collections by permanent work id). The
+        library's own pool and the pool carrying the equivalent identifier
+        may therefore be different pools of the same Work, so the
+        collection scope has to be independent of the equivalency match
+        rather than riding on the same joined row."""
+        test_library = db.library(short_name="test")
+        library_collection = db.collection(library=test_library)
+        other_collection = db.collection()
+
+        work = db.work(with_license_pool=True, collection=library_collection)
+
+        # A second pool of the same work, in a collection this library
+        # doesn't carry. The ISBN is equivalent to *this* pool's identifier.
+        other_edition = db.edition()
+        db.licensepool(other_edition, collection=other_collection, work=work)
+
+        isbn = db.identifier(identifier_type="ISBN")
+        source = DataSource.lookup(db.session, DataSource.OCLC)
+        isbn.equivalent_to(source, other_edition.primary_identifier, 1)
+
+        script = SuppressWorkForLibraryScript(db.session)
+        result = script.suppress_work(test_library, isbn)
+
+        assert result.result == SuppressResult.NEWLY_SUPPRESSED
+        assert work.suppressed_for == [test_library]
+
+    def test_suppress_work_direct_match_outside_library_falls_through(
+        self, db: DatabaseTransactionFixture
+    ):
+        """An ISBN can be some *other* library's collection's own pool
+        identifier (ISBN-keyed ODL/OPDS collections are the common case).
+        That direct match isn't this library's work, so it must not be
+        suppressed on this library's behalf -- and the equivalency
+        fallback should still find the work this library does carry."""
+        test_library = db.library(short_name="test")
+        library_collection = db.collection(library=test_library)
+        other_collection = db.collection()
+
+        work = db.work(with_license_pool=True, collection=library_collection)
+
+        # An ISBN that is another collection's own pool identifier.
+        isbn_edition = db.edition(identifier_type="ISBN")
+        other_work = db.work(with_license_pool=True, collection=other_collection)
+        db.licensepool(isbn_edition, collection=other_collection, work=other_work)
+        isbn = isbn_edition.primary_identifier
+
+        source = DataSource.lookup(db.session, DataSource.OCLC)
+        isbn.equivalent_to(source, work.presentation_edition.primary_identifier, 1)
+
+        script = SuppressWorkForLibraryScript(db.session)
+        result = script.suppress_work(test_library, isbn)
+
+        assert result.result == SuppressResult.NEWLY_SUPPRESSED
+        assert result.description == f"{work.title} (work id: {work.id})"
+        assert work.suppressed_for == [test_library]
+        assert other_work.suppressed_for == []
 
     def test_suppress_work_suppress_ambiguous_suppresses_all_candidates(
         self, db: DatabaseTransactionFixture
@@ -568,8 +650,8 @@ class TestSuppressWorkForLibraryScript:
         result = script.suppress_work(test_library, isbn, suppress_ambiguous=True)
 
         assert result.result == SuppressResult.NEWLY_SUPPRESSED
-        assert result.title is not None
-        parts = result.title.split("; ")
+        assert result.description is not None
+        parts = result.description.split("; ")
         assert f"{work1.title} (work id: {work1.id})" in parts
         assert f"{work2.title} (work id: {work2.id})" in parts
         assert work1.suppressed_for == [test_library]
@@ -657,7 +739,7 @@ class TestSuppressWorkForLibraryScript:
         # Only the newly-changed work2 is described -- work1 was already
         # suppressed before this run, so it isn't reported as an action
         # that just happened.
-        assert result.title == f"{work2.title} (work id: {work2.id})"
+        assert result.description == f"{work2.title} (work id: {work2.id})"
 
     def test_suppress_work_suppress_ambiguous_dry_run_does_not_mutate(
         self, db: DatabaseTransactionFixture
@@ -692,10 +774,11 @@ class TestSuppressWorkForLibraryScript:
         only be consulted as a fallback when there's no direct match,
         never used to second-guess one."""
         test_library = db.library(short_name="test")
-        work = db.work(with_license_pool=True)
+        collection = db.collection(library=test_library)
+        work = db.work(with_license_pool=True, collection=collection)
         identifier = work.presentation_edition.primary_identifier
 
-        other_work = db.work(with_license_pool=True)
+        other_work = db.work(with_license_pool=True, collection=collection)
         other_identifier = other_work.presentation_edition.primary_identifier
 
         source = DataSource.lookup(db.session, DataSource.OCLC)
@@ -705,13 +788,14 @@ class TestSuppressWorkForLibraryScript:
         result = script.suppress_work(test_library, identifier)
 
         assert result.result == SuppressResult.NEWLY_SUPPRESSED
-        assert result.title == f"{work.title} (work id: {work.id})"
+        assert result.description == f"{work.title} (work id: {work.id})"
         assert work.suppressed_for == [test_library]
         assert other_work.suppressed_for == []
 
     def test_suppress_work_dry_run(self, db: DatabaseTransactionFixture):
         test_library = db.library(short_name="test")
-        work = db.work(with_license_pool=True)
+        collection = db.collection(library=test_library)
+        work = db.work(with_license_pool=True, collection=collection)
 
         script = SuppressWorkForLibraryScript(db.session)
         result = script.suppress_work(
@@ -727,7 +811,8 @@ class TestSuppressWorkForLibraryScript:
         self, db: DatabaseTransactionFixture
     ):
         test_library = db.library(short_name="test")
-        work = db.work(with_license_pool=True)
+        collection = db.collection(library=test_library)
+        work = db.work(with_license_pool=True, collection=collection)
         work.suppressed_for.append(test_library)
 
         script = SuppressWorkForLibraryScript(db.session)
@@ -846,8 +931,9 @@ class TestSuppressWorkForLibraryScript:
         self, db: DatabaseTransactionFixture, tmp_path, capsys
     ):
         test_library = db.library(short_name="test")
-        work1 = db.work(with_license_pool=True)
-        work2 = db.work(with_license_pool=True)
+        collection = db.collection(library=test_library)
+        work1 = db.work(with_license_pool=True, collection=collection)
+        work2 = db.work(with_license_pool=True, collection=collection)
         id1 = work1.presentation_edition.primary_identifier
         id2 = work2.presentation_edition.primary_identifier
 
@@ -872,8 +958,9 @@ class TestSuppressWorkForLibraryScript:
         self, db: DatabaseTransactionFixture, tmp_path
     ):
         test_library = db.library(short_name="test")
-        work1 = db.work(with_license_pool=True)
-        work2 = db.work(with_license_pool=True)
+        collection = db.collection(library=test_library)
+        work1 = db.work(with_license_pool=True, collection=collection)
+        work2 = db.work(with_license_pool=True, collection=collection)
         id1 = work1.presentation_edition.primary_identifier
         id2 = work2.presentation_edition.primary_identifier
 
@@ -950,7 +1037,8 @@ class TestSuppressWorkForLibraryScript:
 
     def test_suppress_work_does_not_commit(self, db: DatabaseTransactionFixture):
         test_library = db.library(short_name="test")
-        work = db.work(with_license_pool=True)
+        collection = db.collection(library=test_library)
+        work = db.work(with_license_pool=True, collection=collection)
 
         script = SuppressWorkForLibraryScript(db.session)
         with patch.object(db.session, "commit") as mock_commit:
