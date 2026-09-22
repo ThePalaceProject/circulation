@@ -26,8 +26,8 @@ class SuppressResult(Enum):
 class SuppressOutcome(NamedTuple):
     result: SuppressResult
     # The title of the resolved work, when there is exactly one. For
-    # AMBIGUOUS, this instead lists the titles of every candidate work,
-    # to help a human resolve the ambiguity.
+    # AMBIGUOUS, this instead lists the title and work id of every
+    # candidate work, to help a human resolve the ambiguity.
     title: str | None = None
 
 
@@ -155,15 +155,21 @@ class SuppressWorkForLibraryScript(Script):
     def load_works(self, identifier: Identifier) -> list[Work]:
         """Find the Work(s) reachable from an identifier.
 
-        This looks past LicensePools whose own identifier matches, to
-        also include LicensePools reachable through identifier
-        equivalency -- e.g. an ISBN a librarian has on hand is often
-        linked to a vendor's LicensePool via metadata equivalency
-        rather than being that LicensePool's own identifier. This uses
-        the same strict, high-confidence equivalency policy that
-        `Work.from_identifiers` applies by default everywhere else in
-        the codebase, so it won't walk into loosely-related works.
+        An identifier that owns a LicensePool directly is an exact match
+        and is returned on its own, with no need to consult equivalencies.
+        Only when there's no direct match do we look past LicensePools
+        whose own identifier matches, to also include LicensePools
+        reachable through identifier equivalency -- e.g. an ISBN a
+        librarian has on hand is often linked to a vendor's LicensePool
+        via metadata equivalency rather than being that LicensePool's own
+        identifier. This uses the same strict, high-confidence equivalency
+        policy that `Work.from_identifiers` applies by default everywhere
+        else in the codebase, so it won't walk into loosely-related works.
         """
+        direct_work = identifier.work
+        if direct_work is not None:
+            return [direct_work]
+
         query = Work.from_identifiers(self._db, [identifier])
         if query is None:
             return []
@@ -175,19 +181,30 @@ class SuppressWorkForLibraryScript(Script):
         identifier: Identifier,
         dry_run: bool = False,
     ) -> SuppressOutcome:
+        """Suppress the work resolved from an identifier for a library.
+
+        :param library: The library for which the resolved work should be suppressed.
+        :param identifier: The identifier used to resolve the work, either
+            directly (it owns a LicensePool) or through identifier equivalency.
+        :param dry_run: If true, report the outcome without changing suppression.
+        :return: The result of the suppression attempt, and the resolved
+            work's title(s) when available.
+        """
         works = self.load_works(identifier)
         if not works:
             self.log.warning(f"No work found for {identifier}")
             return SuppressOutcome(SuppressResult.NOT_FOUND)
 
         if len(works) > 1:
-            titles = "; ".join(w.title for w in works if w.title)
+            titles = "; ".join(
+                f"{w.title or '[no title]'} (work id: {w.id})" for w in works
+            )
             self.log.warning(
                 f"{identifier.type}/{identifier.identifier} resolves to "
                 f"{len(works)} different works via identifier equivalency; "
                 "skipping rather than guessing which one to suppress."
             )
-            return SuppressOutcome(SuppressResult.AMBIGUOUS, titles or None)
+            return SuppressOutcome(SuppressResult.AMBIGUOUS, titles)
 
         work = works[0]
 
