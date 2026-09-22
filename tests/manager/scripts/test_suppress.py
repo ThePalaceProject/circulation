@@ -462,8 +462,36 @@ class TestSuppressWorkForLibraryScript:
         assert result.title is not None
         assert work1.title in result.title
         assert work2.title in result.title
+        assert f"work id: {work1.id}" in result.title
+        assert f"work id: {work2.id}" in result.title
         assert work1.suppressed_for == []
         assert work2.suppressed_for == []
+
+    def test_suppress_work_prefers_direct_match_over_ambiguous_equivalency(
+        self, db: DatabaseTransactionFixture
+    ):
+        """An identifier that owns a LicensePool directly is an exact
+        match and must win even if it's also equivalent (via messy
+        metadata) to a different, unrelated Work -- equivalency should
+        only be consulted as a fallback when there's no direct match,
+        never used to second-guess one."""
+        test_library = db.library(short_name="test")
+        work = db.work(with_license_pool=True)
+        identifier = work.presentation_edition.primary_identifier
+
+        other_work = db.work(with_license_pool=True)
+        other_identifier = other_work.presentation_edition.primary_identifier
+
+        source = DataSource.lookup(db.session, DataSource.OCLC)
+        identifier.equivalent_to(source, other_identifier, 1)
+
+        script = SuppressWorkForLibraryScript(db.session)
+        result = script.suppress_work(test_library, identifier)
+
+        assert result.result == SuppressResult.NEWLY_SUPPRESSED
+        assert result.title == work.title
+        assert work.suppressed_for == [test_library]
+        assert other_work.suppressed_for == []
 
     def test_suppress_work_dry_run(self, db: DatabaseTransactionFixture):
         test_library = db.library(short_name="test")
