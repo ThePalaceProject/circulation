@@ -7,7 +7,11 @@ from unittest.mock import create_autospec, patch
 
 import pytest
 
-from palace.manager.scripts.suppress import SuppressResult, SuppressWorkForLibraryScript
+from palace.manager.scripts.suppress import (
+    SuppressOutcome,
+    SuppressResult,
+    SuppressWorkForLibraryScript,
+)
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from tests.fixtures.database import DatabaseTransactionFixture
 
@@ -273,7 +277,9 @@ class TestSuppressWorkForLibraryScript:
 
         script = SuppressWorkForLibraryScript(db.session)
         suppress_work_mock = create_autospec(script.suppress_work)
-        suppress_work_mock.return_value = SuppressResult.NEWLY_SUPPRESSED
+        suppress_work_mock.return_value = SuppressOutcome(
+            SuppressResult.NEWLY_SUPPRESSED, "Some Title"
+        )
         script.suppress_work = suppress_work_mock
         args = [
             "--library",
@@ -295,7 +301,9 @@ class TestSuppressWorkForLibraryScript:
 
         script = SuppressWorkForLibraryScript(db.session)
         suppress_work_mock = create_autospec(script.suppress_work)
-        suppress_work_mock.return_value = SuppressResult.NEWLY_SUPPRESSED
+        suppress_work_mock.return_value = SuppressOutcome(
+            SuppressResult.NEWLY_SUPPRESSED, "Some Title"
+        )
         script.suppress_work = suppress_work_mock
         args = [
             "--library",
@@ -355,7 +363,8 @@ class TestSuppressWorkForLibraryScript:
             test_library, work.presentation_edition.primary_identifier
         )
 
-        assert result == SuppressResult.NEWLY_SUPPRESSED
+        assert result.result == SuppressResult.NEWLY_SUPPRESSED
+        assert result.title == work.title
         assert work.suppressed_for == [test_library]
 
     def test_suppress_work_already_suppressed(self, db: DatabaseTransactionFixture):
@@ -368,7 +377,8 @@ class TestSuppressWorkForLibraryScript:
             test_library, work.presentation_edition.primary_identifier
         )
 
-        assert result == SuppressResult.ALREADY_SUPPRESSED
+        assert result.result == SuppressResult.ALREADY_SUPPRESSED
+        assert result.title == work.title
         assert work.suppressed_for == [test_library]
 
     def test_suppress_work_no_work_for_identifier(self, db: DatabaseTransactionFixture):
@@ -378,7 +388,8 @@ class TestSuppressWorkForLibraryScript:
         script = SuppressWorkForLibraryScript(db.session)
         result = script.suppress_work(test_library, identifier)
 
-        assert result == SuppressResult.NOT_FOUND
+        assert result.result == SuppressResult.NOT_FOUND
+        assert result.title is None
 
     def test_suppress_work_resolves_via_equivalent_identifier(
         self, db: DatabaseTransactionFixture
@@ -400,7 +411,8 @@ class TestSuppressWorkForLibraryScript:
         script = SuppressWorkForLibraryScript(db.session)
         result = script.suppress_work(test_library, isbn)
 
-        assert result == SuppressResult.NEWLY_SUPPRESSED
+        assert result.result == SuppressResult.NEWLY_SUPPRESSED
+        assert result.title == work.title
         assert work.suppressed_for == [test_library]
 
     def test_suppress_work_equivalent_identifier_only_affects_specified_library(
@@ -422,7 +434,7 @@ class TestSuppressWorkForLibraryScript:
         script = SuppressWorkForLibraryScript(db.session)
         result = script.suppress_work(library_a, isbn)
 
-        assert result == SuppressResult.NEWLY_SUPPRESSED
+        assert result.result == SuppressResult.NEWLY_SUPPRESSED
         assert work.suppressed_for == [library_a]
         assert library_b not in work.suppressed_for
 
@@ -446,7 +458,10 @@ class TestSuppressWorkForLibraryScript:
         script = SuppressWorkForLibraryScript(db.session)
         result = script.suppress_work(test_library, isbn)
 
-        assert result == SuppressResult.AMBIGUOUS
+        assert result.result == SuppressResult.AMBIGUOUS
+        assert result.title is not None
+        assert work1.title in result.title
+        assert work2.title in result.title
         assert work1.suppressed_for == []
         assert work2.suppressed_for == []
 
@@ -461,7 +476,7 @@ class TestSuppressWorkForLibraryScript:
             dry_run=True,
         )
 
-        assert result == SuppressResult.NEWLY_SUPPRESSED
+        assert result.result == SuppressResult.NEWLY_SUPPRESSED
         assert work.suppressed_for == []
 
     def test_suppress_work_dry_run_already_suppressed(
@@ -478,15 +493,19 @@ class TestSuppressWorkForLibraryScript:
             dry_run=True,
         )
 
-        assert result == SuppressResult.ALREADY_SUPPRESSED
+        assert result.result == SuppressResult.ALREADY_SUPPRESSED
 
     def test_print_results_normal(self, db: DatabaseTransactionFixture, capsys):
         test_library = db.library(short_name="mylib", name="My Library")
         script = SuppressWorkForLibraryScript(db.session)
         results = {
-            ("ISBN", "111"): SuppressResult.NEWLY_SUPPRESSED,
-            ("ISBN", "222"): SuppressResult.ALREADY_SUPPRESSED,
-            ("ISBN", "333"): SuppressResult.NOT_FOUND,
+            ("ISBN", "111"): SuppressOutcome(
+                SuppressResult.NEWLY_SUPPRESSED, "Book One"
+            ),
+            ("ISBN", "222"): SuppressOutcome(
+                SuppressResult.ALREADY_SUPPRESSED, "Book Two"
+            ),
+            ("ISBN", "333"): SuppressOutcome(SuppressResult.NOT_FOUND),
         }
         started_at = datetime(2026, 2, 26, 12, 0, 0, tzinfo=timezone.utc)
         script._print_results(
@@ -505,8 +524,8 @@ class TestSuppressWorkForLibraryScript:
         assert re.search(r"Newly suppressed:\s+1", out)
         assert re.search(r"Already suppressed:\s+1", out)
         assert re.search(r"Not found:\s+1", out)
-        assert "[SUPPRESSED] ISBN/111" in out
-        assert "[ALREADY SUPPRESSED] ISBN/222" in out
+        assert "[SUPPRESSED] ISBN/111 -- Book One" in out
+        assert "[ALREADY SUPPRESSED] ISBN/222 -- Book Two" in out
         assert "[NOT FOUND] ISBN/333" in out
         assert "[DRY RUN]" not in out
 
@@ -514,7 +533,9 @@ class TestSuppressWorkForLibraryScript:
         test_library = db.library(short_name="mylib", name="My Library")
         script = SuppressWorkForLibraryScript(db.session)
         results = {
-            ("ISBN", "111"): SuppressResult.AMBIGUOUS,
+            ("ISBN", "111"): SuppressOutcome(
+                SuppressResult.AMBIGUOUS, "Book One; Book Two"
+            ),
         }
         started_at = datetime(2026, 2, 26, 12, 0, 0, tzinfo=timezone.utc)
         script._print_results(
@@ -527,14 +548,16 @@ class TestSuppressWorkForLibraryScript:
 
         out = capsys.readouterr().out
         assert re.search(r"Ambiguous:\s+1", out)
-        assert "[AMBIGUOUS] ISBN/111" in out
+        assert "[AMBIGUOUS] ISBN/111 -- Book One; Book Two" in out
 
     def test_print_results_dry_run(self, db: DatabaseTransactionFixture, capsys):
         test_library = db.library(short_name="mylib", name="My Library")
         script = SuppressWorkForLibraryScript(db.session)
         results = {
-            ("ISBN", "111"): SuppressResult.NEWLY_SUPPRESSED,
-            ("ISBN", "222"): SuppressResult.NOT_FOUND,
+            ("ISBN", "111"): SuppressOutcome(
+                SuppressResult.NEWLY_SUPPRESSED, "Book One"
+            ),
+            ("ISBN", "222"): SuppressOutcome(SuppressResult.NOT_FOUND),
         }
         started_at = datetime(2026, 2, 26, 9, 30, 0, tzinfo=timezone.utc)
         script._print_results(
@@ -552,7 +575,7 @@ class TestSuppressWorkForLibraryScript:
         assert "0.05s" in out
         assert re.search(r"Would suppress:\s+1", out)
         assert re.search(r"Not found:\s+1", out)
-        assert "[WOULD SUPPRESS] ISBN/111" in out
+        assert "[WOULD SUPPRESS] ISBN/111 -- Book One" in out
         assert "[NOT FOUND] ISBN/222" in out
 
     def test_do_run_not_found_identifier(self, db: DatabaseTransactionFixture, capsys):
@@ -690,5 +713,5 @@ class TestSuppressWorkForLibraryScript:
             result = script.suppress_work(
                 test_library, work.presentation_edition.primary_identifier
             )
-        assert result == SuppressResult.NEWLY_SUPPRESSED
+        assert result.result == SuppressResult.NEWLY_SUPPRESSED
         mock_commit.assert_not_called()

@@ -3,7 +3,7 @@ import csv
 from collections.abc import Sequence
 from datetime import datetime, timezone
 from enum import Enum, auto
-from typing import cast
+from typing import NamedTuple, cast
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -21,6 +21,14 @@ class SuppressResult(Enum):
     ALREADY_SUPPRESSED = auto()
     NOT_FOUND = auto()
     AMBIGUOUS = auto()
+
+
+class SuppressOutcome(NamedTuple):
+    result: SuppressResult
+    # The title of the resolved work, when there is exactly one. For
+    # AMBIGUOUS, this instead lists the titles of every candidate work,
+    # to help a human resolve the ambiguity.
+    title: str | None = None
 
 
 class SuppressWorkForLibraryScript(Script):
@@ -166,24 +174,25 @@ class SuppressWorkForLibraryScript(Script):
         library: Library,
         identifier: Identifier,
         dry_run: bool = False,
-    ) -> SuppressResult:
+    ) -> SuppressOutcome:
         works = self.load_works(identifier)
         if not works:
             self.log.warning(f"No work found for {identifier}")
-            return SuppressResult.NOT_FOUND
+            return SuppressOutcome(SuppressResult.NOT_FOUND)
 
         if len(works) > 1:
+            titles = "; ".join(w.title for w in works if w.title)
             self.log.warning(
                 f"{identifier.type}/{identifier.identifier} resolves to "
                 f"{len(works)} different works via identifier equivalency; "
                 "skipping rather than guessing which one to suppress."
             )
-            return SuppressResult.AMBIGUOUS
+            return SuppressOutcome(SuppressResult.AMBIGUOUS, titles or None)
 
         work = works[0]
 
         if library in work.suppressed_for:
-            return SuppressResult.ALREADY_SUPPRESSED
+            return SuppressOutcome(SuppressResult.ALREADY_SUPPRESSED, work.title)
 
         if not dry_run:
             # Suppression is scoped to exactly this one library. Resolving
@@ -198,7 +207,7 @@ class SuppressWorkForLibraryScript(Script):
             f"{identifier.type}/{identifier.identifier} (work id: {work.id}) "
             f"for {library.short_name}."
         )
-        return SuppressResult.NEWLY_SUPPRESSED
+        return SuppressOutcome(SuppressResult.NEWLY_SUPPRESSED, work.title)
 
     def do_run(self, cmd_args: list[str] | None = None) -> None:
         parsed = self.parse_command_line(self._db, cmd_args=cmd_args)
@@ -223,15 +232,15 @@ class SuppressWorkForLibraryScript(Script):
             )
         pairs = unique_pairs
 
-        results: dict[tuple[str, str], SuppressResult] = {}
+        results: dict[tuple[str, str], SuppressOutcome] = {}
         try:
             for id_type, id_value in pairs:
                 try:
                     identifier = self.load_identifier(id_type, id_value)
-                    result = self.suppress_work(library, identifier, dry_run=dry_run)
+                    outcome = self.suppress_work(library, identifier, dry_run=dry_run)
                 except PalaceValueError:
-                    result = SuppressResult.NOT_FOUND
-                results[(id_type, id_value)] = result
+                    outcome = SuppressOutcome(SuppressResult.NOT_FOUND)
+                results[(id_type, id_value)] = outcome
 
             if not dry_run:
                 self._db.commit()
@@ -246,20 +255,26 @@ class SuppressWorkForLibraryScript(Script):
 
     def _print_results(
         self,
-        results: dict[tuple[str, str], SuppressResult],
+        results: dict[tuple[str, str], SuppressOutcome],
         dry_run: bool,
         library: Library,
         started_at: datetime,
         duration_seconds: float,
     ) -> None:
         newly_suppressed = [
-            k for k, v in results.items() if v == SuppressResult.NEWLY_SUPPRESSED
+            k for k, v in results.items() if v.result == SuppressResult.NEWLY_SUPPRESSED
         ]
         already_suppressed = [
-            k for k, v in results.items() if v == SuppressResult.ALREADY_SUPPRESSED
+            k
+            for k, v in results.items()
+            if v.result == SuppressResult.ALREADY_SUPPRESSED
         ]
-        not_found = [k for k, v in results.items() if v == SuppressResult.NOT_FOUND]
-        ambiguous = [k for k, v in results.items() if v == SuppressResult.AMBIGUOUS]
+        not_found = [
+            k for k, v in results.items() if v.result == SuppressResult.NOT_FOUND
+        ]
+        ambiguous = [
+            k for k, v in results.items() if v.result == SuppressResult.AMBIGUOUS
+        ]
 
         prefix = "[DRY RUN] " if dry_run else ""
         suppress_label = "Would suppress" if dry_run else "Newly suppressed"
@@ -287,6 +302,7 @@ class SuppressWorkForLibraryScript(Script):
             SuppressResult.NOT_FOUND: "NOT FOUND",
             SuppressResult.AMBIGUOUS: "AMBIGUOUS",
         }
-        for (id_type, id_value), result in results.items():
-            status = status_map[result]
-            print(f"  [{status}] {id_type}/{id_value}")
+        for (id_type, id_value), outcome in results.items():
+            status = status_map[outcome.result]
+            title_suffix = f" -- {outcome.title}" if outcome.title else ""
+            print(f"  [{status}] {id_type}/{id_value}{title_suffix}")
