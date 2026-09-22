@@ -30,7 +30,7 @@ class SuppressOutcome(NamedTuple):
     # formatted as "<title> (work id: <id>)" and joined with "; " when
     # there's more than one -- e.g. for AMBIGUOUS, or when
     # --suppress-ambiguous affects more than one work at once.
-    title: str | None = None
+    description: str | None = None
 
 
 class SuppressWorkForLibraryScript(Script):
@@ -163,15 +163,16 @@ class SuppressWorkForLibraryScript(Script):
         return identifiers
 
     def load_works(self, identifier: Identifier, library: Library) -> list[Work]:
-        """Find the Work(s) reachable from an identifier for a library.
+        """Find the Work(s) `library` carries for an identifier.
 
-        An identifier that owns a LicensePool directly is an exact match
-        and is returned on its own, with no need to consult equivalencies,
-        regardless of which library that LicensePool's collection belongs
-        to (this matches the identifier resolution the script has always
-        done, before this class started consulting equivalencies at all).
+        Only works the library actually licenses are considered, so that a
+        title carried by two libraries through two different collections
+        (e.g. one via OverDrive, one via Bibliotheca) resolves cleanly for
+        each of them instead of looking ambiguous to both.
 
-        Only when there's no direct match do we look past LicensePools
+        An identifier that owns a LicensePool in one of the library's
+        collections is an exact match and is returned on its own, with no
+        need to consult equivalencies. Otherwise we look past LicensePools
         whose own identifier matches, to also include LicensePools
         reachable through identifier equivalency -- e.g. an ISBN a
         librarian has on hand is often linked to a vendor's LicensePool
@@ -180,30 +181,30 @@ class SuppressWorkForLibraryScript(Script):
         policy that `Work.from_identifiers` applies by default everywhere
         else in the codebase, so it won't walk into loosely-related works.
 
-        This equivalency fallback is scoped to `library`'s own collections.
-        Otherwise, a title licensed to two different libraries through two
-        different collections (e.g. one via OverDrive, one via Bibliotheca)
-        would look ambiguous when suppressing for either library alone,
-        even though only one of the two candidate works is actually
-        licensed to that library.
+        Collections are scoped by association rather than by whether
+        they're currently active: `suppressed_for` is a durable flag, not
+        something that should depend on where today falls in a
+        collection's subscription window.
         """
-        direct_work = identifier.work
-        if direct_work is not None:
-            return [direct_work]
-
-        collection_ids = [c.id for c in library.active_collections]
+        collection_ids = [
+            c.id for c in library.associated_collections if c.id is not None
+        ]
         if not collection_ids:
             return []
 
-        base_query = (
-            self._db.query(Work)
-            .join(Work.license_pools)
-            .join(LicensePool.identifier)
-            .filter(LicensePool.collection_id.in_(collection_ids))
+        direct_work = identifier.work
+        if direct_work is not None and any(
+            pool.collection_id in collection_ids for pool in direct_work.license_pools
+        ):
+            return [direct_work]
+
+        # The collection scope is an EXISTS rather than a filter on the
+        # joined pool, because the pool carrying the equivalent identifier
+        # and the pool in this library's collection may be different pools
+        # of the same Work.
+        query = Work.from_identifiers(self._db, [identifier]).filter(
+            Work.license_pools.any(LicensePool.collection_id.in_(collection_ids))
         )
-        query = Work.from_identifiers(self._db, [identifier], base_query=base_query)
-        if query is None:
-            return []
         return cast(list[Work], query.distinct().all())
 
     @staticmethod
@@ -223,14 +224,15 @@ class SuppressWorkForLibraryScript(Script):
 
         :param library: The library for which the resolved work should be suppressed.
         :param identifier: The identifier used to resolve the work, either
-            directly (it owns a LicensePool) or through identifier equivalency.
+            directly (it owns a LicensePool in one of the library's
+            collections) or through identifier equivalency.
         :param dry_run: If true, report the outcome without changing suppression.
         :param suppress_ambiguous: If the identifier resolves to more than one
             distinct work via equivalency, suppress it for the library in
             every candidate work instead of refusing to guess which one is
             meant.
-        :return: The result of the suppression attempt, and the resolved
-            work's title(s) when available.
+        :return: The result of the suppression attempt, and a description of
+            the work(s) it applies to, when any were resolved.
         """
         works = self.load_works(identifier, library)
         if not works:
@@ -275,14 +277,15 @@ class SuppressWorkForLibraryScript(Script):
         if not suppress_ambiguous:
             # Without --suppress-ambiguous, refuse to guess which one(s) the
             # operator meant.
-            titles = self._describe_works(works)
             self.log.warning(
                 f"{identifier.type}/{identifier.identifier} resolves to "
                 f"{len(works)} different works via identifier equivalency; "
                 "skipping rather than guessing which one to suppress. Pass "
                 "--suppress-ambiguous to suppress all of them for this library."
             )
-            return SuppressOutcome(SuppressResult.AMBIGUOUS, titles)
+            return SuppressOutcome(
+                SuppressResult.AMBIGUOUS, self._describe_works(works)
+            )
 
         # At least one candidate isn't yet suppressed (the all-suppressed
         # case was handled above), so this always changes at least one work.
@@ -404,5 +407,5 @@ class SuppressWorkForLibraryScript(Script):
         }
         for (id_type, id_value), outcome in results.items():
             status = status_map[outcome.result]
-            title_suffix = f" -- {outcome.title}" if outcome.title else ""
-            print(f"  [{status}] {id_type}/{id_value}{title_suffix}")
+            suffix = f" -- {outcome.description}" if outcome.description else ""
+            print(f"  [{status}] {id_type}/{id_value}{suffix}")
