@@ -76,6 +76,14 @@ class SuppressWorkForLibraryScript(Script):
             help="Report what would be suppressed without making any changes.",
             action="store_true",
         )
+        parser.add_argument(
+            "--suppress-ambiguous",
+            help="If an identifier resolves to more than one distinct work via "
+            "identifier equivalency (e.g. the same ISBN licensed through more "
+            "than one collection), suppress it in all of them instead of "
+            "skipping it.",
+            action="store_true",
+        )
         return parser
 
     @classmethod
@@ -175,18 +183,29 @@ class SuppressWorkForLibraryScript(Script):
             return []
         return cast(list[Work], query.distinct().all())
 
+    @staticmethod
+    def _describe_works(works: list[Work]) -> str:
+        """Format a list of works for operator-facing output, e.g. for an
+        ambiguous match or when suppressing more than one work at once."""
+        return "; ".join(f"{w.title or '[no title]'} (work id: {w.id})" for w in works)
+
     def suppress_work(
         self,
         library: Library,
         identifier: Identifier,
         dry_run: bool = False,
+        suppress_ambiguous: bool = False,
     ) -> SuppressOutcome:
-        """Suppress the work resolved from an identifier for a library.
+        """Suppress the work(s) resolved from an identifier for a library.
 
         :param library: The library for which the resolved work should be suppressed.
         :param identifier: The identifier used to resolve the work, either
             directly (it owns a LicensePool) or through identifier equivalency.
         :param dry_run: If true, report the outcome without changing suppression.
+        :param suppress_ambiguous: If the identifier resolves to more than one
+            distinct work via equivalency, suppress it for the library in
+            every candidate work instead of refusing to guess which one is
+            meant.
         :return: The result of the suppression attempt, and the resolved
             work's title(s) when available.
         """
@@ -195,41 +214,66 @@ class SuppressWorkForLibraryScript(Script):
             self.log.warning(f"No work found for {identifier}")
             return SuppressOutcome(SuppressResult.NOT_FOUND)
 
-        if len(works) > 1:
-            titles = "; ".join(
-                f"{w.title or '[no title]'} (work id: {w.id})" for w in works
+        if len(works) == 1:
+            work = works[0]
+
+            if library in work.suppressed_for:
+                return SuppressOutcome(SuppressResult.ALREADY_SUPPRESSED, work.title)
+
+            if not dry_run:
+                # Suppression is scoped to exactly this one library. Resolving
+                # the work via identifier equivalency only changes *which work*
+                # we find -- it never changes *which libraries* it's suppressed
+                # for, since only the `library` argument passed in is ever
+                # appended to `suppressed_for`.
+                work.suppressed_for.append(library)
+
+            self.log.info(
+                f"{'[DRY RUN] Would suppress' if dry_run else 'Suppressing'} "
+                f"{identifier.type}/{identifier.identifier} (work id: {work.id}) "
+                f"for {library.short_name}."
             )
+            return SuppressOutcome(SuppressResult.NEWLY_SUPPRESSED, work.title)
+
+        # More than one distinct Work is reachable from this identifier via
+        # equivalency (see load_works) -- e.g. the same ISBN licensed
+        # through more than one collection, each with its own permanent
+        # Work. Without --suppress-ambiguous, refuse to guess which one(s)
+        # the operator meant.
+        if not suppress_ambiguous:
+            titles = self._describe_works(works)
             self.log.warning(
                 f"{identifier.type}/{identifier.identifier} resolves to "
                 f"{len(works)} different works via identifier equivalency; "
-                "skipping rather than guessing which one to suppress."
+                "skipping rather than guessing which one to suppress. Pass "
+                "--suppress-ambiguous to suppress all of them for this library."
             )
             return SuppressOutcome(SuppressResult.AMBIGUOUS, titles)
 
-        work = works[0]
+        newly_suppressed = 0
+        for work in works:
+            if library in work.suppressed_for:
+                continue
+            if not dry_run:
+                work.suppressed_for.append(library)
+            newly_suppressed += 1
 
-        if library in work.suppressed_for:
-            return SuppressOutcome(SuppressResult.ALREADY_SUPPRESSED, work.title)
-
-        if not dry_run:
-            # Suppression is scoped to exactly this one library. Resolving
-            # the work via identifier equivalency only changes *which work*
-            # we find -- it never changes *which libraries* it's suppressed
-            # for, since only the `library` argument passed in is ever
-            # appended to `suppressed_for`.
-            work.suppressed_for.append(library)
+        titles = self._describe_works(works)
+        if newly_suppressed == 0:
+            return SuppressOutcome(SuppressResult.ALREADY_SUPPRESSED, titles)
 
         self.log.info(
             f"{'[DRY RUN] Would suppress' if dry_run else 'Suppressing'} "
-            f"{identifier.type}/{identifier.identifier} (work id: {work.id}) "
-            f"for {library.short_name}."
+            f"{identifier.type}/{identifier.identifier} in {newly_suppressed} "
+            f"of {len(works)} ambiguous work(s) for {library.short_name}."
         )
-        return SuppressOutcome(SuppressResult.NEWLY_SUPPRESSED, work.title)
+        return SuppressOutcome(SuppressResult.NEWLY_SUPPRESSED, titles)
 
     def do_run(self, cmd_args: list[str] | None = None) -> None:
         parsed = self.parse_command_line(self._db, cmd_args=cmd_args)
         library = self.load_library(parsed.library)
         dry_run: bool = parsed.dry_run
+        suppress_ambiguous: bool = parsed.suppress_ambiguous
         started_at = datetime.now(tz=timezone.utc)
 
         if parsed.file:
@@ -254,7 +298,12 @@ class SuppressWorkForLibraryScript(Script):
             for id_type, id_value in pairs:
                 try:
                     identifier = self.load_identifier(id_type, id_value)
-                    outcome = self.suppress_work(library, identifier, dry_run=dry_run)
+                    outcome = self.suppress_work(
+                        library,
+                        identifier,
+                        dry_run=dry_run,
+                        suppress_ambiguous=suppress_ambiguous,
+                    )
                 except PalaceValueError:
                     outcome = SuppressOutcome(SuppressResult.NOT_FOUND)
                 results[(id_type, id_value)] = outcome

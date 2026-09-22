@@ -76,6 +76,24 @@ class TestSuppressWorkForLibraryScript:
         )
         assert parsed.dry_run is True
 
+    def test_parse_command_line_suppress_ambiguous_default_false(
+        self, db: DatabaseTransactionFixture
+    ):
+        parsed = SuppressWorkForLibraryScript.parse_command_line(
+            db.session,
+            ["--library", "lib1", "--identifier", "123"],
+        )
+        assert parsed.suppress_ambiguous is False
+
+    def test_parse_command_line_suppress_ambiguous_flag(
+        self, db: DatabaseTransactionFixture
+    ):
+        parsed = SuppressWorkForLibraryScript.parse_command_line(
+            db.session,
+            ["--library", "lib1", "--identifier", "123", "--suppress-ambiguous"],
+        )
+        assert parsed.suppress_ambiguous is True
+
     def test_parse_command_line_file_and_identifier_mutually_exclusive(
         self, db: DatabaseTransactionFixture, capsys
     ):
@@ -292,7 +310,7 @@ class TestSuppressWorkForLibraryScript:
         script.do_run(args)
 
         suppress_work_mock.assert_called_once_with(
-            test_library, test_identifier, dry_run=False
+            test_library, test_identifier, dry_run=False, suppress_ambiguous=False
         )
 
     def test_do_run_dry_run(self, db: DatabaseTransactionFixture, capsys):
@@ -317,7 +335,34 @@ class TestSuppressWorkForLibraryScript:
         script.do_run(args)
 
         suppress_work_mock.assert_called_once_with(
-            test_library, test_identifier, dry_run=True
+            test_library, test_identifier, dry_run=True, suppress_ambiguous=False
+        )
+
+    def test_do_run_suppress_ambiguous_flag(
+        self, db: DatabaseTransactionFixture, capsys
+    ):
+        test_library = db.library(short_name="test")
+        test_identifier = db.identifier()
+
+        script = SuppressWorkForLibraryScript(db.session)
+        suppress_work_mock = create_autospec(script.suppress_work)
+        suppress_work_mock.return_value = SuppressOutcome(
+            SuppressResult.NEWLY_SUPPRESSED, "Some Title"
+        )
+        script.suppress_work = suppress_work_mock
+        args = [
+            "--library",
+            test_library.short_name,
+            "--identifier-type",
+            test_identifier.type,
+            "--identifier",
+            test_identifier.identifier,
+            "--suppress-ambiguous",
+        ]
+        script.do_run(args)
+
+        suppress_work_mock.assert_called_once_with(
+            test_library, test_identifier, dry_run=False, suppress_ambiguous=True
         )
 
     def test_do_run_with_file(self, db: DatabaseTransactionFixture, tmp_path, capsys):
@@ -464,6 +509,106 @@ class TestSuppressWorkForLibraryScript:
         assert work2.title in result.title
         assert f"work id: {work1.id}" in result.title
         assert f"work id: {work2.id}" in result.title
+        assert work1.suppressed_for == []
+        assert work2.suppressed_for == []
+
+    def test_suppress_work_suppress_ambiguous_suppresses_all_candidates(
+        self, db: DatabaseTransactionFixture
+    ):
+        """With --suppress-ambiguous, an identifier resolving to multiple
+        distinct works (e.g. the same ISBN licensed through more than one
+        collection) should suppress the work for the library in every
+        candidate, rather than refusing."""
+        test_library = db.library(short_name="test")
+        work1 = db.work(with_license_pool=True)
+        work2 = db.work(with_license_pool=True)
+        id1 = work1.presentation_edition.primary_identifier
+        id2 = work2.presentation_edition.primary_identifier
+
+        isbn = db.identifier(identifier_type="ISBN")
+        source = DataSource.lookup(db.session, DataSource.OCLC)
+        isbn.equivalent_to(source, id1, 1)
+        isbn.equivalent_to(source, id2, 1)
+
+        script = SuppressWorkForLibraryScript(db.session)
+        result = script.suppress_work(test_library, isbn, suppress_ambiguous=True)
+
+        assert result.result == SuppressResult.NEWLY_SUPPRESSED
+        assert result.title is not None
+        assert work1.title in result.title
+        assert work2.title in result.title
+        assert work1.suppressed_for == [test_library]
+        assert work2.suppressed_for == [test_library]
+
+    def test_suppress_work_suppress_ambiguous_already_suppressed_for_all(
+        self, db: DatabaseTransactionFixture
+    ):
+        test_library = db.library(short_name="test")
+        work1 = db.work(with_license_pool=True)
+        work2 = db.work(with_license_pool=True)
+        work1.suppressed_for.append(test_library)
+        work2.suppressed_for.append(test_library)
+        id1 = work1.presentation_edition.primary_identifier
+        id2 = work2.presentation_edition.primary_identifier
+
+        isbn = db.identifier(identifier_type="ISBN")
+        source = DataSource.lookup(db.session, DataSource.OCLC)
+        isbn.equivalent_to(source, id1, 1)
+        isbn.equivalent_to(source, id2, 1)
+
+        script = SuppressWorkForLibraryScript(db.session)
+        result = script.suppress_work(test_library, isbn, suppress_ambiguous=True)
+
+        assert result.result == SuppressResult.ALREADY_SUPPRESSED
+        # Not duplicated by a redundant append.
+        assert work1.suppressed_for == [test_library]
+        assert work2.suppressed_for == [test_library]
+
+    def test_suppress_work_suppress_ambiguous_partial_already_suppressed(
+        self, db: DatabaseTransactionFixture
+    ):
+        """If some but not all candidates are already suppressed, the
+        overall result is NEWLY_SUPPRESSED since the run had an effect,
+        and every candidate ends up suppressed."""
+        test_library = db.library(short_name="test")
+        work1 = db.work(with_license_pool=True)
+        work2 = db.work(with_license_pool=True)
+        work1.suppressed_for.append(test_library)
+        id1 = work1.presentation_edition.primary_identifier
+        id2 = work2.presentation_edition.primary_identifier
+
+        isbn = db.identifier(identifier_type="ISBN")
+        source = DataSource.lookup(db.session, DataSource.OCLC)
+        isbn.equivalent_to(source, id1, 1)
+        isbn.equivalent_to(source, id2, 1)
+
+        script = SuppressWorkForLibraryScript(db.session)
+        result = script.suppress_work(test_library, isbn, suppress_ambiguous=True)
+
+        assert result.result == SuppressResult.NEWLY_SUPPRESSED
+        assert work1.suppressed_for == [test_library]
+        assert work2.suppressed_for == [test_library]
+
+    def test_suppress_work_suppress_ambiguous_dry_run_does_not_mutate(
+        self, db: DatabaseTransactionFixture
+    ):
+        test_library = db.library(short_name="test")
+        work1 = db.work(with_license_pool=True)
+        work2 = db.work(with_license_pool=True)
+        id1 = work1.presentation_edition.primary_identifier
+        id2 = work2.presentation_edition.primary_identifier
+
+        isbn = db.identifier(identifier_type="ISBN")
+        source = DataSource.lookup(db.session, DataSource.OCLC)
+        isbn.equivalent_to(source, id1, 1)
+        isbn.equivalent_to(source, id2, 1)
+
+        script = SuppressWorkForLibraryScript(db.session)
+        result = script.suppress_work(
+            test_library, isbn, dry_run=True, suppress_ambiguous=True
+        )
+
+        assert result.result == SuppressResult.NEWLY_SUPPRESSED
         assert work1.suppressed_for == []
         assert work2.suppressed_for == []
 
