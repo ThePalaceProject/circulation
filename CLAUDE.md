@@ -69,7 +69,7 @@ This repository is a [`uv` workspace](https://docs.astral.sh/uv/concepts/project
   - `/integration` - Third-party service integrations and content provider APIs
   - `/scripts` - Legacy CLI utilities (**deprecated - put new logic in `/celery/tasks`**)
     - The package is deprecated for *logic*, not for entry points. A thin `Script` subclass
-      here plus a `bin/` wrapper is still the only supported way to run something on demand,
+      here plus a `bin/` wrapper is still a supported way to run something on demand,
       and is still the expected pattern for dispatching a Celery task by hand. There is no
       replacement framework: `palace-startup-task` is the only console script the project
       ships, and it resolves into this package.
