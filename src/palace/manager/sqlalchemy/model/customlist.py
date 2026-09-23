@@ -13,7 +13,6 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
-    Table,
     Unicode,
     UniqueConstraint,
     false,
@@ -385,32 +384,6 @@ class CustomList(Base):
         return db.execute(
             select(func.count()).where(CustomListEntry.list_id == self.id)
         ).scalar_one()
-
-
-# Retained for one release only. Sharing state now lives on
-# CustomList.shared_locally, and no code reads or writes this table. It stays in
-# Base.metadata so that a database built by create_all still has it, which keeps the
-# previous release working while this release's migration runs online -- see the
-# online-migration section of CLAUDE.md. A stacked follow-up PR drops it.
-customlist_sharedlibrary: Table = Table(
-    "customlist_sharedlibraries",
-    Base.metadata,
-    Column(
-        "customlist_id",
-        Integer,
-        ForeignKey("customlists.id", ondelete="CASCADE"),
-        index=True,
-        nullable=False,
-    ),
-    Column(
-        "library_id",
-        Integer,
-        ForeignKey("libraries.id", ondelete="CASCADE"),
-        index=True,
-        nullable=False,
-    ),
-    UniqueConstraint("customlist_id", "library_id"),
-)
 
 
 class CustomListEntry(Base):
