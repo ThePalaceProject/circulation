@@ -195,10 +195,17 @@ Two details that are easy to miss in release 1:
 
 - **Deleting the relationship can break parent deletes.** It was the relationship that cascaded (or nulled
   the child FK) by hand; once it is gone only the database's own rules apply. A child foreign key declared
-  without an `ON DELETE` clause will reject the parent delete while any row survives. Either empty the table
-  in the release-1 migration (right when the rows are dead data — `TRUNCATE` avoids the row-level WAL of a
-  large `DELETE`, and its `ACCESS EXCLUSIVE` lock is uncontended on a table nothing reads) or give the
-  foreign key an `ON DELETE` clause. A FK that already declares `ON DELETE CASCADE` needs neither.
+  without an `ON DELETE` clause will reject the parent delete while any row survives. Fix it either by
+  giving the foreign key an `ON DELETE` clause, or by emptying the table in the release-1 migration — and if
+  you empty it, use a plain `DELETE`, not `TRUNCATE`. The table is not quiet yet at that point: the
+  migration runs while N-1 is still serving, and N-1 still maps the relationship, so it still SELECTs the
+  child table on every parent delete. `TRUNCATE` takes an `ACCESS EXCLUSIVE` lock, which conflicts with
+  those reads, and a `TRUNCATE` left waiting queues every later query on the table behind it — an online
+  migration turned into a stall. A `DELETE` takes only `ROW EXCLUSIVE`, never blocks them, and its extra
+  WAL and dead rows don't matter on a table that is dropped next release anyway. If the table really is too
+  large for one `DELETE`, a `TRUNCATE` guarded by a short `lock_timeout`
+  (`op.execute("SET lock_timeout = '2s'")` first) at least fails the migration fast instead of stalling
+  traffic. A FK that already declares `ON DELETE CASCADE` needs none of this.
 - **Delete the model's tests in release 1 too.** The gate runs N-1's *test suite* against the new schema, so
   tests that build rows in the doomed table fail in release 2 even though no application code would.
 
