@@ -445,7 +445,8 @@ class TestSuppressWorkForLibraryScript:
         self, db: DatabaseTransactionFixture
     ):
         """A library that carries no collections carries no works, so
-        there is nothing for it to suppress."""
+        there is nothing for it to suppress -- but the work does exist,
+        so this is reported as not-in-this-library rather than not-found."""
         test_library = db.library(short_name="test")
         work = db.work(with_license_pool=True)
 
@@ -454,7 +455,55 @@ class TestSuppressWorkForLibraryScript:
             test_library, work.presentation_edition.primary_identifier
         )
 
+        assert result.result == SuppressResult.NOT_IN_LIBRARY
+        assert work.suppressed_for == []
+
+    def test_library_collection_ids_are_cached(self, db: DatabaseTransactionFixture):
+        """load_works consults this once per identifier, so a --file run
+        would otherwise repeat the same query for every row."""
+        test_library = db.library(short_name="test")
+        collection = db.collection(library=test_library)
+
+        script = SuppressWorkForLibraryScript(db.session)
+        first = script._library_collection_ids(test_library)
+        second = script._library_collection_ids(test_library)
+
+        assert first == [collection.id]
+        assert first is second
+
+    def test_suppress_work_pool_without_a_work(self, db: DatabaseTransactionFixture):
+        """A LicensePool can exist before its Work has been calculated
+        (work_id is nullable), so there may be nothing to suppress even
+        though the identifier is licensed by the library."""
+        test_library = db.library(short_name="test")
+        collection = db.collection(library=test_library)
+        edition = db.edition()
+        db.licensepool(edition, collection=collection)
+
+        script = SuppressWorkForLibraryScript(db.session)
+        result = script.suppress_work(test_library, edition.primary_identifier)
+
         assert result.result == SuppressResult.NOT_FOUND
+
+    def test_suppress_work_not_in_library_distinguished_from_not_found(
+        self, db: DatabaseTransactionFixture
+    ):
+        """An identifier belonging to some other library's collection is a
+        different problem from an identifier that matches nothing at all,
+        so the two get distinct results instead of both reading NOT FOUND."""
+        test_library = db.library(short_name="test")
+        db.collection(library=test_library)
+        other_collection = db.collection()
+        work = db.work(with_license_pool=True, collection=other_collection)
+
+        script = SuppressWorkForLibraryScript(db.session)
+        result = script.suppress_work(
+            test_library, work.presentation_edition.primary_identifier
+        )
+
+        assert result.result == SuppressResult.NOT_IN_LIBRARY
+        # The work is named, so an operator can see what they don't carry.
+        assert result.description == f"{work.title} (work id: {work.id})"
         assert work.suppressed_for == []
 
     def test_suppress_work_resolves_via_equivalent_identifier(
@@ -528,10 +577,12 @@ class TestSuppressWorkForLibraryScript:
         result = script.suppress_work(test_library, isbn)
 
         assert result.result == SuppressResult.AMBIGUOUS
-        assert result.description is not None
-        parts = result.description.split("; ")
-        assert f"{work1.title} (work id: {work1.id})" in parts
-        assert f"{work2.title} (work id: {work2.id})" in parts
+        # Candidates are ordered by work id, so the operator-facing output
+        # is stable between runs on the same data.
+        assert result.description == (
+            f"{work1.title} (work id: {work1.id}); "
+            f"{work2.title} (work id: {work2.id})"
+        )
         assert work1.suppressed_for == []
         assert work2.suppressed_for == []
 
@@ -594,6 +645,87 @@ class TestSuppressWorkForLibraryScript:
         result = script.suppress_work(test_library, isbn)
 
         assert result.result == SuppressResult.NEWLY_SUPPRESSED
+        assert work.suppressed_for == [test_library]
+
+    def test_suppress_work_same_identifier_in_two_of_the_librarys_collections(
+        self, db: DatabaseTransactionFixture
+    ):
+        """One vendor identifier can be licensed by two of a library's own
+        collections -- a consortium's OverDrive collection plus that
+        library's OverDrive Advantage collection, say. Each pool gets its
+        own permanent Work, so suppressing one and reporting success would
+        leave the title circulating through the other. Both must reach the
+        ambiguity guard."""
+        test_library = db.library(short_name="test")
+        consortium = db.collection(library=test_library)
+        advantage = db.collection(library=test_library)
+
+        edition = db.edition()
+        identifier = edition.primary_identifier
+
+        # The same identifier, licensed separately by each collection.
+        consortium_work = db.work(with_license_pool=False)
+        advantage_work = db.work(with_license_pool=False)
+        db.licensepool(edition, collection=consortium, work=consortium_work)
+        db.licensepool(edition, collection=advantage, work=advantage_work)
+
+        script = SuppressWorkForLibraryScript(db.session)
+        result = script.suppress_work(test_library, identifier)
+
+        assert result.result == SuppressResult.AMBIGUOUS
+        assert consortium_work.suppressed_for == []
+        assert advantage_work.suppressed_for == []
+
+    def test_suppress_work_same_identifier_in_two_collections_with_flag(
+        self, db: DatabaseTransactionFixture
+    ):
+        """--suppress-ambiguous covers every collection's copy, which is
+        what an operator wants once they know why there are two."""
+        test_library = db.library(short_name="test")
+        consortium = db.collection(library=test_library)
+        advantage = db.collection(library=test_library)
+
+        edition = db.edition()
+        identifier = edition.primary_identifier
+
+        consortium_work = db.work(with_license_pool=False)
+        advantage_work = db.work(with_license_pool=False)
+        db.licensepool(edition, collection=consortium, work=consortium_work)
+        db.licensepool(edition, collection=advantage, work=advantage_work)
+
+        script = SuppressWorkForLibraryScript(db.session)
+        result = script.suppress_work(test_library, identifier, suppress_ambiguous=True)
+
+        assert result.result == SuppressResult.NEWLY_SUPPRESSED
+        assert consortium_work.suppressed_for == [test_library]
+        assert advantage_work.suppressed_for == [test_library]
+
+    def test_suppress_work_identifier_pool_outside_library_other_pool_inside(
+        self, db: DatabaseTransactionFixture
+    ):
+        """The identifier's own pool may sit outside the library while the
+        same Work has another pool inside it. Resolution has to find that
+        work through the equivalency query -- which reaches it because an
+        identifier is always a member of its own equivalent set (the
+        fn_recursive_equivalents base case seeds the CTE with it)."""
+        test_library = db.library(short_name="test")
+        library_collection = db.collection(library=test_library)
+        other_collection = db.collection()
+
+        # The work's pool for `identifier` is in a collection the library
+        # doesn't carry...
+        work = db.work(with_license_pool=True, collection=other_collection)
+        identifier = work.presentation_edition.primary_identifier
+
+        # ...but the same work has another pool in a collection it does.
+        inside_edition = db.edition()
+        db.licensepool(inside_edition, collection=library_collection, work=work)
+
+        script = SuppressWorkForLibraryScript(db.session)
+        result = script.suppress_work(test_library, identifier)
+
+        assert result.result == SuppressResult.NEWLY_SUPPRESSED
+        assert result.description == f"{work.title} (work id: {work.id})"
         assert work.suppressed_for == [test_library]
 
     def test_suppress_work_direct_match_outside_library_falls_through(
@@ -878,6 +1010,32 @@ class TestSuppressWorkForLibraryScript:
         out = capsys.readouterr().out
         assert re.search(r"Ambiguous:\s+1", out)
         assert "[AMBIGUOUS] ISBN/111 -- Book One; Book Two" in out
+
+    def test_print_results_not_in_library(self, db: DatabaseTransactionFixture, capsys):
+        test_library = db.library(short_name="mylib", name="My Library")
+        script = SuppressWorkForLibraryScript(db.session)
+        results = {
+            ("ISBN", "111"): SuppressOutcome(
+                SuppressResult.NOT_IN_LIBRARY, "Book One (work id: 1)"
+            ),
+            ("ISBN", "222"): SuppressOutcome(SuppressResult.NOT_FOUND),
+        }
+        started_at = datetime(2026, 2, 26, 12, 0, 0, tzinfo=timezone.utc)
+        script._print_results(
+            results,
+            dry_run=False,
+            library=test_library,
+            started_at=started_at,
+            duration_seconds=1.23,
+        )
+
+        out = capsys.readouterr().out
+        # The two misses are counted separately, so an operator can tell a
+        # title they don't carry from an identifier that matches nothing.
+        assert re.search(r"Not in this library:\s+1", out)
+        assert re.search(r"Not found:\s+1", out)
+        assert "[NOT IN THIS LIBRARY] ISBN/111 -- Book One (work id: 1)" in out
+        assert "[NOT FOUND] ISBN/222" in out
 
     def test_print_results_dry_run(self, db: DatabaseTransactionFixture, capsys):
         test_library = db.library(short_name="mylib", name="My Library")
