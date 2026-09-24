@@ -287,7 +287,7 @@ def test_generate_excel_report_strips_illegal_characters(
     so they are stripped rather than failing the whole report.
     """
     query = select(
-        literal("Sofi\x1fa Pescarin").label("author"),
+        literal("Ja\x1fne Doe").label("author"),
         literal("Ti\x0btle").label("title"),
         literal("line1\nline2\ttabbed").label("notes"),
     )
@@ -311,7 +311,7 @@ def test_generate_excel_report_strips_illegal_characters(
         header: ws.cell(row=2, column=index + 1).value
         for index, header in enumerate(headers)
     }
-    assert values["author"] == "Sofia Pescarin"
+    assert values["author"] == "Jane Doe"
     assert values["title"] == "Title"
     # Tab, newline and carriage return are legal and must be preserved.
     assert values["notes"] == "line1\nline2\ttabbed"
@@ -322,7 +322,7 @@ def test_generate_csv_report_strips_illegal_characters(
 ):
     """The CSV output is sanitized identically to the Excel output."""
     query = select(
-        literal("Sofi\x1fa Pescarin").label("author"),
+        literal("Ja\x1fne Doe").label("author"),
         literal(9780306406157).label("identifier"),
     )
 
@@ -339,7 +339,7 @@ def test_generate_csv_report_strips_illegal_characters(
 
     csv_file.seek(0)
     rows = list(csv.reader(io.StringIO(csv_file.getvalue())))
-    assert rows[1][0] == "Sofia Pescarin"
+    assert rows[1][0] == "Jane Doe"
 
 
 def test_only_active_collections_are_included(
