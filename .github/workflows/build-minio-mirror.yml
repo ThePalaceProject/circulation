@@ -1,0 +1,101 @@
+name: Build MinIO Mirror
+
+# Publishes ghcr.io/thepalaceproject/palace-ci-minio, the MinIO image used by the test suites of
+# circulation, library-registry and virtual-library-card. MinIO withdrew anonymous public access
+# to its own image (Docker Hub, then quay.io), so we host a copy built from its official GitHub
+# release binaries. See docker/Dockerfile.minio.mirror for the full rationale.
+#
+# The image is pinned to a single upstream release and its content is fully determined by the
+# checksums in that Dockerfile, so there is no scheduled rebuild: running this again produces the
+# same image. It runs only when the Dockerfile or this workflow changes, or on demand.
+#
+# One-time manual step: GHCR packages are created private. After the first successful run, set the
+# package visibility to public (Org -> Packages -> palace-ci-minio -> Package settings), matching
+# the other Palace images. Without that, every developer and CI job would need a docker login.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/build-minio-mirror.yml
+      - docker/Dockerfile.minio.mirror
+  workflow_dispatch:
+
+concurrency:
+  group: build-minio-mirror-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build & Push MinIO Mirror
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # See comment here: https://github.com/actions/runner-images/issues/1187#issuecomment-686735760
+      - name: Disable network offload
+        run: sudo ethtool -K eth0 tx off rx off
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # The Dockerfile is the single source of truth for which upstream release we mirror, so the
+      # tag is read back out of it rather than duplicated here where the two could drift apart.
+      - name: Determine image and tag
+        id: image
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/palace-ci-minio"
+          tag=$(sed -n 's/^ARG MINIO_RELEASE=\(.*\)$/\1/p' docker/Dockerfile.minio.mirror | head -1)
+          if [[ -z "$tag" ]]; then
+            echo "::error::Could not read MINIO_RELEASE from docker/Dockerfile.minio.mirror"
+            exit 1
+          fi
+          echo "Publishing $image:$tag"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      # The mirror contains no RUN instructions, so both architectures cross-build on this single
+      # amd64 runner with no QEMU emulation and no per-arch runner matrix.
+      - name: Build and push mirror image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./docker/Dockerfile.minio.mirror
+          target: minio
+          platforms: linux/amd64,linux/arm64
+          push: true
+          # Deliberately no `latest` tag: consumers pin this exact release. Following a moving
+          # upstream tag is part of how we ended up needing this mirror.
+          tags: ${{ steps.image.outputs.image }}:${{ steps.image.outputs.tag }}
+
+      - name: Verify published image
+        run: |
+          set -euo pipefail
+          ref="${{ steps.image.outputs.image }}:${{ steps.image.outputs.tag }}"
+          docker buildx imagetools inspect "$ref"
+          # Confirm both architectures actually made it into the published manifest list.
+          platforms=$(docker buildx imagetools inspect "$ref" --raw \
+            | jq -r '.manifests[] | select(.platform.os != "unknown") | "\(.platform.os)/\(.platform.architecture)"')
+          echo "Published platforms: $platforms"
+          for platform in linux/amd64 linux/arm64; do
+            grep -qx "$platform" <<< "$platforms" \
+              || { echo "::error::$platform missing from $ref"; exit 1; }
+          done
+          # Smoke-test the runner's native architecture.
+          docker run --rm --entrypoint /usr/bin/minio "$ref" --version

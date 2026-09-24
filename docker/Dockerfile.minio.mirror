@@ -1,0 +1,95 @@
+# syntax=docker/dockerfile:1.7
+#
+# Mirror of the upstream MinIO server image, published as
+# ghcr.io/thepalaceproject/palace-ci-minio.
+#
+# Why this exists
+# ---------------
+# MinIO withdrew anonymous public access to its server image: first from Docker Hub
+# (~13 Sept 2026), then from quay.io (~24 Sept 2026). Both registries now answer 401 to
+# anonymous manifest requests for every tag, and the binary download host (dl.min.io) answers
+# 410. Every Palace repo that ran `FROM <registry>/minio/minio` in its test setup therefore
+# fails before its test suite starts. Pinning an older tag or relying on a local Docker cache
+# does not help: the whole repository is gated, and tox-docker passes `pull=True` on every
+# build, forcing a fresh pull each time.
+#
+# The one channel MinIO still serves anonymously is GitHub release assets, so this image is
+# assembled from the official release binaries rather than pulled and re-tagged. The binaries
+# below are byte-for-byte identical to the ones inside the last upstream image CI used
+# (quay.io/minio/minio:latest, labelled RELEASE.2025-09-07T16-13-09Z) — verified by comparing
+# their sha256 against /usr/bin/minio and /usr/bin/mc extracted from that image.
+#
+# Scope
+# -----
+# This is a bare passthrough. It contains no Palace configuration: no credentials, no buckets,
+# no entrypoint script. The repos that consume it (circulation, library-registry,
+# virtual-library-card) each configure MinIO differently and keep doing so in their own
+# Dockerfiles — they change only their `FROM` line. Baking configuration in here would fork
+# the image between repos immediately.
+#
+# This mirror is a bridge, not a destination; see the retirement ticket for replacing MinIO
+# outright. Do not add features to it.
+#
+# Updating
+# --------
+# The release strings and their checksums are a matched set. If you bump a version you MUST
+# also replace the matching `--checksum=` value, or the build will fail (by design).
+# Checksums come from the `.sha256sum` asset published alongside each binary.
+
+ARG BASE_IMAGE=registry.access.redhat.com/ubi9/ubi-minimal:9.6
+
+# MinIO publishes one binary per platform rather than a multi-arch artifact, and each has its
+# own checksum, so the download is split into a per-architecture stage that `fetch` selects
+# from using TARGETARCH. This keeps checksum verification native to BuildKit's ADD.
+FROM ${BASE_IMAGE} AS fetch-amd64
+ARG MINIO_RELEASE=RELEASE.2025-09-07T16-13-09Z
+ARG MC_RELEASE=RELEASE.2025-08-13T08-35-41Z
+ADD --chmod=755 --checksum=sha256:7c5bd8512c6e966455b1d198209358b2d191c77a83ab377c4073281065fb855f \
+    https://github.com/minio/minio/releases/download/${MINIO_RELEASE}/minio.linux-amd64.${MINIO_RELEASE} \
+    /staging/minio
+ADD --chmod=755 --checksum=sha256:01f866e9c5f9b87c2b09116fa5d7c06695b106242d829a8bb32990c00312e891 \
+    https://github.com/minio/mc/releases/download/${MC_RELEASE}/mc.linux-amd64.${MC_RELEASE} \
+    /staging/mc
+
+FROM ${BASE_IMAGE} AS fetch-arm64
+ARG MINIO_RELEASE=RELEASE.2025-09-07T16-13-09Z
+ARG MC_RELEASE=RELEASE.2025-08-13T08-35-41Z
+ADD --chmod=755 --checksum=sha256:5c83cd2cf151717ba0243f73e1c7802ff36e272b67144bdd7f1f7d684fd6f03d \
+    https://github.com/minio/minio/releases/download/${MINIO_RELEASE}/minio.linux-arm64.${MINIO_RELEASE} \
+    /staging/minio
+ADD --chmod=755 --checksum=sha256:14c8c9616cfce4636add161304353244e8de383b2e2752c0e9dad01d4c27c12c \
+    https://github.com/minio/mc/releases/download/${MC_RELEASE}/mc.linux-arm64.${MC_RELEASE} \
+    /staging/mc
+
+FROM fetch-${TARGETARCH} AS fetch
+
+FROM ${BASE_IMAGE} AS minio
+ARG MINIO_RELEASE=RELEASE.2025-09-07T16-13-09Z
+ARG MC_RELEASE=RELEASE.2025-08-13T08-35-41Z
+
+LABEL org.opencontainers.image.title="palace-ci-minio" \
+      org.opencontainers.image.description="Unmodified MinIO server build, mirrored for Palace CI because upstream withdrew anonymous registry access." \
+      org.opencontainers.image.version="${MINIO_RELEASE}" \
+      org.opencontainers.image.source="https://github.com/ThePalaceProject/circulation" \
+      org.opencontainers.image.vendor="The Palace Project" \
+      io.palace.minio.release="${MINIO_RELEASE}" \
+      io.palace.mc.release="${MC_RELEASE}"
+
+COPY --from=fetch /staging/minio /usr/bin/minio
+COPY --from=fetch /staging/mc /usr/bin/mc
+
+# Matches the upstream image: MinIO reads credentials from these files when the corresponding
+# environment variables are not set, and `mc` needs a writable config dir.
+ENV MINIO_ROOT_USER_FILE=access_key \
+    MINIO_ROOT_PASSWORD_FILE=secret_key \
+    MINIO_KMS_SECRET_KEY_FILE=kms_master_key \
+    MINIO_CONFIG_ENV_FILE=config.env \
+    MC_CONFIG_DIR=/tmp/.mc
+
+# Declaring the volume creates the mount point, so no RUN is needed here. Keeping this stage
+# free of RUN instructions means the image cross-builds for every architecture without QEMU.
+VOLUME ["/data"]
+EXPOSE 9000 9001
+
+# A plain, unconfigured server. Consumers override this with their own CMD/ENTRYPOINT.
+CMD ["minio", "server", "/data", "--address", ":9000", "--console-address", ":9001"]
