@@ -31,9 +31,13 @@ from palace.manager.celery.tasks.generate_inventory_and_hold_reports import (
 from palace.manager.integration.license.opds.opds1.settings import OPDSImporterSettings
 from palace.manager.integration.license.overdrive.api import OverdriveAPI
 from palace.manager.sqlalchemy.model.classification import Genre, Subject
+from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.library import Library
-from palace.manager.sqlalchemy.model.licensing import LicensePoolStatus
+from palace.manager.sqlalchemy.model.licensing import (
+    LicensePoolStatus,
+    LicensePoolType,
+)
 from palace.manager.sqlalchemy.model.patron import Hold
 from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import (
@@ -1201,6 +1205,165 @@ def test_inventory_activity_report_hold_ratio(
     assert ratio_for(no_holds_work) == pytest.approx(0.0)
     # The ratio is undefined without owned copies, and reports the -1 sentinel.
     assert ratio_for(no_copies_work) == -1
+
+
+def _activity_report_rows(
+    db: DatabaseTransactionFixture, library: Library, *collections: Collection
+) -> list[dict[str, str]]:
+    """Run the activity report for a library and return its rows."""
+    csv_file = io.StringIO()
+    csv_file.name = "test_activity_report.csv"
+    generate_csv_report(
+        db=db.session,
+        csv_file=csv_file,
+        sql_params={
+            "library_id": library.id,
+            "integration_ids": tuple(
+                c.integration_configuration.id for c in collections
+            ),
+        },
+        query=palace_inventory_activity_report_query(),
+    )
+    csv_file.seek(0)
+    return list(csv.DictReader(csv_file))
+
+
+def test_inventory_activity_report_loan_counts(
+    db: DatabaseTransactionFixture,
+    services_fixture: ServicesFixture,
+):
+    """Loan counts come from Loan rows, and are scoped and filtered consistently."""
+    library = db.library(short_name="test_library")
+    other_library = db.library(short_name="other_library")
+    collection = create_test_opds_collection(
+        "Shared Collection", "SharedSource", db, library
+    )
+    # A second library on the collection is what makes it shared, which is what
+    # enables the shared_* columns.
+    collection.associated_libraries = [library, other_library]
+    ds = collection.data_source
+    assert ds is not None
+
+    work = db.work(
+        data_source_name=ds.name, collection=collection, with_license_pool=True
+    )
+    pool = work.license_pools[0]
+    start = utc_now() - timedelta(days=7)
+    unexpired = utc_now() + timedelta(days=1)
+
+    # This library: 2 active loans, plus an expired one that must not be counted.
+    pool.loan_to(db.patron(library=library), start=start, end=unexpired)
+    pool.loan_to(db.patron(library=library), start=start, end=None)
+    pool.loan_to(
+        db.patron(library=library), start=start, end=utc_now() - timedelta(minutes=1)
+    )
+    # The other library: 3 active loans, plus an expired one.
+    for _ in range(3):
+        pool.loan_to(db.patron(library=other_library), start=start, end=unexpired)
+    pool.loan_to(
+        db.patron(library=other_library),
+        start=start,
+        end=utc_now() - timedelta(minutes=1),
+    )
+
+    rows = _activity_report_rows(db, library, collection)
+    assert len(rows) == 1
+
+    assert int(rows[0]["library_active_loan_count"]) == 2
+    # The library's own loans are a subset of the shared count, never an addend.
+    assert int(rows[0]["shared_active_loan_count"]) == 5
+
+
+@pytest.mark.parametrize(
+    "pool_type",
+    [
+        pytest.param(LicensePoolType.AGGREGATED, id="odl"),
+        pytest.param(LicensePoolType.UNLIMITED, id="unlimited"),
+        pytest.param(LicensePoolType.METERED, id="metered"),
+    ],
+)
+def test_inventory_activity_report_loan_counts_by_pool_type(
+    db: DatabaseTransactionFixture,
+    services_fixture: ServicesFixture,
+    pool_type: LicensePoolType,
+):
+    """Loan counts are exact for every pool type.
+
+    The availability counters cannot express a loan count for all of these. An ODL
+    pool cancels a loan out of `licenses_owned` as `checkouts_left` falls, and an
+    unlimited pool holds every counter at zero. Counting Loan rows sidesteps both.
+    """
+    library = db.library(short_name="test_library")
+    other_library = db.library(short_name="other_library")
+    collection = create_test_opds_collection("Collection", "Source", db, library)
+    collection.associated_libraries = [library, other_library]
+    ds = collection.data_source
+    assert ds is not None
+
+    work = db.work(
+        data_source_name=ds.name, collection=collection, with_license_pool=True
+    )
+    pool = work.license_pools[0]
+    pool.type = pool_type
+
+    if pool_type == LicensePoolType.AGGREGATED:
+        # An ODL license with exactly one checkout left. Borrowing it drives
+        # licenses_owned, licenses_available and licenses_reserved all to zero.
+        license = db.license(
+            pool=pool,
+            status=LicenseStatus.available,
+            checkouts_left=1,
+            checkouts_available=1,
+            terms_concurrency=1,
+        )
+        license.checkout()
+        license.loan_to(db.patron(library=library), end=utc_now() + timedelta(days=1))
+        pool.update_availability_from_licenses()
+        assert pool.licenses_owned == 0
+    elif pool_type == LicensePoolType.UNLIMITED:
+        # Unlimited pools are imported with every counter pinned to zero.
+        pool.licenses_owned = 0
+        pool.licenses_available = 0
+        pool.licenses_reserved = 0
+        pool.patrons_in_hold_queue = 0
+        pool.loan_to(db.patron(library=library), end=utc_now() + timedelta(days=1))
+    else:
+        pool.licenses_owned = 5
+        pool.licenses_available = 4
+        pool.licenses_reserved = 0
+        pool.loan_to(db.patron(library=library), end=utc_now() + timedelta(days=1))
+
+    rows = _activity_report_rows(db, library, collection)
+    assert len(rows) == 1
+    # One patron holds a loan, whatever the counters say about it.
+    assert int(rows[0]["library_active_loan_count"]) == 1
+    assert int(rows[0]["shared_active_loan_count"]) == 1
+
+
+def test_inventory_activity_report_shared_loan_count_unshared_collection(
+    db: DatabaseTransactionFixture,
+    services_fixture: ServicesFixture,
+):
+    """A collection only this library uses reports the -1 sentinel, not a count."""
+    library = db.library(short_name="test_library")
+    collection = create_test_opds_collection(
+        "Unshared Collection", "UnsharedSource", db, library
+    )
+    ds = collection.data_source
+    assert ds is not None
+
+    work = db.work(
+        data_source_name=ds.name, collection=collection, with_license_pool=True
+    )
+    work.license_pools[0].loan_to(
+        db.patron(library=library), end=utc_now() + timedelta(days=1)
+    )
+
+    rows = _activity_report_rows(db, library, collection)
+    assert len(rows) == 1
+    assert int(rows[0]["library_active_loan_count"]) == 1
+    assert int(rows[0]["shared_active_loan_count"]) == -1
+    assert int(rows[0]["shared_active_hold_count"]) == -1
 
 
 @pytest.mark.parametrize(
