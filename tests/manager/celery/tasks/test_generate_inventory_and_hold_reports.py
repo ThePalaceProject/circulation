@@ -277,6 +277,71 @@ def test_generate_csv_report_quotes_target_age(
     assert '"5-8"' in csv_content
 
 
+def test_generate_excel_report_strips_illegal_characters(
+    db: DatabaseTransactionFixture,
+):
+    """Control characters in the data don't blow up Excel generation.
+
+    Imported metadata sometimes carries stray control characters (e.g. a U+001F
+    unit separator inside a contributor name). openpyxl refuses to write them,
+    so they are stripped rather than failing the whole report.
+    """
+    query = select(
+        literal("Sofi\x1fa Pescarin").label("author"),
+        literal("Ti\x0btle").label("title"),
+        literal("line1\nline2\ttabbed").label("notes"),
+    )
+
+    excel_file = io.BytesIO()
+    excel_file.name = "test_report.xlsx"
+
+    generate_excel_report(
+        db=db.session,
+        excel_file=excel_file,
+        sql_params={},
+        query=query,
+    )
+
+    excel_file.seek(0)
+    wb = load_workbook(io.BytesIO(excel_file.getvalue()))
+    ws = wb.active
+    assert ws is not None
+    headers = [ws.cell(row=1, column=c).value for c in range(1, ws.max_column + 1)]
+    values = {
+        header: ws.cell(row=2, column=index + 1).value
+        for index, header in enumerate(headers)
+    }
+    assert values["author"] == "Sofia Pescarin"
+    assert values["title"] == "Title"
+    # Tab, newline and carriage return are legal and must be preserved.
+    assert values["notes"] == "line1\nline2\ttabbed"
+
+
+def test_generate_csv_report_strips_illegal_characters(
+    db: DatabaseTransactionFixture,
+):
+    """The CSV output is sanitized identically to the Excel output."""
+    query = select(
+        literal("Sofi\x1fa Pescarin").label("author"),
+        literal(9780306406157).label("identifier"),
+    )
+
+    csv_file = io.StringIO()
+    csv_file.name = "test_report.csv"
+
+    generate_csv_report(
+        db=db.session,
+        csv_file=csv_file,
+        sql_params={},
+        query=query,
+        columns_to_stringify={"identifier"},
+    )
+
+    csv_file.seek(0)
+    rows = list(csv.reader(io.StringIO(csv_file.getvalue())))
+    assert rows[1][0] == "Sofia Pescarin"
+
+
 def test_only_active_collections_are_included(
     db: DatabaseTransactionFixture, services_fixture: ServicesFixture
 ):
