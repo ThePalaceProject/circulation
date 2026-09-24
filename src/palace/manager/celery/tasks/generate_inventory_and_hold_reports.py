@@ -14,6 +14,7 @@ from typing import IO, Any
 from celery import shared_task
 from openpyxl import Workbook
 from openpyxl.cell import WriteOnlyCell
+from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from openpyxl.styles.numbers import FORMAT_TEXT
 from sqlalchemy import (
     bindparam,
@@ -268,21 +269,38 @@ def _stringify_cell_value(value: Any) -> str:
     return str(value)
 
 
+def _sanitize_cell_value(value: str) -> str:
+    """Strip characters that Excel does not permit in worksheet cells.
+
+    Some imported metadata contains stray control characters (e.g. a U+001F unit
+    separator embedded in a contributor name). openpyxl rejects these with an
+    ``IllegalCharacterError``, which would fail the whole report, so we remove
+    them. The same regex openpyxl validates with is used here, so anything that
+    survives is guaranteed to be writable. Tab, newline and carriage return are
+    not matched by that regex and are therefore preserved.
+    """
+    return ILLEGAL_CHARACTERS_RE.sub("", value)
+
+
 def _cell_value(key: str, value: Any, stringify_cols: frozenset[str]) -> Any:
     """Convert a cell value for report output (shared by CSV and Excel writers).
 
     For columns in stringify_cols, forces the value to a plain string.
     Enum values are converted using their .value attribute.
     Timezone-aware datetimes are formatted as strings for Excel compatibility.
+    String values are stripped of characters that Excel disallows, so that the
+    CSV and Excel outputs stay identical.
     """
     if key in stringify_cols:
-        return _stringify_cell_value(value)
+        return _sanitize_cell_value(_stringify_cell_value(value))
     if value is None:
         return ""
     if isinstance(value, enum.Enum):
-        return str(value.value)
+        return _sanitize_cell_value(str(value.value))
     if isinstance(value, datetime) and value.tzinfo is not None:
         return value.strftime("%Y-%m-%d %H:%M:%S.%f")
+    if isinstance(value, str):
+        return _sanitize_cell_value(value)
     return value
 
 
