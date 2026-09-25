@@ -290,6 +290,7 @@ def test_generate_excel_report_strips_illegal_characters(
         literal("Ja\x1fne Doe").label("author"),
         literal("Ti\x0btle").label("title"),
         literal("line1\nline2\ttabbed").label("notes"),
+        literal("97803064\x1f06157").label("identifier"),
     )
 
     excel_file = io.BytesIO()
@@ -300,6 +301,7 @@ def test_generate_excel_report_strips_illegal_characters(
         excel_file=excel_file,
         sql_params={},
         query=query,
+        columns_to_stringify={"identifier"},
     )
 
     excel_file.seek(0)
@@ -312,6 +314,8 @@ def test_generate_excel_report_strips_illegal_characters(
         for index, header in enumerate(headers)
     }
     assert values["author"] == "Jane Doe"
+    # Stringified columns go through a separate branch of the sanitizer.
+    assert values["identifier"] == "9780306406157"
     assert values["title"] == "Title"
     # Tab, newline and carriage return are legal and must be preserved.
     assert values["notes"] == "line1\nline2\ttabbed"
@@ -320,10 +324,14 @@ def test_generate_excel_report_strips_illegal_characters(
 def test_generate_csv_report_strips_illegal_characters(
     db: DatabaseTransactionFixture,
 ):
-    """The CSV output is sanitized identically to the Excel output."""
+    """The CSV output is sanitized identically to the Excel output.
+
+    ``identifier`` is a stringified column, so it exercises the
+    ``_stringify_cell_value`` branch of the sanitizer as well.
+    """
     query = select(
         literal("Ja\x1fne Doe").label("author"),
-        literal(9780306406157).label("identifier"),
+        literal("97803064\x1f06157").label("identifier"),
     )
 
     csv_file = io.StringIO()
@@ -339,7 +347,7 @@ def test_generate_csv_report_strips_illegal_characters(
 
     csv_file.seek(0)
     rows = list(csv.reader(io.StringIO(csv_file.getvalue())))
-    assert rows[1][0] == "Jane Doe"
+    assert rows[1] == ["Jane Doe", "9780306406157"]
 
 
 def test_only_active_collections_are_included(
