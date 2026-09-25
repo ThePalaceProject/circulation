@@ -282,6 +282,29 @@ def _sanitize_cell_value(value: str) -> str:
     return ILLEGAL_CHARACTERS_RE.sub("", value)
 
 
+# Leading characters that a spreadsheet application treats as the start of a
+# formula when it parses a CSV. Excel's own xlsx parser only does this for "=",
+# but its CSV importer (and Google Sheets) also act on these.
+_CSV_FORMULA_PREFIXES = frozenset({"=", "+", "-", "@", "\t", "\r"})
+
+
+def _escape_csv_formula(value: Any) -> Any:
+    """Neutralize a value a spreadsheet would otherwise parse as a formula.
+
+    Imported metadata is attacker-influenced -- it comes from third-party feeds --
+    so a title or contributor name beginning with ``=`` would be evaluated when
+    library staff open the CSV in Excel or Sheets. Prefixing with an apostrophe is
+    the conventional mitigation; the spreadsheet consumes it and displays the
+    original text.
+
+    Only ``str`` values are touched, so genuine numbers (written unquoted by
+    ``QUOTE_NONNUMERIC``) keep their type and negative numbers are unaffected.
+    """
+    if isinstance(value, str) and value[:1] in _CSV_FORMULA_PREFIXES:
+        return f"'{value}"
+    return value
+
+
 def _cell_value(key: str, value: Any, stringify_cols: frozenset[str]) -> Any:
     """Convert a cell value for report output (shared by CSV and Excel writers).
 
@@ -314,7 +337,10 @@ def _write_csv_rows(
     writer.writerow(keys)
     for row in rows:
         writer.writerow(
-            [_cell_value(key, row.get(key, ""), stringify_cols) for key in keys]
+            [
+                _escape_csv_formula(_cell_value(key, row.get(key, ""), stringify_cols))
+                for key in keys
+            ]
         )
     csv_file.flush()
 
@@ -340,6 +366,13 @@ def _write_excel_rows(
         for key in keys:
             value = _cell_value(key, row.get(key, ""), stringify_cols)
             cell = WriteOnlyCell(ws, value=value)
+            if isinstance(value, str):
+                # openpyxl stores any "="-prefixed string as a formula cell, which
+                # Excel then evaluates. Pin string values to the text type so
+                # imported metadata can't become executable. This is a no-op for
+                # strings openpyxl already typed as text. Note that number_format
+                # is presentation only and does NOT prevent this.
+                cell.data_type = "s"
             if key in stringify_cols:
                 cell.number_format = FORMAT_TEXT
             data_row.append(cell)

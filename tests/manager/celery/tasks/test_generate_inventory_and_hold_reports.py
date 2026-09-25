@@ -350,6 +350,84 @@ def test_generate_csv_report_strips_illegal_characters(
     assert rows[1] == ["Jane Doe", "9780306406157"]
 
 
+def test_generate_excel_report_does_not_create_formulas(
+    db: DatabaseTransactionFixture,
+):
+    """Imported metadata is never written as an executable formula.
+
+    openpyxl stores any "="-prefixed string as a formula cell, so a contributor
+    name or title from a third-party feed could otherwise be evaluated when
+    library staff open the report.
+    """
+    payload = '=HYPERLINK("http://example.com/evil","Click")'
+    query = select(
+        literal(payload).label("author"),
+        literal("=1+1").label("title"),
+        literal("normal value").label("collection_name"),
+    )
+
+    excel_file = io.BytesIO()
+    excel_file.name = "test_report.xlsx"
+
+    generate_excel_report(
+        db=db.session,
+        excel_file=excel_file,
+        sql_params={},
+        query=query,
+    )
+
+    excel_file.seek(0)
+    ws = load_workbook(io.BytesIO(excel_file.getvalue())).active
+    assert ws is not None
+    headers = [ws.cell(row=1, column=c).value for c in range(1, ws.max_column + 1)]
+    cells = {
+        header: ws.cell(row=2, column=index + 1) for index, header in enumerate(headers)
+    }
+
+    # Stored as text, not as a formula, and the text is preserved verbatim.
+    assert cells["author"].data_type == "s"
+    assert cells["author"].value == payload
+    assert cells["title"].data_type == "s"
+    assert cells["title"].value == "=1+1"
+    assert cells["collection_name"].value == "normal value"
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        pytest.param(
+            '=HYPERLINK("http://x","c")', '\'=HYPERLINK("http://x","c")', id="equals"
+        ),
+        pytest.param("+1+1", "'+1+1", id="plus"),
+        pytest.param("-1+1", "'-1+1", id="minus"),
+        pytest.param("@SUM(A1)", "'@SUM(A1)", id="at"),
+        pytest.param("5-8", "5-8", id="target-age-untouched"),
+        pytest.param("Jane Doe", "Jane Doe", id="plain-untouched"),
+    ],
+)
+def test_generate_csv_report_escapes_formulas(
+    db: DatabaseTransactionFixture,
+    value: str,
+    expected: str,
+):
+    """Formula-like strings are neutralized in the CSV, ordinary values are not."""
+    query = select(literal(value).label("author"))
+
+    csv_file = io.StringIO()
+    csv_file.name = "test_report.csv"
+
+    generate_csv_report(
+        db=db.session,
+        csv_file=csv_file,
+        sql_params={},
+        query=query,
+    )
+
+    csv_file.seek(0)
+    rows = list(csv.reader(io.StringIO(csv_file.getvalue())))
+    assert rows[1][0] == expected
+
+
 def test_only_active_collections_are_included(
     db: DatabaseTransactionFixture, services_fixture: ServicesFixture
 ):
