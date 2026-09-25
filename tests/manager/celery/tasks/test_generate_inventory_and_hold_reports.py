@@ -35,6 +35,7 @@ from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import LicensePoolStatus
 from palace.manager.sqlalchemy.model.patron import Hold
+from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import (
     get_one_or_create,
     tuple_to_numericrange,
@@ -1151,7 +1152,7 @@ def test_inventory_activity_report_hold_ratio(
     ds = collection.data_source
     assert ds is not None
 
-    def work_with(licenses_owned: int, holds: int):
+    def work_with(licenses_owned: int, holds: int) -> Work:
         work = db.work(
             data_source_name=ds.name, collection=collection, with_license_pool=True
         )
@@ -1188,7 +1189,7 @@ def test_inventory_activity_report_hold_ratio(
     csv_file.seek(0)
     rows = list(csv.DictReader(csv_file))
 
-    def ratio_for(work) -> float:
+    def ratio_for(work: Work) -> float:
         identifier_value = work.presentation_edition.primary_identifier.identifier
         row = next(r for r in rows if r["identifier"] == identifier_value)
         return float(row["library_hold_ratio"])
