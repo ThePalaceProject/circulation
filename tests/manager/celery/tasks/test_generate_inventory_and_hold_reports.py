@@ -35,6 +35,7 @@ from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import LicensePoolStatus
 from palace.manager.sqlalchemy.model.patron import Hold
+from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.sqlalchemy.util import (
     get_one_or_create,
     tuple_to_numericrange,
@@ -1133,6 +1134,73 @@ def test_inventory_report_visibility_columns(
     suppressed_row = row_for(suppressed_work)
     assert suppressed_row["visible"] == "false"
     assert suppressed_row["visibility_status"] == "manually suppressed"
+
+
+def test_inventory_activity_report_hold_ratio(
+    db: DatabaseTransactionFixture,
+    services_fixture: ServicesFixture,
+):
+    """library_hold_ratio is a real ratio, not integer division.
+
+    The numbers come from a title in a real report (PP-4552): 31 holds against
+    61 owned copies, which was being reported as 0.
+    """
+    library = db.library(short_name="test_library")
+    collection = create_test_opds_collection(
+        "Ratio Collection", "RatioSource", db, library
+    )
+    ds = collection.data_source
+    assert ds is not None
+
+    def work_with(licenses_owned: int, holds: int) -> Work:
+        work = db.work(
+            data_source_name=ds.name, collection=collection, with_license_pool=True
+        )
+        pool = work.license_pools[0]
+        pool.licenses_owned = licenses_owned
+        for _ in range(holds):
+            get_one_or_create(
+                db.session,
+                Hold,
+                patron=db.patron(library=library),
+                license_pool=pool,
+                position=1,
+                start=utc_now(),
+                end=utc_now() + timedelta(days=1),
+            )
+        return work
+
+    fractional_work = work_with(licenses_owned=61, holds=31)
+    whole_work = work_with(licenses_owned=2, holds=6)
+    no_holds_work = work_with(licenses_owned=4, holds=0)
+    no_copies_work = work_with(licenses_owned=0, holds=2)
+
+    csv_file = io.StringIO()
+    csv_file.name = "test_activity_report.csv"
+    generate_csv_report(
+        db=db.session,
+        csv_file=csv_file,
+        sql_params={
+            "library_id": library.id,
+            "integration_ids": (collection.integration_configuration.id,),
+        },
+        query=palace_inventory_activity_report_query(),
+    )
+    csv_file.seek(0)
+    rows = list(csv.DictReader(csv_file))
+
+    def ratio_for(work: Work) -> float:
+        identifier_value = work.presentation_edition.primary_identifier.identifier
+        row = next(r for r in rows if r["identifier"] == identifier_value)
+        return float(row["library_hold_ratio"])
+
+    # 31 / 61. Integer division would truncate this to 0.
+    assert ratio_for(fractional_work) == pytest.approx(0.51)
+    # Ratios at or above 1 were unaffected by the truncation.
+    assert ratio_for(whole_work) == pytest.approx(3.0)
+    assert ratio_for(no_holds_work) == pytest.approx(0.0)
+    # The ratio is undefined without owned copies, and reports the -1 sentinel.
+    assert ratio_for(no_copies_work) == -1
 
 
 @pytest.mark.parametrize(
