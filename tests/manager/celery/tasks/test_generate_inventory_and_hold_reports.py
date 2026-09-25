@@ -917,7 +917,7 @@ def test_generate_report(
                 # Activity report specific fields for book with holds
                 assert int(row["total_library_allowed_concurrent_users"]) == 1
                 assert int(row["library_active_loan_count"]) == 0
-                # Collection is shared (library2 was added), licenses_reserved defaults to 0
+                # Collection is shared (library2 was added), and no patron has a loan
                 assert int(row["shared_active_loan_count"]) == 0
                 assert int(row["library_active_hold_count"]) == 3
                 assert (
@@ -1140,6 +1140,27 @@ def test_inventory_report_visibility_columns(
     assert suppressed_row["visibility_status"] == "manually suppressed"
 
 
+def _activity_report_rows(
+    db: DatabaseTransactionFixture, library: Library, *collections: Collection
+) -> list[dict[str, str]]:
+    """Run the activity report for a library and return its rows."""
+    csv_file = io.StringIO()
+    csv_file.name = "test_activity_report.csv"
+    generate_csv_report(
+        db=db.session,
+        csv_file=csv_file,
+        sql_params={
+            "library_id": library.id,
+            "integration_ids": tuple(
+                c.integration_configuration.id for c in collections
+            ),
+        },
+        query=palace_inventory_activity_report_query(),
+    )
+    csv_file.seek(0)
+    return list(csv.DictReader(csv_file))
+
+
 def test_inventory_activity_report_hold_ratio(
     db: DatabaseTransactionFixture,
     services_fixture: ServicesFixture,
@@ -1179,19 +1200,7 @@ def test_inventory_activity_report_hold_ratio(
     no_holds_work = work_with(licenses_owned=4, holds=0)
     no_copies_work = work_with(licenses_owned=0, holds=2)
 
-    csv_file = io.StringIO()
-    csv_file.name = "test_activity_report.csv"
-    generate_csv_report(
-        db=db.session,
-        csv_file=csv_file,
-        sql_params={
-            "library_id": library.id,
-            "integration_ids": (collection.integration_configuration.id,),
-        },
-        query=palace_inventory_activity_report_query(),
-    )
-    csv_file.seek(0)
-    rows = list(csv.DictReader(csv_file))
+    rows = _activity_report_rows(db, library, collection)
 
     def ratio_for(work: Work) -> float:
         identifier_value = work.presentation_edition.primary_identifier.identifier
@@ -1205,27 +1214,6 @@ def test_inventory_activity_report_hold_ratio(
     assert ratio_for(no_holds_work) == pytest.approx(0.0)
     # The ratio is undefined without owned copies, and reports the -1 sentinel.
     assert ratio_for(no_copies_work) == -1
-
-
-def _activity_report_rows(
-    db: DatabaseTransactionFixture, library: Library, *collections: Collection
-) -> list[dict[str, str]]:
-    """Run the activity report for a library and return its rows."""
-    csv_file = io.StringIO()
-    csv_file.name = "test_activity_report.csv"
-    generate_csv_report(
-        db=db.session,
-        csv_file=csv_file,
-        sql_params={
-            "library_id": library.id,
-            "integration_ids": tuple(
-                c.integration_configuration.id for c in collections
-            ),
-        },
-        query=palace_inventory_activity_report_query(),
-    )
-    csv_file.seek(0)
-    return list(csv.DictReader(csv_file))
 
 
 def test_inventory_activity_report_loan_counts(
