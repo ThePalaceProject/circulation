@@ -528,18 +528,38 @@ def _licenses_lateral() -> Lateral:
     )
 
 
-def _library_loans_lateral() -> Lateral:
-    """How many loans are active for this item in this library?"""
+def _active_loans_lateral(*, this_library_only: bool) -> Lateral:
+    """How many loans are active for this item?
+
+    Counts ``Loan`` rows rather than deriving a number from the pool's availability
+    counters, because those counters cannot express a loan count for every pool type.
+    An ``AGGREGATED`` (ODL) pool recomputes ``licenses_owned`` from its licenses as
+    ``min(checkouts_left, terms_concurrency)``, and a checkout decrements
+    ``checkouts_left``, so a loan shrinks the owned and available counts together and
+    cancels itself out. An ``UNLIMITED`` pool holds all four counters at zero by
+    design. In both cases the loans themselves are recorded, so counting them is both
+    exact and uniform across pool types.
+
+    A loan is active until it expires. Expired loans are deleted by
+    ``celery.tasks.reaper.loan_reaper``, but only for metered pools and only when that
+    task next runs, so they have to be excluded here as well.
+
+    :param this_library_only: Restrict the count to loans held by patrons of the
+        library the report is being generated for. When False, every library sharing
+        the collection is counted.
+    """
     loan_alias = aliased(Loan)
     patron_alias = aliased(Patron)
-    return lateral(
-        select(func.count(loan_alias.id).label("active_loan_count"))
-        .join(patron_alias, loan_alias.patron_id == patron_alias.id)
-        .where(
-            loan_alias.license_pool_id == LicensePool.id,
-            patron_alias.library_id == Library.id,
-        )
+    unexpired = loan_alias.end.is_(None) | (loan_alias.end > func.now())
+    query = select(func.count(loan_alias.id).label("active_loan_count")).where(
+        loan_alias.license_pool_id == LicensePool.id,
+        unexpired,
     )
+    if this_library_only:
+        query = query.join(patron_alias, loan_alias.patron_id == patron_alias.id).where(
+            patron_alias.library_id == Library.id
+        )
+    return lateral(query)
 
 
 def _library_hold_ratio(lib_holds: Lateral) -> ColumnElement[Any]:
@@ -702,7 +722,8 @@ def palace_inventory_activity_report_query() -> Select:
     wg_subquery = _comma_separated_sorted_work_genre_list_subquery()
     collection_sharing = _is_shared_collection_lateral()
     lib_holds = _library_holds_lateral()
-    lib_loans = _library_loans_lateral()
+    lib_loans = _active_loans_lateral(this_library_only=True)
+    shared_loans = _active_loans_lateral(this_library_only=False)
 
     return (
         select(
@@ -730,7 +751,7 @@ def palace_inventory_activity_report_query() -> Select:
             case(
                 (
                     collection_sharing.c.is_shared_collection,
-                    LicensePool.licenses_reserved,
+                    func.coalesce(shared_loans.c.active_loan_count, 0),
                 ),
                 else_=-1,
             ).label("shared_active_loan_count"),
@@ -765,6 +786,7 @@ def palace_inventory_activity_report_query() -> Select:
         .outerjoin(wg_subquery, Work.id == wg_subquery.c.work_id)
         .outerjoin(lib_holds, true())
         .outerjoin(lib_loans, true())
+        .outerjoin(shared_loans, true())
         .join(collection_sharing, true())
         .where(
             Library.id == bindparam("library_id"),
