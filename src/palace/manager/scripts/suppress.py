@@ -3,7 +3,7 @@ import csv
 from collections.abc import Sequence
 from datetime import datetime, timezone
 from enum import Enum, auto
-from typing import NamedTuple, cast
+from typing import Any, NamedTuple, cast
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -39,7 +39,9 @@ class SuppressWorkForLibraryScript(Script):
 
     BY_DATABASE_ID = "Database ID"
 
-    _collection_ids: dict[int, list[int]]
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._collection_ids: dict[int, list[int]] = {}
 
     @classmethod
     def arg_parser(cls, _db: Session) -> argparse.ArgumentParser:
@@ -178,8 +180,6 @@ class SuppressWorkForLibraryScript(Script):
         something that should depend on where today falls in a
         collection's subscription window.
         """
-        if not hasattr(self, "_collection_ids"):
-            self._collection_ids = {}
         if library.id not in self._collection_ids:
             self._collection_ids[library.id] = [
                 c.id for c in library.associated_collections if c.id is not None
@@ -195,14 +195,21 @@ class SuppressWorkForLibraryScript(Script):
         each of them instead of looking ambiguous to both.
 
         Pools for this exact identifier in one of the library's collections
-        are exact matches, and win outright over equivalency. There can be
-        more than one of them: each collection that carries a title
-        licenses it separately, and every non-open-access pool gets its own
-        permanent Work -- so a library holding both a consortium's
-        OverDrive collection and its own OverDrive Advantage collection has
-        two works for one OverDrive id. All of them are returned, so that
-        case meets the same ambiguity guard as the equivalency case below
-        rather than silently suppressing whichever was found first.
+        are exact matches, and win outright over equivalency. With
+        consistent data there is at most one Work among them, because
+        `LicensePool.calculate_work` forces every pool sharing an
+        identifier onto the same Work -- so suppressing it already covers
+        every collection that identifier appears in, a consortium's
+        OverDrive collection and a library's own Advantage collection
+        alike. Every matching work is nonetheless returned rather than the
+        first one found, so that inconsistent data (a state
+        `calculate_work` itself warns about and repairs, logging that the
+        pools have "more than one Work between them") meets the ambiguity
+        guard instead of being silently resolved to one of them.
+
+        The legitimate way one identifier reaches several works is
+        different vendor identifiers sharing an ISBN, and that goes
+        through the equivalency path below rather than this one.
 
         A pool whose Work hasn't been calculated yet counts for nothing
         here: suppression is a Work/Library relation, so a pool without a
@@ -332,8 +339,8 @@ class SuppressWorkForLibraryScript(Script):
             return SuppressOutcome(SuppressResult.NEWLY_SUPPRESSED, description)
 
         # This identifier resolves to more than one of the library's works
-        # (see load_works) -- e.g. the same title licensed through more than
-        # one of its collections, each pool with its own permanent Work.
+        # (see load_works) -- usually different vendor identifiers sharing
+        # an ISBN, each with its own Work.
         if all(library in work.suppressed_for for work in works):
             # Every candidate already reflects the desired state, so there's
             # nothing to decide or change -- this isn't really ambiguous in

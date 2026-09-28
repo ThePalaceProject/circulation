@@ -687,23 +687,28 @@ class TestSuppressWorkForLibraryScript:
             ),
         ],
     )
-    def test_suppress_work_same_identifier_in_two_of_the_librarys_collections(
+    def test_suppress_work_same_identifier_pointing_at_inconsistent_works(
         self,
         db: DatabaseTransactionFixture,
         suppress_ambiguous: bool,
         expected_result: SuppressResult,
         suppressed_after: bool,
     ):
-        """One vendor identifier can be licensed by two of a library's own
-        collections -- a consortium's OverDrive collection plus that
-        library's OverDrive Advantage collection, say. Each pool gets its
-        own permanent Work, so suppressing one and reporting success would
-        leave the title circulating through the other: both must reach the
-        ambiguity guard, and --suppress-ambiguous must cover both."""
+        """`LicensePool.calculate_work` forces every pool sharing an
+        identifier onto one Work, so two pools of one identifier pointing
+        at different Works is precisely the inconsistency it warns about
+        ("more than one Work between them") and repairs -- which is why
+        this state has to be built by hand here rather than through the
+        normal import path.
+
+        The guard exists so that if the script does meet that state it
+        refuses, rather than suppressing one Work, reporting success, and
+        leaving the other circulating."""
         test_library = db.library(short_name="test")
         edition = db.edition()
 
-        # The same identifier, licensed separately by each collection.
+        # Two pools of one identifier, deliberately pointed at different
+        # works: the inconsistent state calculate_work would repair.
         works = []
         for _ in range(2):
             work = db.work(with_license_pool=False)
