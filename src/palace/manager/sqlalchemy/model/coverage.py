@@ -31,11 +31,7 @@ if TYPE_CHECKING:
 
 
 class BaseCoverageRecord:
-    """Holds the ``coverage_status`` enum shared by the two dormant coverage models.
-
-    Everything else on this mixin went with the queries it supported; it is
-    removed along with those models and their tables in the follow-up PR.
-    """
+    """Holds the ``coverage_status`` enum shared by the two dormant coverage models."""
 
     SUCCESS = "success"
     TRANSIENT_FAILURE = "transient failure"
@@ -315,30 +311,13 @@ class Timestamp(Base):
 class CoverageRecord(Base, BaseCoverageRecord):
     """A record of a Identifier being used as input into some process.
 
-    Dormant model retained only so the ``coveragerecords`` table stays in the
-    schema for one more release. The CoverageProvider machinery that read and
-    wrote these records has been retired, and the ``coverage_records``
-    relationships on Identifier, DataSource and Collection have been removed, so
-    nothing in the current code reads or writes this table.
-
-    Removing those relationships is what actually stops the reads: a mapped
-    relationship is loaded by SQLAlchemy whenever its parent is deleted (to
-    cascade the delete, or to null the child's foreign key), so while they
-    existed every ``session.delete(collection)`` still SELECTed from this table.
-
-    The model is kept for one more release because the schema of a freshly
-    initialized database is built with ``create_all`` from these models, not by
-    replaying migrations -- dropping the class would remove the table from new
-    installs immediately, while N-1 app servers still expect it. The model and
-    the table are removed together in a follow-up PR that ships after this
-    release.
-
-    Only the columns remain. The query and write helpers (``lookup``, ``add_for``,
-    ``bulk_add`` and friends) are gone: nothing called them, and with the parent
-    relationships removed a row they wrote could no longer be cleaned up when its
-    Identifier, DataSource or Collection is deleted -- it would just make that
-    delete fail on a foreign key. Keeping the class a bare table definition makes
-    it impossible to write such a row.
+    Dormant: nothing reads or writes this table. The class is retained only so
+    ``create_all`` keeps emitting the table for freshly initialized databases,
+    which N-1 app servers still expect; it and the table are removed together in
+    a follow-up PR. It is deliberately just a table definition -- without the
+    parent relationships, a row written here could not be cleaned up when its
+    Identifier, DataSource or Collection is deleted, and would instead make that
+    delete fail on a foreign key.
     """
 
     __tablename__ = "coveragerecords"

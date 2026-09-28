@@ -1,42 +1,32 @@
 """Empty coveragerecords before dropping it
 
-The ``coverage_records`` relationships on Identifier, DataSource and Collection are
-removed in this release, which is what finally stops the application reading the
-``coveragerecords`` table. Those relationships were also the only thing keeping parent
-deletes working: ``coveragerecords`` has plain foreign keys to ``identifiers``,
-``datasources`` and ``collections`` with no ``ON DELETE`` clause, so SQLAlchemy had to
-load the children and cascade (or null their FK) by hand. With the relationships gone
-nothing does that any more, and any surviving row would make deleting its parent fail
-with a foreign-key violation.
-
-The rows are dead data -- the CoverageProvider machinery that wrote them was retired a
-release ago -- so we empty the table rather than add ``ON DELETE`` clauses to a table
+This release removes the ``coverage_records`` relationships on Identifier, DataSource
+and Collection, which is what finally stops the application reading this table. Those
+relationships were also the only thing cleaning up children on a parent delete --
+``coveragerecords`` has plain foreign keys with no ``ON DELETE`` clause -- so with them
+gone any surviving row would make deleting its parent fail on a foreign key. The rows
+are dead data, so we empty the table rather than add ``ON DELETE`` clauses to a table
 that is dropped in the next release.
 
 TRUNCATE rather than DELETE: the table can hold tens of millions of rows, and TRUNCATE
-reclaims them in constant time without generating row-level WAL. Nothing references
+reclaims them in constant time without row-level WAL. Nothing references
 ``coveragerecords``, so no CASCADE is needed.
 
-The ACCESS EXCLUSIVE lock TRUNCATE takes is *not* guaranteed to be uncontended: N-1
-servers still map the ``coverage_records`` relationships this release removes, so they
-take an ACCESS SHARE lock on the table whenever they delete an Identifier, DataSource
-or Collection -- that is the very behaviour this release exists to stop. If such a
-delete is in flight the TRUNCATE waits, and a waiting ACCESS EXCLUSIVE request queues
-ahead of every later reader, so the whole table stalls behind it. The wait should be
-short, but ``lock_timeout`` bounds it: the migration fails fast and is retried rather
-than blocking instance startup.
+``lock_timeout`` bounds the wait for TRUNCATE's ACCESS EXCLUSIVE lock. That lock is not
+guaranteed to be uncontended: N-1 servers still map the relationships this release
+removes, so they read the table when deleting an Identifier, DataSource or Collection.
+Without the timeout a TRUNCATE waiting on such a delete would queue ahead of every
+later reader and stall them all indefinitely. With it, the statement gives up after 5s
+and the migration fails -- nothing retries it, so the deploy has to be re-run, which is
+the better failure: loud and bounded rather than a spreading stall.
 
-The timeout is reset immediately afterwards. ``SET LOCAL`` lasts to the end of the
-*transaction*, not the end of this revision, and ``alembic/env.py`` runs every pending
-revision inside a single ``context.begin_transaction()`` (it does not set
-``transaction_per_migration``). Without the reset, any revision applied after this one
-in the same ``alembic upgrade`` -- the stacked drop in the next release, or anything
-added before this one ships -- would silently inherit a 5s lock timeout it never asked
-for, and could roll the whole upgrade back while waiting on a busy table.
+The timeout is reset immediately afterwards because ``SET LOCAL`` lasts to the end of
+the *transaction*, not the end of this revision, and ``alembic/env.py`` runs every
+pending revision in a single ``context.begin_transaction()``. Without the reset, a
+later revision in the same upgrade would inherit a 5s timeout it never asked for.
 
-``equivalentscoveragerecords`` deliberately gets no such treatment: it has no ORM
-relationships pointing at it, and its one foreign key already declares
-``ON DELETE CASCADE``, so the database cleans it up on its own.
+``equivalentscoveragerecords`` needs no such treatment: it has no ORM relationships
+pointing at it, and its one foreign key already declares ``ON DELETE CASCADE``.
 
 Revision ID: 58ebd34c5092
 Revises: 5b1f4f3c7979
