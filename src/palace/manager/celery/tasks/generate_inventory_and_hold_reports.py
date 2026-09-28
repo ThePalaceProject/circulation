@@ -561,8 +561,11 @@ def _active_loans_lateral(*, this_library_only: bool) -> Lateral:
     exact and uniform across pool types.
 
     A loan is active until it expires. Expired loans are deleted by
-    ``celery.tasks.reaper.loan_reaper``, but only for metered pools and only when that
-    task next runs, so they have to be excluded here as well.
+    ``celery.tasks.reaper.loan_reaper``, but only for ``METERED`` and ``AGGREGATED``
+    pools (it filters on ``LicensePool.metered_or_equivalent_type``), and only when
+    that task next runs. So expired rows linger between runs, and on ``UNLIMITED``
+    and open-access pools they are never reaped at all; either way they have to be
+    excluded here.
 
     :param this_library_only: Restrict the count to loans held by patrons of the
         library the report is being generated for. When False, every library sharing
