@@ -17,8 +17,10 @@ from openpyxl.cell import WriteOnlyCell
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from openpyxl.styles.numbers import FORMAT_TEXT
 from sqlalchemy import (
+    Numeric,
     bindparam,
     case,
+    cast,
     exists,
     false,
     func,
@@ -560,6 +562,28 @@ def _library_loans_lateral() -> Lateral:
     )
 
 
+def _library_hold_ratio(lib_holds: Lateral) -> ColumnElement[Any]:
+    """How many holds does this library have per owned copy?
+
+    Returns -1 when the item has no owned copies, since the ratio is undefined.
+
+    The numerator is cast to ``Numeric`` because both operands are otherwise integral,
+    and PostgreSQL's integer division discards the fractional part of the result at any
+    magnitude: 7 holds against 2 copies would report 3 rather than 3.5, and any ratio
+    below 1.0 would report 0.
+    """
+    active_hold_count = func.coalesce(lib_holds.c.active_hold_count, 0)
+    return case(
+        (
+            LicensePool.licenses_owned > 0,
+            func.round(
+                cast(active_hold_count, Numeric) / LicensePool.licenses_owned, 2
+            ),
+        ),
+        else_=-1,
+    )
+
+
 def inventory_report_query() -> Select:
     """A query for inventory report with license information.
 
@@ -742,14 +766,7 @@ def palace_inventory_activity_report_query() -> Select:
                 ),
                 else_=-1,
             ).label("shared_active_hold_count"),
-            case(
-                (
-                    LicensePool.licenses_owned > 0,
-                    func.coalesce(lib_holds.c.active_hold_count, 0)
-                    / LicensePool.licenses_owned,
-                ),
-                else_=-1,
-            ).label("library_hold_ratio"),
+            _library_hold_ratio(lib_holds).label("library_hold_ratio"),
         )
         .select_from(LicensePool)
         .join(Identifier, LicensePool.identifier_id == Identifier.id)
