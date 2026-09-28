@@ -406,6 +406,8 @@ def test_generate_excel_report_does_not_create_formulas(
         pytest.param("+1+1", "'+1+1", id="plus"),
         pytest.param("-1+1", "'-1+1", id="minus"),
         pytest.param("@SUM(A1)", "'@SUM(A1)", id="at"),
+        pytest.param("\tlead-tab", "'\tlead-tab", id="tab"),
+        pytest.param("\rlead-cr", "'\rlead-cr", id="carriage-return"),
         pytest.param("5-8", "5-8", id="target-age-untouched"),
         pytest.param("Jane Doe", "Jane Doe", id="plain-untouched"),
     ],
@@ -431,6 +433,38 @@ def test_generate_csv_report_escapes_formulas(
     csv_file.seek(0)
     rows = list(csv.reader(io.StringIO(csv_file.getvalue())))
     assert rows[1][0] == expected
+
+
+def test_generate_csv_report_leaves_negative_numbers_numeric(
+    db: DatabaseTransactionFixture,
+):
+    """A real negative number is not mistaken for a formula.
+
+    "-" is in the CSV escape set, but only ``str`` values are escaped, so numeric
+    columns keep their type. Asserted on the raw CSV text rather than the parsed
+    row, because ``csv.reader`` yields strings either way and would hide the
+    difference between an unquoted number and a quoted string.
+    """
+    query = select(
+        literal(-5).label("int_col"),
+        literal(-5.5).label("float_col"),
+        literal("-5").label("str_col"),
+    )
+
+    csv_file = io.StringIO()
+    csv_file.name = "test_report.csv"
+
+    generate_csv_report(
+        db=db.session,
+        csv_file=csv_file,
+        sql_params={},
+        query=query,
+    )
+
+    csv_file.seek(0)
+    data_line = csv_file.getvalue().splitlines()[1]
+    # Numbers stay unquoted and unescaped; only the string form is escaped.
+    assert data_line == '-5,-5.5,"\'-5"'
 
 
 def test_only_active_collections_are_included(

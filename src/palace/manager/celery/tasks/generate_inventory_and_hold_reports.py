@@ -296,11 +296,17 @@ def _escape_csv_formula(value: Any) -> Any:
     Imported metadata is attacker-influenced -- it comes from third-party feeds --
     so a title or contributor name beginning with ``=`` would be evaluated when
     library staff open the CSV in Excel or Sheets. Prefixing with an apostrophe is
-    the conventional mitigation; the spreadsheet consumes it and displays the
-    original text.
+    the conventional mitigation.
+
+    Note that this genuinely changes the CSV data: Excel only hides a leading
+    apostrophe that was typed into a cell, so on CSV import the apostrophe is part
+    of the value. Staff will see ``'=HYPERLINK(...)`` and any script reading the
+    CSV gets the apostrophe too. Blocking the formula is worth that cost, but the
+    CSV is no longer byte-identical to the xlsx (see ``_write_reports``).
 
     Only ``str`` values are touched, so genuine numbers (written unquoted by
-    ``QUOTE_NONNUMERIC``) keep their type and negative numbers are unaffected.
+    ``QUOTE_NONNUMERIC``) keep their type -- a negative *number* is unaffected,
+    though a negative number that arrives as a *string* is escaped.
     """
     if isinstance(value, str) and value[:1] in _CSV_FORMULA_PREFIXES:
         return f"'{value}"
@@ -314,7 +320,8 @@ def _cell_value(key: str, value: Any, stringify_cols: frozenset[str]) -> Any:
     Enum values are converted using their .value attribute.
     Timezone-aware datetimes are formatted as strings for Excel compatibility.
     String values from the database are stripped of characters that Excel
-    disallows, so that the CSV and Excel outputs stay identical.
+    disallows, so that both writers see the same value. The CSV writer may then
+    add a formula-escaping apostrophe on top of this; see ``_write_reports``.
     """
     if key in stringify_cols:
         return _sanitize_cell_value(_stringify_cell_value(value))
@@ -413,8 +420,14 @@ def _write_reports(
 ) -> None:
     """Execute a query once and write both CSV and Excel from the buffered results.
 
-    This avoids running the same heavy query twice and guarantees that the CSV
-    and Excel files contain identical data from the same query execution.
+    This avoids running the same heavy query twice, so both files are built from
+    a single query execution.
+
+    The two files are no longer byte-identical: formula-like strings get a leading
+    apostrophe in the CSV (see ``_escape_csv_formula``), while the xlsx blocks the
+    same formulas by pinning the cell to the text type and so keeps the value
+    unchanged. Don't "fix" that difference away, and don't compare the two files
+    cell by cell.
     """
     stringify_cols = frozenset(columns_to_stringify or ())
     keys, rows = _fetch_report_rows(db, query, sql_params, row_transform)
