@@ -1243,8 +1243,9 @@ def test_inventory_activity_report_hold_ratio(
             )
         return work
 
-    fractional_work = work_with(licenses_owned=61, holds=31)
-    whole_work = work_with(licenses_owned=2, holds=6)
+    fraction_below_one_work = work_with(licenses_owned=61, holds=31)
+    fraction_above_one_work = work_with(licenses_owned=2, holds=7)
+    whole_ratio_work = work_with(licenses_owned=2, holds=6)
     no_holds_work = work_with(licenses_owned=4, holds=0)
     no_copies_work = work_with(licenses_owned=0, holds=2)
 
@@ -1267,10 +1268,12 @@ def test_inventory_activity_report_hold_ratio(
         row = next(r for r in rows if r["identifier"] == identifier_value)
         return float(row["library_hold_ratio"])
 
-    # 31 / 61. Integer division would truncate this to 0.
-    assert ratio_for(fractional_work) == pytest.approx(0.51)
-    # Ratios at or above 1 were unaffected by the truncation.
-    assert ratio_for(whole_work) == pytest.approx(3.0)
+    # 31 / 61 = 0.508..., rounded to two places. Integer division reported 0.
+    assert ratio_for(fraction_below_one_work) == pytest.approx(0.51)
+    # 7 / 2. Truncation discards the fraction above 1.0 too, reporting 3 rather than 3.5.
+    assert ratio_for(fraction_above_one_work) == pytest.approx(3.5)
+    # Only whole-number ratios came through the truncation unchanged.
+    assert ratio_for(whole_ratio_work) == pytest.approx(3.0)
     assert ratio_for(no_holds_work) == pytest.approx(0.0)
     # The ratio is undefined without owned copies, and reports the -1 sentinel.
     assert ratio_for(no_copies_work) == -1

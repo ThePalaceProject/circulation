@@ -568,7 +568,9 @@ def _library_hold_ratio(lib_holds: Lateral) -> ColumnElement[Any]:
     Returns -1 when the item has no owned copies, since the ratio is undefined.
 
     The numerator is cast to ``Numeric`` because both operands are otherwise integral,
-    and PostgreSQL's integer division would truncate every ratio below 1.0 to zero.
+    and PostgreSQL's integer division discards the fractional part of the result at any
+    magnitude: 7 holds against 2 copies would report 3 rather than 3.5, and any ratio
+    below 1.0 would report 0.
     """
     active_hold_count = func.coalesce(lib_holds.c.active_hold_count, 0)
     return case(
