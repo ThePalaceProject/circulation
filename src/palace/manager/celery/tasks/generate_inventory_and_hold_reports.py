@@ -288,15 +288,17 @@ def _cell_value(key: str, value: Any, stringify_cols: frozenset[str]) -> Any:
     For columns in stringify_cols, forces the value to a plain string.
     Enum values are converted using their .value attribute.
     Timezone-aware datetimes are formatted as strings for Excel compatibility.
-    String values are stripped of characters that Excel disallows, so that the
-    CSV and Excel outputs stay identical.
+    String values from the database are stripped of characters that Excel
+    disallows, so that the CSV and Excel outputs stay identical.
     """
     if key in stringify_cols:
         return _sanitize_cell_value(_stringify_cell_value(value))
     if value is None:
         return ""
     if isinstance(value, enum.Enum):
-        return _sanitize_cell_value(str(value.value))
+        # Enum values are declared in our own source, so they can't carry
+        # illegal characters and don't need sanitizing.
+        return str(value.value)
     if isinstance(value, datetime) and value.tzinfo is not None:
         return value.strftime("%Y-%m-%d %H:%M:%S.%f")
     if isinstance(value, str):
