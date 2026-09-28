@@ -460,6 +460,37 @@ class TestSuppressWorkForLibraryScript:
 
         assert result.result == SuppressResult.NOT_FOUND
 
+    def test_suppress_work_pool_without_a_work_falls_through_to_equivalency(
+        self, db: DatabaseTransactionFixture
+    ):
+        """A pool whose Work hasn't been calculated can't be suppressed --
+        there is no Work to attach the suppression to -- so it doesn't
+        count as an exact match and resolution falls through to
+        equivalency. Refusing instead would leave a title the library
+        demonstrably carries unsuppressed just because some other pool of
+        the same identifier was mid-import."""
+        test_library = db.library(short_name="test")
+        collection = db.collection(library=test_library)
+
+        # The identifier the librarian names is licensed here, but its
+        # pool has no Work yet.
+        workless_edition = db.edition()
+        db.licensepool(workless_edition, collection=collection)
+        identifier = workless_edition.primary_identifier
+
+        # An equivalent identifier does have a Work in the same collection.
+        equivalent_work = db.work(with_license_pool=True, collection=collection)
+        source = DataSource.lookup(db.session, DataSource.OCLC)
+        identifier.equivalent_to(
+            source, equivalent_work.presentation_edition.primary_identifier, 1
+        )
+
+        script = SuppressWorkForLibraryScript(db.session)
+        result = script.suppress_work(test_library, identifier)
+
+        assert result.result == SuppressResult.NEWLY_SUPPRESSED
+        assert equivalent_work.suppressed_for == [test_library]
+
     def test_suppress_work_not_in_library_distinguished_from_not_found(
         self, db: DatabaseTransactionFixture
     ):

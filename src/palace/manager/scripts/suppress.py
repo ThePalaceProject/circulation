@@ -204,6 +204,15 @@ class SuppressWorkForLibraryScript(Script):
         case meets the same ambiguity guard as the equivalency case below
         rather than silently suppressing whichever was found first.
 
+        A pool whose Work hasn't been calculated yet counts for nothing
+        here: suppression is a Work/Library relation, so a pool without a
+        Work has nothing that *can* be suppressed. Such a pool therefore
+        doesn't make this an exact match, and resolution falls through to
+        equivalency rather than refusing -- otherwise a title the library
+        demonstrably carries under an equivalent identifier would go
+        unsuppressed because some other pool of the same identifier was
+        mid-import.
+
         Failing an exact match, we look past LicensePools whose own
         identifier matches, to also include LicensePools reachable through
         identifier equivalency -- e.g. an ISBN a librarian has on hand is
