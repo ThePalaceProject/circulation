@@ -22,7 +22,6 @@ from palace.manager.service.integration_registry.license_providers import (
 )
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.collection import Collection
-from palace.manager.sqlalchemy.model.coverage import CoverageRecord
 from palace.manager.sqlalchemy.model.customlist import CustomList
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
@@ -656,16 +655,6 @@ class TestCollection:
         pool2 = db.licensepool(None, collection=collection2)
         work2.license_pools.append(pool2)
 
-        record, _ = CoverageRecord.add_for(
-            work.presentation_edition, collection.data_source, collection=collection
-        )
-        assert (
-            CoverageRecord.lookup(
-                work.presentation_edition, collection.data_source, collection=collection
-            )
-            != None
-        )
-
         # If we're meant to test an inactive collection, make it inactive.
         if is_inactive:
             db.make_collection_inactive(collection)
@@ -694,9 +683,6 @@ class TestCollection:
 
         # The default library now has no collections.
         assert [] == library.associated_collections
-
-        # The collection based coverage record got deleted
-        assert db.session.get(CoverageRecord, record.id) == None
 
         # The deletion of the Collection's sole LicensePool has
         # cascaded to Loan, Hold, License, and
