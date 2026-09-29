@@ -2276,7 +2276,7 @@ dev = [
     { name = "mypy", specifier = ">=2.3.0,<3" },
     { name = "pyfakefs", specifier = ">=6.2.0,<7" },
     { name = "pytest", specifier = ">=9.1.1" },
-    { name = "pytest-alembic", specifier = ">=0.12.0,<0.13" },
+    { name = "pytest-alembic", specifier = ">=0.12.0,<0.14" },
     { name = "pytest-asyncio", specifier = ">=1.4.0,<2" },
     { name = "pytest-celery", specifier = ">=0.0.0,<0.0.1" },
     { name = "pytest-cov", specifier = ">=7.0.0,<8" },
@@ -2901,16 +2901,16 @@ wheels = [
 
 [[package]]
 name = "pytest-alembic"
-version = "0.12.1"
+version = "0.13.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "alembic" },
     { name = "pytest" },
     { name = "sqlalchemy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f9/37/ad095d92242fe5c6b4b793191240375c01f6508960f31179de7f0e22cb96/pytest_alembic-0.12.1.tar.gz", hash = "sha256:4e2b477d93464d0cfe80487fdf63922bfd22f29153ca980c1bccf1dbf833cf12", size = 30635, upload-time = "2025-05-27T14:15:29.85Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/42/be/6428967095a5ab5e139b1f924f2f6d7f5ca8f69eb393f0eff0345608209c/pytest_alembic-0.13.0.tar.gz", hash = "sha256:268ff312e14d9f9c835d0676f22fba36088e877097f7ec89a568d5ae92a5b5f4", size = 39520, upload-time = "2026-09-25T15:57:17.043Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/8b/f4/ded73992f972360adf84781b7e58729a3778e4358d482e1fe375c83948b4/pytest_alembic-0.12.1-py3-none-any.whl", hash = "sha256:d0d6be79f1c597278fbeda08c5558e7b8770af099521b0aa164e0df4aed945da", size = 36571, upload-time = "2025-05-27T14:15:28.817Z" },
+    { url = "https://files.pythonhosted.org/packages/f8/54/aa2e6512ac86c656dbaa6e5647c6386c6227c6c1bc5b39bb932522c5d89c/pytest_alembic-0.13.0-py3-none-any.whl", hash = "sha256:98c50d394774c0fb79c1d10dcbde657ab0a3cefb90fbe406ce3dd77a166c863f", size = 45979, upload-time = "2026-09-25T15:57:15.999Z" },
 ]
 
 [[package]]
