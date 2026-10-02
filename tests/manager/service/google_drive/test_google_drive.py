@@ -7,9 +7,13 @@ from urllib.parse import unquote_plus
 
 import pytest
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from googleapiclient.http import HttpMockSequence
 
-from palace.manager.service.google_drive.google_drive import GoogleDriveService
+from palace.manager.service.google_drive.google_drive import (
+    API_NUM_RETRIES,
+    GoogleDriveService,
+)
 
 if TYPE_CHECKING:
     pass
@@ -222,3 +226,69 @@ class TestGoogleDriveService:
         # Verify orderBy=createdTime is present in the request URI.
         request_uri = unquote_plus(http_mock_sequence.request_sequence[0][0])
         assert "orderBy=createdTime" in request_uri
+
+    @pytest.fixture
+    def no_retry_sleep(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Remove googleapiclient's exponential backoff delay between retries.
+
+        ``HttpRequest`` captures ``time.sleep`` at construction time, so patching
+        the attribute on the ``time`` module before the request is built is enough.
+        """
+        monkeypatch.setattr("time.sleep", lambda _seconds: None)
+
+    def test_create_file_retries_server_error(self, no_retry_sleep: None):
+        """A retryable 5xx from the upload endpoint is retried, not propagated.
+
+        Drive intermittently answers uploads with a bare ``HttpError 500 ...
+        Unknown Error``; without ``num_retries`` a single one of these aborts the
+        whole calling task.
+        """
+        file_name = "file.txt"
+        file_id = "file-id"
+        success = json.dumps(
+            {
+                "kind": "drive#file",
+                "id": file_id,
+                "name": file_name,
+                "mimeType": "text/plain",
+            }
+        )
+        http_mock_sequence = HttpMockSequence(
+            [
+                ({"status": "200"}, '{"files": []}'),
+                ({"status": "500"}, '{"error": {}}'),
+                ({"status": "200"}, success),
+            ]
+        )
+        service = drive_service(http=http_mock_sequence)
+
+        stored_file = service.create_file(
+            file_name=file_name,
+            stream=BytesIO(b"Hello world"),
+            content_type="text/plain",
+        )
+
+        assert stored_file["id"] == file_id
+        # The upload was attempted twice: the 500, then the successful retry.
+        assert len(http_mock_sequence.request_sequence) == 3
+        # The retry resends the full multipart body, not an exhausted stream.
+        assert "Hello world" in str(http_mock_sequence.request_sequence[2][2])
+
+    def test_create_file_raises_when_retries_exhausted(self, no_retry_sleep: None):
+        """Once the retry budget is spent, the error surfaces to the caller."""
+        file_name = "file.txt"
+        http_mock_sequence = HttpMockSequence(
+            [({"status": "200"}, '{"files": []}')]
+            # num_retries retries on top of the initial attempt.
+            + [({"status": "500"}, '{"error": {}}')] * (API_NUM_RETRIES + 1)
+        )
+        service = drive_service(http=http_mock_sequence)
+
+        with pytest.raises(HttpError):
+            service.create_file(
+                file_name=file_name,
+                stream=BytesIO(b"Hello world"),
+                content_type="text/plain",
+            )
+
+        assert len(http_mock_sequence.request_sequence) == API_NUM_RETRIES + 2

@@ -11,6 +11,15 @@ if TYPE_CHECKING:
     from googleapiclient._apis.drive.v3 import DriveResource, File
 
 
+# Number of times to retry a Drive API call that fails with a retryable error.
+# googleapiclient only retries when num_retries is passed explicitly (it defaults
+# to 0); when set, it applies exponential backoff with jitter to 5xx responses and
+# socket errors. The Drive upload endpoint intermittently returns a bare
+# "HttpError 500 ... Unknown Error" that Google documents as retryable, and
+# without this a single blip aborts the whole calling task.
+API_NUM_RETRIES = 5
+
+
 class GoogleDriveService(LoggerMixin):
 
     def __init__(self, api_client: DriveResource) -> None:
@@ -50,7 +59,7 @@ class GoogleDriveService(LoggerMixin):
                 supportsAllDrives=True,
                 includeItemsFromAllDrives=True,
             )
-            .execute()
+            .execute(num_retries=API_NUM_RETRIES)
         )
 
         files: list[File] = results["files"]
@@ -88,7 +97,7 @@ class GoogleDriveService(LoggerMixin):
                 fields="*",
                 supportsAllDrives=True,
             )
-            .execute()
+            .execute(num_retries=API_NUM_RETRIES)
         )
 
         self.log.info(f"Stored '{file_name}' in parent_folder[{parent_folder_id}].")
@@ -120,7 +129,7 @@ class GoogleDriveService(LoggerMixin):
                         body=body,
                         supportsAllDrives=True,
                     )
-                    .execute()
+                    .execute(num_retries=API_NUM_RETRIES)
                 )
 
             results.append(folder)
