@@ -13,6 +13,7 @@ from googleapiclient.http import HttpMockSequence
 from palace.manager.service.google_drive.google_drive import (
     API_NUM_RETRIES,
     GoogleDriveService,
+    GoogleDriveUnavailable,
 )
 
 if TYPE_CHECKING:
@@ -275,7 +276,11 @@ class TestGoogleDriveService:
         assert "Hello world" in str(http_mock_sequence.request_sequence[2][2])
 
     def test_create_file_raises_when_retries_exhausted(self, no_retry_sleep: None):
-        """Once the retry budget is spent, the error surfaces to the caller."""
+        """A 5xx outlasting the retry budget is re-raised as retryable.
+
+        Callers (the playtime report task) key their own, much longer, retry
+        schedule off GoogleDriveUnavailable.
+        """
         file_name = "file.txt"
         http_mock_sequence = HttpMockSequence(
             [({"status": "200"}, '{"files": []}')]
@@ -284,7 +289,7 @@ class TestGoogleDriveService:
         )
         service = drive_service(http=http_mock_sequence)
 
-        with pytest.raises(HttpError):
+        with pytest.raises(GoogleDriveUnavailable):
             service.create_file(
                 file_name=file_name,
                 stream=BytesIO(b"Hello world"),
@@ -292,3 +297,31 @@ class TestGoogleDriveService:
             )
 
         assert len(http_mock_sequence.request_sequence) == API_NUM_RETRIES + 2
+
+    @pytest.mark.parametrize("status", ["400", "401", "403", "404"])
+    def test_create_file_does_not_retry_client_error(
+        self, status: str, no_retry_sleep: None
+    ):
+        """A non-retryable status fails fast and keeps its original exception.
+
+        Retrying these for a quarter of an hour would only delay surfacing a
+        misconfiguration, so they must not become GoogleDriveUnavailable.
+        """
+        http_mock_sequence = HttpMockSequence(
+            [
+                ({"status": "200"}, '{"files": []}'),
+                ({"status": status}, '{"error": {}}'),
+            ]
+        )
+        service = drive_service(http=http_mock_sequence)
+
+        with pytest.raises(HttpError) as exc_info:
+            service.create_file(
+                file_name="file.txt",
+                stream=BytesIO(b"Hello world"),
+                content_type="text/plain",
+            )
+
+        assert not isinstance(exc_info.value, GoogleDriveUnavailable)
+        # The upload was attempted exactly once -- no retries.
+        assert len(http_mock_sequence.request_sequence) == 2

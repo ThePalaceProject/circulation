@@ -10,7 +10,7 @@ from collections import defaultdict
 from collections.abc import Iterable
 from datetime import date, datetime, timedelta, timezone
 from io import TextIOWrapper
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from celery import shared_task
 from sqlalchemy import and_, distinct, false, select, true, union
@@ -26,16 +26,24 @@ from palace.manager.integration.license.opds.for_distributors.api import (
 )
 from palace.manager.integration.license.opds.opds2.api import OPDS2API
 from palace.manager.service.celery.celery import QueueNames
+from palace.manager.service.google_drive.google_drive import (
+    GoogleDriveService,
+    GoogleDriveUnavailable,
+)
 from palace.manager.service.integration_registry.license_providers import (
     LicenseProvidersRegistry,
 )
 from palace.manager.service.redis.models.lock import RedisLock
+from palace.manager.service.redis.redis import Redis
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.time_tracking import PlaytimeEntry, PlaytimeSummary
 from palace.manager.util.uuid import uuid_encode
+
+if TYPE_CHECKING:
+    from googleapiclient._apis.drive.v3 import File
 
 
 @shared_task(queue=QueueNames.default, bind=True)
@@ -159,8 +167,29 @@ FOLDER_LOCK_ACQUIRE_TIMEOUT: float | int = 60
 # Exposed as a module-level constant so tests can set it to 0.
 FOLDER_CREATION_JITTER_MAX: int = 10
 
+# Namespace for deriving the stable id embedded in each report's file name.
+# Any fixed UUID would do, but this value must never change: the derived names
+# are how a retry recognises reports that an earlier attempt already uploaded,
+# so changing it would cause duplicate uploads of existing reports.
+REPORT_UUID_NAMESPACE = uuid.UUID("6714036e-d424-46bc-993a-d474b42a9909")
 
-@shared_task(queue=QueueNames.default, bind=True)
+# How many times the task re-runs itself when Google Drive is unavailable, and
+# the base delay (seconds) for the exponential backoff between those attempts.
+# GoogleDriveService already retries within a single request, but that budget
+# only spans ~30s; these cover a Drive outage lasting into the minutes. 4
+# retries at a 60s base gives roughly 60s, 120s, 240s and 480s -- about a
+# quarter of an hour in total.
+DRIVE_MAX_RETRIES = 4
+DRIVE_RETRY_BACKOFF = 60
+
+
+@shared_task(
+    queue=QueueNames.default,
+    bind=True,
+    max_retries=DRIVE_MAX_RETRIES,
+    autoretry_for=(GoogleDriveUnavailable,),
+    retry_backoff=DRIVE_RETRY_BACKOFF,
+)
 def generate_playtime_report(
     task: Task,
     start: date | None = None,
@@ -169,6 +198,12 @@ def generate_playtime_report(
     """
     This task generates a CSV report of playtime summaries based on a date range and uploads that report to
     a shared Google Drive. If no date range is supplied, it will include summaries from the previous month.
+
+    The task is retried when Drive is unavailable. Because a retry re-runs the
+    whole data source loop, each report's file name is derived from the report's
+    identity rather than randomly generated, and a report already present in
+    Drive is skipped -- so a retry resumes where the failed attempt stopped
+    instead of uploading a second copy of everything that already succeeded.
     """
 
     default_start, default_until = (
@@ -190,7 +225,6 @@ def generate_playtime_report(
     )
 
     link_extension = "csv"
-    uid = uuid_encode(uuid.uuid4())
 
     google_drive_container = task.services.google_drive()
     google_drive = google_drive_container.service()
@@ -216,8 +250,45 @@ def generate_playtime_report(
             reporting_name_with_no_spaces = (
                 f"{reporting_name}-{data_source_name}".replace(" ", "_")
             )
+            uid = _report_uid(
+                reporting_name=reporting_name,
+                data_source_name=data_source_name,
+                start=start,
+                until=until,
+            )
             file_name_prefix = f"{formatted_start_date}-{formatted_until_date}-playtime-summary-{reporting_name_with_no_spaces}-{uid}"
             linked_file_name = f"{file_name_prefix}.{link_extension}"
+
+            nested_folders = [
+                data_source_name,
+                "Usage Reports",
+                reporting_name,
+                str(start.year),
+            ]
+
+            leaf_folder = _create_report_folders(
+                task=task,
+                google_drive=google_drive,
+                redis_client=redis_client,
+                nested_folders=nested_folders,
+                root_folder_id=root_folder_id,
+                data_source_name=data_source_name,
+            )
+
+            # Skip reports a previous attempt of this task already uploaded. The
+            # folder hierarchy is created first so that this check can run before
+            # the report is regenerated, which keeps a retry from repeating the
+            # expensive query and CSV build for work that is already done.
+            if google_drive.get_file(
+                name=linked_file_name, parent_folder_id=leaf_folder["id"]
+            ):
+                task.log.info(
+                    f"{'/'.join(nested_folders + [linked_file_name])} already exists in "
+                    "Google Drive; skipping. Remove the existing file if you need to "
+                    "regenerate this report."
+                )
+                continue
+
             # Write to a temporary file so we don't overflow the memory
             with tempfile.NamedTemporaryFile(
                 "w+b",
@@ -239,64 +310,120 @@ def generate_playtime_report(
                     ),
                 )
 
-                nested_folders = [
-                    data_source_name,
-                    "Usage Reports",
-                    reporting_name,
-                    str(start.year),
-                ]
-
-                # Acquire a distributed lock so that concurrent workers within the
-                # same Redis instance don't each create a duplicate folder hierarchy.
-                # Google Drive allows same-named folders and has list-API indexing
-                # latency, so a bare get-then-create is not safe under concurrent access.
-                folder_lock = RedisLock(
-                    redis_client,
-                    lock_name=[
-                        "playtime_report_folder",
-                        root_folder_id or "default",
-                        data_source_name,
-                    ],
-                    lock_timeout=timedelta(minutes=5),
-                )
-                try:
-                    lock_acquired = folder_lock.acquire_blocking(
-                        timeout=FOLDER_LOCK_ACQUIRE_TIMEOUT
-                    )
-                except Exception:
-                    # Redis may be unavailable (connection error, timeout, etc.).
-                    # Treat this the same as failing to acquire within the timeout:
-                    # log a warning and proceed without the lock rather than
-                    # aborting the entire report for this data source.
-                    lock_acquired = False
-                if not lock_acquired:
-                    task.log.warning(
-                        f"Could not acquire folder creation lock for {data_source_name!r} "
-                        f"within {FOLDER_LOCK_ACQUIRE_TIMEOUT} seconds. Proceeding without "
-                        "lock — duplicate folders may be created."
-                    )
-                try:
-                    folder_results = google_drive.create_nested_folders_if_not_exist(
-                        folders=nested_folders,
-                        parent_folder_id=root_folder_id,
-                    )
-                    # the leaf folder is the last path segment in the result list
-                    leaf_folder = folder_results[-1]
-                finally:
-                    if lock_acquired:
-                        folder_lock.release()
-
                 # store file
-                google_drive.create_file(
-                    file_name=linked_file_name,
-                    parent_folder_id=leaf_folder["id"],
-                    content_type="text/csv",
-                    stream=temp,
-                )
+                try:
+                    google_drive.create_file(
+                        file_name=linked_file_name,
+                        parent_folder_id=leaf_folder["id"],
+                        content_type="text/csv",
+                        stream=temp,
+                    )
+                except FileExistsError:
+                    # The check above can miss a file this task uploaded moments
+                    # earlier, because Drive's list API lags its writes. Losing
+                    # that race means the report is already stored, which is the
+                    # outcome we wanted, so treat it as success.
+                    task.log.info(
+                        f"{'/'.join(nested_folders + [linked_file_name])} was already "
+                        "present in Google Drive; skipping."
+                    )
+                    continue
+
                 task.log.info(
                     f"Stored {'/'.join(nested_folders + [linked_file_name])} in Google Drive"
                     f"{'' if not root_folder_id else f' under the parent folder (id={root_folder_id}'}."
                 )
+
+
+def _report_uid(
+    *,
+    reporting_name: str,
+    data_source_name: str,
+    start: date,
+    until: date,
+) -> str:
+    """
+    Derive the stable id embedded in a report's file name.
+
+    This used to be a single random ``uuid4`` per task invocation, which meant
+    every attempt produced differently-named files. That defeated
+    :meth:`GoogleDriveService.create_file`'s duplicate guard and made the task
+    unsafe to retry, because a retry after a partial failure would upload a
+    second copy of every report that had already succeeded. Deriving the id from
+    the report's identity instead makes the name reproducible, so a retry can
+    recognise -- and skip -- its own earlier work.
+
+    :param reporting_name: The name identifying this circulation manager.
+    :param data_source_name: The data source the report covers.
+    :param start: First day of the reporting period.
+    :param until: Last day of the reporting period.
+    :return: A compact, URL-safe id, stable for a given set of arguments.
+    """
+    key = "|".join(
+        [reporting_name, data_source_name, start.isoformat(), until.isoformat()]
+    )
+    return uuid_encode(uuid.uuid5(REPORT_UUID_NAMESPACE, key))
+
+
+def _create_report_folders(
+    *,
+    task: Task,
+    google_drive: GoogleDriveService,
+    redis_client: Redis,
+    nested_folders: list[str],
+    root_folder_id: str | None,
+    data_source_name: str,
+) -> File:
+    """
+    Create (or look up) the folder hierarchy a report is stored in.
+
+    :param task: The running task, used for logging.
+    :param google_drive: The Drive service to create the folders with.
+    :param redis_client: Redis client backing the folder-creation lock.
+    :param nested_folders: Folder names, outermost first.
+    :param root_folder_id: Drive folder/shared-drive ID to create them under.
+    :param data_source_name: The data source, used to scope the lock.
+    :return: The leaf folder, i.e. the one the report itself belongs in.
+    """
+    # Acquire a distributed lock so that concurrent workers within the
+    # same Redis instance don't each create a duplicate folder hierarchy.
+    # Google Drive allows same-named folders and has list-API indexing
+    # latency, so a bare get-then-create is not safe under concurrent access.
+    folder_lock = RedisLock(
+        redis_client,
+        lock_name=[
+            "playtime_report_folder",
+            root_folder_id or "default",
+            data_source_name,
+        ],
+        lock_timeout=timedelta(minutes=5),
+    )
+    try:
+        lock_acquired = folder_lock.acquire_blocking(
+            timeout=FOLDER_LOCK_ACQUIRE_TIMEOUT
+        )
+    except Exception:
+        # Redis may be unavailable (connection error, timeout, etc.).
+        # Treat this the same as failing to acquire within the timeout:
+        # log a warning and proceed without the lock rather than
+        # aborting the entire report for this data source.
+        lock_acquired = False
+    if not lock_acquired:
+        task.log.warning(
+            f"Could not acquire folder creation lock for {data_source_name!r} "
+            f"within {FOLDER_LOCK_ACQUIRE_TIMEOUT} seconds. Proceeding without "
+            "lock — duplicate folders may be created."
+        )
+    try:
+        folder_results = google_drive.create_nested_folders_if_not_exist(
+            folders=nested_folders,
+            parent_folder_id=root_folder_id,
+        )
+        # the leaf folder is the last path segment in the result list
+        return folder_results[-1]
+    finally:
+        if lock_acquired:
+            folder_lock.release()
 
 
 def _fetch_distinct_eligible_data_source_names(

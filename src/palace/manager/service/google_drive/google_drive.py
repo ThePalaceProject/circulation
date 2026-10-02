@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from io import IOBase
-from typing import IO, TYPE_CHECKING, cast
+from typing import IO, TYPE_CHECKING, Protocol, TypeVar, cast
 
+from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseUpload
 
+from palace.util.exceptions import BasePalaceException
 from palace.util.log import LoggerMixin
 
 if TYPE_CHECKING:
@@ -19,11 +21,60 @@ if TYPE_CHECKING:
 # without this a single blip aborts the whole calling task.
 API_NUM_RETRIES = 5
 
+# HTTP statuses that indicate a transient Drive-side problem rather than a bad
+# request. 5xx is Google's documented retryable set; 429 is rate limiting, where
+# backing off is likewise the correct response. Anything else (401/403/404/400)
+# reflects configuration or a genuinely bad request and must surface immediately
+# instead of being retried for a quarter of an hour.
+RETRYABLE_STATUS_CODES = frozenset({429, 500, 502, 503, 504})
+
+T_co = TypeVar("T_co", covariant=True)
+
+
+class GoogleDriveUnavailable(BasePalaceException):
+    """The Drive API failed in a way that is worth retrying later.
+
+    This is raised only after googleapiclient's own in-request retry budget
+    (:data:`API_NUM_RETRIES`) has been exhausted, so it means the problem
+    outlasted the client-level backoff. Callers running as Celery tasks should
+    list it in ``autoretry_for`` so the work is re-attempted on a longer delay.
+    """
+
+
+class _ApiRequest(Protocol[T_co]):
+    """The subset of googleapiclient's generated request objects that we call.
+
+    The generated stubs give each Drive method its own request class (e.g.
+    ``FileHttpRequest``) rather than a generic one, so a structural type is what
+    lets :meth:`GoogleDriveService._execute` stay typed across all of them.
+    """
+
+    def execute(self, *, num_retries: int = ...) -> T_co: ...
+
 
 class GoogleDriveService(LoggerMixin):
 
     def __init__(self, api_client: DriveResource) -> None:
         self.api_client = api_client
+
+    def _execute(self, request: _ApiRequest[T_co]) -> T_co:
+        """Run a Drive API request, retrying and classifying transient failures.
+
+        ``num_retries`` turns on googleapiclient's exponential backoff with
+        jitter for 5xx responses and socket errors, which covers a brief blip
+        within the single call. A failure that survives that budget is
+        re-raised as :class:`GoogleDriveUnavailable` so the caller can retry on
+        a much longer schedule; non-retryable statuses propagate unchanged.
+        """
+        try:
+            return request.execute(num_retries=API_NUM_RETRIES)
+        except HttpError as e:
+            if e.resp.status in RETRYABLE_STATUS_CODES:
+                raise GoogleDriveUnavailable(
+                    f"Google Drive returned a retryable error "
+                    f"(status={e.resp.status}): {e}"
+                ) from e
+            raise
 
     def get_file(self, name: str, parent_folder_id: str | None = None) -> File | None:
         """
@@ -49,9 +100,8 @@ class GoogleDriveService(LoggerMixin):
         if parent_folder_id:
             query += f" and '{parent_folder_id}' in parents"
 
-        results = (
-            self.api_client.files()
-            .list(
+        results = self._execute(
+            self.api_client.files().list(
                 q=query,
                 pageSize=10,
                 fields="nextPageToken, files(*)",
@@ -59,7 +109,6 @@ class GoogleDriveService(LoggerMixin):
                 supportsAllDrives=True,
                 includeItemsFromAllDrives=True,
             )
-            .execute(num_retries=API_NUM_RETRIES)
         )
 
         files: list[File] = results["files"]
@@ -89,15 +138,13 @@ class GoogleDriveService(LoggerMixin):
         media = MediaIoBaseUpload(cast(IOBase, stream), mimetype=content_type)
         parents = [parent_folder_id] if parent_folder_id else []
         file_metadata: File = {"name": file_name, "parents": parents}
-        file = (
-            self.api_client.files()
-            .create(
+        file = self._execute(
+            self.api_client.files().create(
                 body=file_metadata,
                 media_body=media,
                 fields="*",
                 supportsAllDrives=True,
             )
-            .execute(num_retries=API_NUM_RETRIES)
         )
 
         self.log.info(f"Stored '{file_name}' in parent_folder[{parent_folder_id}].")
@@ -123,13 +170,11 @@ class GoogleDriveService(LoggerMixin):
             folder = self.get_file(name=folder_name, parent_folder_id=parent_id)
 
             if not folder:
-                folder = (
-                    self.api_client.files()
-                    .create(
+                folder = self._execute(
+                    self.api_client.files().create(
                         body=body,
                         supportsAllDrives=True,
                     )
-                    .execute(num_retries=API_NUM_RETRIES)
                 )
 
             results.append(folder)
