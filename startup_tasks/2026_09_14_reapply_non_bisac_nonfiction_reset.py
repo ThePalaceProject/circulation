@@ -1,28 +1,20 @@
 """Re-apply the non-BISAC nonfiction reset now that no old code is running.
 
-Release N repaired these subjects: startup task
-``2026_09_14_reclassify_non_bisac_nonfiction_subjects`` reset ``checked=False``
-on BISAC subjects stored as nonfiction because an unresolvable code fell
-through the ruleset catch-all, and chained the re-score behind it.
+Startup task ``2026_09_14_reclassify_non_bisac_nonfiction_subjects`` repaired
+these subjects a release ago, but its reset was exposed to any old code still
+live -- web containers are recycled after the migrate step, and Fargate is not
+governed by that playbook at all. Old code reaching ``Subject.assign_to_genre``
+consumes the reset and re-stamps ``checked=True`` with the same wrong value;
+see that task's docstring for the detail. A release later nothing old is
+running anywhere, so the same reset is safe to apply again.
 
-That repair is exposed for as long as any old code is still running. Anything
-reaching Subject.assign_to_genre before the re-score lands consumes the reset,
-and code running the superseded rules re-stamps checked=True with the same
-wrong value -- silently, and with nothing to revisit the subject afterwards.
-The deploy stops the Celery workers before the migrate step, so they are safe,
-but the web containers are recycled after it and Fargate deployments are not
-governed by that playbook at all.
+It recomputes which subjects the classifier disagrees with rather than
+replaying a stored list, so if the first repair took this is a no-op.
+Re-scoring is left to the nightly ``classify_unchecked_subjects``; the release
+N task chained it only because it was racing old code.
 
-This task exists to close that off. Running it a release later means no old
-code is live anywhere, so the reset it applies cannot be consumed under the old
-rules. It is idempotent: if the release N repair took, this finds nothing to do
-and the run is a no-op.
-
-Re-scoring is left to the nightly classify_unchecked_subjects. There is no need
-to dispatch it here, because by now there is no old code to lose the reset to.
-
-This is the same shape as the null-audience repair, where startup task
-2026_06_17 re-ran what 2026_05_12 had dispatched a release earlier.
+This mirrors the null-audience repair, where ``2026_06_17`` re-ran what
+``2026_05_12`` had dispatched a release earlier.
 
 TODO: Remove the whole repair once this has run on all deployments (PP-5129):
 this task, the release N startup task, ``reset_non_bisac_nonfiction_subjects``
