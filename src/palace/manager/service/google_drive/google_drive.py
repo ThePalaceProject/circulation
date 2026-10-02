@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from io import IOBase
-from typing import IO, TYPE_CHECKING, Protocol, TypeVar, cast
+from typing import IO, TYPE_CHECKING, Any, Protocol, TypeVar, cast
 
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseUpload
@@ -23,10 +23,24 @@ API_NUM_RETRIES = 5
 
 # HTTP statuses that indicate a transient Drive-side problem rather than a bad
 # request. 5xx is Google's documented retryable set; 429 is rate limiting, where
-# backing off is likewise the correct response. Anything else (401/403/404/400)
+# backing off is likewise the correct response. Anything else (401/404/400)
 # reflects configuration or a genuinely bad request and must surface immediately
 # instead of being retried for a quarter of an hour.
 RETRYABLE_STATUS_CODES = frozenset({429, 500, 502, 503, 504})
+
+# Drive reports quota exhaustion as a 403, using the same status as a genuine
+# permission failure and distinguishing the two only by the reason attached to
+# the error. Google documents these reasons as retryable, so a 403 is classified
+# by its reason rather than by its status alone -- otherwise a quota blip would
+# fail the run outright while a real permission error got retried for a quarter
+# of an hour.
+RETRYABLE_403_REASONS = frozenset(
+    {
+        "rateLimitExceeded",
+        "userRateLimitExceeded",
+        "sharingRateLimitExceeded",
+    }
+)
 
 T_co = TypeVar("T_co", covariant=True)
 
@@ -52,6 +66,23 @@ class _ApiRequest(Protocol[T_co]):
     def execute(self, *, num_retries: int = ...) -> T_co: ...
 
 
+def _is_retryable(error: HttpError) -> bool:
+    """Decide whether a Drive error is worth retrying on a longer schedule."""
+    status = error.resp.status
+    if status in RETRYABLE_STATUS_CODES:
+        return True
+    if status == 403:
+        # error_details holds Drive's per-error dicts when the payload has the
+        # expected shape, but googleapiclient leaves it as a string (or unset)
+        # for other shapes, so only dicts are inspected.
+        details: Any = error.error_details or []
+        return any(
+            isinstance(detail, dict) and detail.get("reason") in RETRYABLE_403_REASONS
+            for detail in details
+        )
+    return False
+
+
 class GoogleDriveService(LoggerMixin):
 
     def __init__(self, api_client: DriveResource) -> None:
@@ -69,7 +100,7 @@ class GoogleDriveService(LoggerMixin):
         try:
             return request.execute(num_retries=API_NUM_RETRIES)
         except HttpError as e:
-            if e.resp.status in RETRYABLE_STATUS_CODES:
+            if _is_retryable(e):
                 raise GoogleDriveUnavailable(
                     f"Google Drive returned a retryable error "
                     f"(status={e.resp.status}): {e}"

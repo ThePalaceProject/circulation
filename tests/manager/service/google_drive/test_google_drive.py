@@ -298,7 +298,77 @@ class TestGoogleDriveService:
 
         assert len(http_mock_sequence.request_sequence) == API_NUM_RETRIES + 2
 
-    @pytest.mark.parametrize("status", ["400", "401", "403", "404"])
+    def test_create_file_retries_quota_exhaustion(self, no_retry_sleep: None):
+        """Drive signals quota exhaustion with a 403, not a 429.
+
+        The status alone is indistinguishable from a real permission failure, so
+        the reason is what decides; Google documents these as retryable.
+        """
+        rate_limited = json.dumps(
+            {
+                "error": {
+                    "code": 403,
+                    "message": "Rate Limit Exceeded",
+                    "errors": [
+                        {
+                            "domain": "usageLimits",
+                            "reason": "rateLimitExceeded",
+                            "message": "Rate Limit Exceeded",
+                        }
+                    ],
+                }
+            }
+        )
+        # googleapiclient retries this reason itself, so the budget has to be
+        # spent before the error reaches our classifier.
+        http_mock_sequence = HttpMockSequence(
+            [({"status": "200"}, '{"files": []}')]
+            + [({"status": "403"}, rate_limited)] * (API_NUM_RETRIES + 1)
+        )
+        service = drive_service(http=http_mock_sequence)
+
+        with pytest.raises(GoogleDriveUnavailable):
+            service.create_file(
+                file_name="file.txt",
+                stream=BytesIO(b"Hello world"),
+                content_type="text/plain",
+            )
+
+    def test_create_file_does_not_retry_permission_denied(self, no_retry_sleep: None):
+        """A 403 that is a real permission problem is not treated as transient."""
+        forbidden = json.dumps(
+            {
+                "error": {
+                    "code": 403,
+                    "message": "Insufficient permissions",
+                    "errors": [
+                        {
+                            "domain": "global",
+                            "reason": "insufficientFilePermissions",
+                            "message": "Insufficient permissions",
+                        }
+                    ],
+                }
+            }
+        )
+        http_mock_sequence = HttpMockSequence(
+            [
+                ({"status": "200"}, '{"files": []}'),
+                ({"status": "403"}, forbidden),
+            ]
+        )
+        service = drive_service(http=http_mock_sequence)
+
+        with pytest.raises(HttpError) as exc_info:
+            service.create_file(
+                file_name="file.txt",
+                stream=BytesIO(b"Hello world"),
+                content_type="text/plain",
+            )
+
+        assert not isinstance(exc_info.value, GoogleDriveUnavailable)
+
+    @pytest.mark.parametrize("status", ["400", "401", "404"])
     def test_create_file_does_not_retry_client_error(
         self, status: str, no_retry_sleep: None
     ):
