@@ -2,11 +2,12 @@
 
 Startup task ``2026_09_14_reclassify_non_bisac_nonfiction_subjects`` repaired
 these subjects a release ago, but its reset was exposed to any old code still
-live -- web containers are recycled after the migrate step, and Fargate is not
-governed by that playbook at all. Old code reaching ``Subject.assign_to_genre``
-consumes the reset and re-stamps ``checked=True`` with the same wrong value;
-see that task's docstring for the detail. A release later nothing old is
-running anywhere, so the same reset is safe to apply again.
+live: hosting-playbook's ``helpers/migrate.yml`` recycles the web containers
+after the migrate step, and does not govern Fargate deployments at all. Old
+code reaching ``Subject.assign_to_genre`` consumes the reset and re-stamps
+``checked=True`` with the same wrong value; see that task's docstring for the
+detail. A release later nothing old is running anywhere, so the same reset is
+safe to apply again.
 
 It recomputes which subjects the classifier disagrees with rather than
 replaying a stored list, so if the first repair took this is a no-op.
