@@ -64,6 +64,52 @@ WORKDIR /home/palace/circulation/bin
 CMD ["/sbin/my_init"]
 
 ###############################################################################
+## Circ-celery Image
+##
+## A single image that runs one Celery process per container. The role is
+## selected by the container command (beat|worker), so one image backs both the
+## beat scheduler and every autoscaled worker pool. Unlike the scripts image, it
+## does NOT use runit to supervise several processes -- one process per container
+## is what lets the worker pools be scaled horizontally, and the beat scheduler
+## be pinned to a single instance.
+##
+## Like the webapp/scripts images it boots via my_init, so the shared
+## /etc/my_init.d startup scripts run first -- notably the advisory-locked
+## `initialize_instance` (alembic upgrade head) -- before the Celery role starts.
+## This keeps the migration path identical to the other images: every container
+## brings the schema to head on start, so no separate migration step is needed.
+## `--skip-runit` is used because this image has no runit services; the single
+## Celery process is my_init's main command instead.
+###############################################################################
+
+FROM common AS celery
+
+# Set the local timezone so log timestamps line up with the other images. Beat's
+# own schedule is driven by the Celery `timezone` setting, not this.
+ENV TZ=US/Eastern
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime
+
+# The Celery process runs as the `palace` user via `celery --uid`, which does not
+# reset HOME. Without this it would inherit root's HOME=/root, and libpq
+# (psycopg2) -- probing $HOME/.postgresql/postgresql.crt on connect -- would hit
+# EACCES on /root (mode 700), abort the SSL handshake, and fall back to a
+# plaintext connection that an SSL-required Postgres rejects. my_init does not
+# override an inherited HOME, so setting it here covers the --uid drop.
+ENV HOME=/home/palace
+
+COPY --chmod=755 docker/celery-entrypoint.sh /celery-entrypoint.sh
+
+VOLUME /var/log
+WORKDIR /var/www/circulation
+
+# The role is provided as the container command, e.g. `docker run circ-celery
+# worker`, with PALACE_CELERY_QUEUES / PALACE_CELERY_CONCURRENCY set for worker
+# pools. my_init runs the startup scripts (incl. the DB migration), then execs
+# the entrypoint with the role appended. See docker/celery-entrypoint.sh for the
+# supported roles and env vars.
+ENTRYPOINT ["/sbin/my_init", "--skip-runit", "--quiet", "--", "/celery-entrypoint.sh"]
+
+###############################################################################
 ## Circ-webapp Image
 ###############################################################################
 
