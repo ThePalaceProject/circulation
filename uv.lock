@@ -2901,16 +2901,16 @@ wheels = [
 
 [[package]]
 name = "pytest-alembic"
-version = "0.13.0"
+version = "0.13.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "alembic" },
     { name = "pytest" },
     { name = "sqlalchemy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/42/be/6428967095a5ab5e139b1f924f2f6d7f5ca8f69eb393f0eff0345608209c/pytest_alembic-0.13.0.tar.gz", hash = "sha256:268ff312e14d9f9c835d0676f22fba36088e877097f7ec89a568d5ae92a5b5f4", size = 39520, upload-time = "2026-09-25T15:57:17.043Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/00/99/272ace37071006a0050abf7b6940c6cfdcf58e18f27385be668f6a934ee0/pytest_alembic-0.13.1.tar.gz", hash = "sha256:96a54ec76d4704fffb433880c5a84f5c3ea5980bb3f6509d868fef40e6e9a79f", size = 39777, upload-time = "2026-10-02T16:21:52.261Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f8/54/aa2e6512ac86c656dbaa6e5647c6386c6227c6c1bc5b39bb932522c5d89c/pytest_alembic-0.13.0-py3-none-any.whl", hash = "sha256:98c50d394774c0fb79c1d10dcbde657ab0a3cefb90fbe406ce3dd77a166c863f", size = 45979, upload-time = "2026-09-25T15:57:15.999Z" },
+    { url = "https://files.pythonhosted.org/packages/5b/57/19e2e43140c04be1219f408fe840226c0f4d01550c9d5357f7ee6c86aa73/pytest_alembic-0.13.1-py3-none-any.whl", hash = "sha256:141b410c2d338d98401981dc4f8a848ea46c2c5c46dae106f1bcbed33dccdc47", size = 46278, upload-time = "2026-10-02T16:21:51.261Z" },
 ]
 
 [[package]]
