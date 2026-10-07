@@ -10,6 +10,24 @@ maps neither table, so both are dropped here along with their shared
 
 The ``timestamps`` table and its separate ``service_type`` enum are unaffected.
 
+``lock_timeout`` bounds the wait for the ``ACCESS EXCLUSIVE`` locks this migration
+needs. Dropping a table with foreign keys also drops the referential-integrity
+triggers on each table it references, and Postgres takes ``ACCESS EXCLUSIVE`` on those
+tables to do it -- here ``identifiers``, ``datasources``, ``collections`` (from
+``coveragerecords``) and ``equivalents`` (from ``equivalentscoveragerecords``). Those
+are far busier than the ``coveragerecords`` table 58ebd34c5092 protects, and migrations
+run online: if an N-1 request or Celery task holds an open transaction touching one of
+them, an unbounded ``DROP`` would wait, and every *new* query on that table would queue
+behind the pending lock request and stall too. With the timeout the migration instead
+fails after 5s -- nothing retries it, so the deploy has to be re-run, which is the
+better failure for the same reason 58ebd34c5092 gives: loud and bounded rather than a
+spreading stall.
+
+The timeout is reset at the end for the same reason as in 58ebd34c5092: ``SET LOCAL``
+lasts to the end of the *transaction*, and ``alembic/env.py`` runs every pending
+revision in a single ``context.begin_transaction()``, so without the reset a later
+revision in the same upgrade would inherit a 5s timeout it never asked for.
+
 Revision ID: 5ca948100902
 Revises: 58ebd34c5092
 Create Date: 2026-09-16 00:00:00.000000+00:00
@@ -40,6 +58,8 @@ coverage_status = postgresql.ENUM(
 
 
 def upgrade() -> None:
+    op.execute("SET LOCAL lock_timeout = '5s'")
+
     op.drop_index(
         op.f("ix_equivalentscoveragerecords_equivalency_id"),
         table_name="equivalentscoveragerecords",
@@ -79,6 +99,9 @@ def upgrade() -> None:
 
     # The coverage_status enum was used only by the two tables just dropped.
     coverage_status.drop(op.get_bind(), checkfirst=False)
+
+    # Scope the timeout to the statements above; see the module docstring.
+    op.execute("SET LOCAL lock_timeout = DEFAULT")
 
 
 def downgrade() -> None:
