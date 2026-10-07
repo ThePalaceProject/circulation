@@ -87,8 +87,9 @@ def test_upgrade_does_not_leak_lock_timeout(
     ourselves, which is the situation env.py actually creates.
     """
     # The next revision drops coveragerecords, so it is absent from the schema
-    # built from the current models. Step back to this revision, whose
-    # downgrade recreates it, to give the TRUNCATE something to act on.
+    # built from the current models. Stepping back to this revision runs that
+    # drop's downgrade, which recreates it for the TRUNCATE to act on. (This
+    # revision's own downgrade is a no-op.)
     alembic_runner.migrate_down_to(REVISION)
 
     revision = _load_revision()
