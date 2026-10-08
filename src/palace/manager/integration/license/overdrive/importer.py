@@ -146,7 +146,7 @@ class OverdriveImporter(LoggerMixin):
         # didn't get anything back from overdrive (ie from the book list fetch above) or we did not attempt to
         # fetch it because it was already processed by the parent collection.
         if book.get("metadata"):
-            bibliographic = self._extractor.book_info_to_bibliographic(book)
+            bibliographic = self._extractor.book_info_to_bibliographic(book["metadata"])
             # The bibliographic should never be null here because there is a non-null entry for metadata in the
             # book dictionary.  Mypy complains without an assertion or type hints.
             assert bibliographic

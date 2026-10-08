@@ -381,6 +381,43 @@ class TestOverdriveRepresentationExtractor:
                 in caplog.messages
             )
 
+    def test_book_info_requires_the_metadata_record(
+        self, overdrive_api_fixture: OverdriveAPIFixture
+    ):
+        """The converter reads bibliographic fields off the top level of whatever
+        it is given, so it must be handed the metadata record.
+
+        A product-list summary carries none of ``creators``, ``publisher``,
+        ``publishDate`` or ``languages``, and passing one in yields a record with
+        no author, no publisher, no publication date and a language silently
+        defaulted to English.
+        """
+        _, book_list = overdrive_api_fixture.sample_json("overdrive_book_list.json")
+        summary = book_list["products"][0]
+        _, metadata = overdrive_api_fixture.sample_json("overdrive_metadata.json")
+
+        for field in ("creators", "publisher", "publishDate", "languages"):
+            assert field not in summary
+            assert field in metadata
+
+        from_summary = OverdriveRepresentationExtractor.book_info_to_bibliographic(
+            summary
+        )
+        assert from_summary.contributors == []
+        assert from_summary.publisher is None
+        assert from_summary.published is None
+        # The misleading part: a missing language is not None, it is "eng".
+        assert from_summary.language == "eng"
+
+        from_metadata = OverdriveRepresentationExtractor.book_info_to_bibliographic(
+            metadata
+        )
+        assert [c.display_name for c in from_metadata.contributors] == [
+            "Andreas Rüping"
+        ]
+        assert from_metadata.publisher == "Wiley"
+        assert from_metadata.published is not None
+
     def test_book_info_with_metadata_with_series(
         self,
         overdrive_api_fixture: OverdriveAPIFixture,
