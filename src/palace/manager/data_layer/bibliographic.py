@@ -30,6 +30,7 @@ from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import LicensePool, RightsStatus
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Resource
 from palace.manager.sqlalchemy.util import get_one, get_one_or_create
+from palace.manager.util.json import json_hash
 from palace.manager.util.languages import LanguageCodes
 from palace.manager.util.median import median
 
@@ -104,7 +105,41 @@ class BibliographicData(BaseMutableData):
     def fields_excluded_from_hash(self) -> set[str]:
         # CirculationData is considered separate from bibliographic data, so
         # we want to exclude it from the hash calculation.
+        #
+        # Note: this exclusion must stay in place. CirculationData inherits
+        # ``created_at``, which defaults to the current time, and the set returned
+        # here is applied by ``model_dump(exclude=...)`` to top-level names only --
+        # so including ``circulation`` would pull a nested, always-changing
+        # timestamp into the fingerprint and re-import every book on every run.
+        # The parts of CirculationData that *do* need to influence the fingerprint
+        # are folded in explicitly by :meth:`calculate_hash`.
         return super().fields_excluded_from_hash().union({"circulation"})
+
+    def calculate_hash(self) -> str:
+        """Calculate a fingerprint of this object's bibliographic data.
+
+        This extends the base implementation by folding in the delivery formats
+        carried on ``circulation``. The formats are excluded from the model dump
+        along with the rest of ``circulation`` (see
+        :meth:`fields_excluded_from_hash`), but a change to the set of available
+        formats is a real change: a book imported before Overdrive listed a usable
+        format must be re-applied once one appears, or it stays unopenable.
+
+        Only the format list is folded in -- not the availability counts, which
+        change constantly and are handled separately by ``CirculationData``.
+
+        :return: A lowercase hex-encoded SHA-256 digest string.
+        """
+        base = super().calculate_hash()
+        # The sort is load-bearing: the order in which a distributor lists its
+        # formats is not stable, and an unsorted list would cause spurious
+        # re-imports. ``available`` is included deliberately -- a format toggling
+        # availability is a meaningful change.
+        formats = sorted(
+            (fmt.content_type or "", fmt.drm_scheme or "", bool(fmt.available))
+            for fmt in (self.circulation.formats if self.circulation else [])
+        )
+        return json_hash({"base": base, "formats": formats})
 
     @classmethod
     def from_edition(cls, edition: Edition) -> BibliographicData:

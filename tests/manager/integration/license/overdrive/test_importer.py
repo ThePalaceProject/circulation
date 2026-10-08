@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 import json
 from unittest.mock import AsyncMock, Mock
 
@@ -222,6 +223,135 @@ class TestOverdriveImporter:
         metadata_lookup_mock.assert_not_called()
         apply_bibliographic.assert_not_called()
         assert apply_circulation.called
+
+    def test_process_book_uses_metadata_record_not_product_summary(
+        self,
+        db: DatabaseTransactionFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
+        services_fixture: ServicesFixture,
+    ):
+        """_process_book must convert the fetched metadata record, not the product summary.
+
+        The product-list summary does not carry ``creators``, ``publisher``,
+        ``publishDate`` or ``languages``, so converting it loses the author,
+        publisher and publication date and silently defaults the language to
+        English.
+        """
+        collection = overdrive_api_fixture.collection
+        registry = services_fixture.services.integration_registry.license_providers()
+
+        importer = OverdriveImporter(
+            db=db.session,
+            collection=collection,
+            registry=registry,
+            api=overdrive_api_fixture.api,
+        )
+
+        book_list_data = json.loads(
+            overdrive_files_fixture.sample_data("overdrive_book_list.json")
+        )
+        book = book_list_data["products"][0].copy()
+        metadata = json.loads(
+            overdrive_files_fixture.sample_data("overdrive_metadata.json")
+        )
+        # In production the metadata record is looked up by the summary's id, so
+        # the two always agree.
+        metadata["id"] = book["id"]
+        book["metadata"] = metadata
+        book["availabilityV2"] = json.loads(
+            overdrive_files_fixture.sample_data(
+                "overdrive_availability_information.json"
+            )
+        )
+
+        # Sanity check on the fixture: the fields we care about really are absent
+        # from the summary and present in the metadata record.
+        for field in ("creators", "publisher", "publishDate", "languages"):
+            assert field not in book_list_data["products"][0]
+            assert field in metadata
+
+        apply_bibliographic = Mock()
+        apply_circulation = Mock()
+
+        importer._process_book(
+            book=book,
+            fetch_metadata=True,
+            policy=ReplacementPolicy(),
+            apply_bibliographic=apply_bibliographic,
+            apply_circulation=apply_circulation,
+        )
+
+        apply_bibliographic.assert_called_once()
+        bibliographic = apply_bibliographic.call_args.args[0]
+
+        assert bibliographic.publisher == "Wiley"
+        assert [c.display_name for c in bibliographic.contributors] == [
+            "Andreas Rüping"
+        ]
+        assert bibliographic.published == datetime.date(2005, 1, 31)
+        # "en" in the metadata record, normalized to alpha-3 -- not the "eng"
+        # default that an absent ``languages`` key would have produced.
+        assert bibliographic.language == "eng"
+        assert bibliographic.title == metadata["title"]
+
+        # Formats are deliberately not part of what this fix recovers. The
+        # product-list summary carries a ``formats`` list of its own, and for
+        # this fixture pair both documents yield the same four FormatData, so
+        # there is nothing here that discriminates the fixed code from the
+        # unfixed code. Assert them only as a non-regression check that routing
+        # through the metadata record did not drop them. Making a *change* to
+        # the formats visible to the importer is defect 2's job, covered by the
+        # ``calculate_hash`` tests in tests/manager/data_layer.
+        assert bibliographic.circulation is not None
+        assert len(bibliographic.circulation.formats) == 4
+
+    def test_process_book_non_english_language_preserved(
+        self,
+        db: DatabaseTransactionFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
+        services_fixture: ServicesFixture,
+    ):
+        """A non-English book must not be miscatalogued as English."""
+        collection = overdrive_api_fixture.collection
+        registry = services_fixture.services.integration_registry.license_providers()
+
+        importer = OverdriveImporter(
+            db=db.session,
+            collection=collection,
+            registry=registry,
+            api=overdrive_api_fixture.api,
+        )
+
+        book_list_data = json.loads(
+            overdrive_files_fixture.sample_data("overdrive_book_list.json")
+        )
+        book = book_list_data["products"][0].copy()
+        metadata = json.loads(
+            overdrive_files_fixture.sample_data("overdrive_metadata.json")
+        )
+        metadata["id"] = book["id"]
+        metadata["languages"] = [{"code": "fr", "name": "French"}]
+        book["metadata"] = metadata
+        book["availabilityV2"] = json.loads(
+            overdrive_files_fixture.sample_data(
+                "overdrive_availability_information.json"
+            )
+        )
+
+        apply_bibliographic = Mock()
+
+        importer._process_book(
+            book=book,
+            fetch_metadata=True,
+            policy=ReplacementPolicy(),
+            apply_bibliographic=apply_bibliographic,
+            apply_circulation=Mock(),
+        )
+
+        apply_bibliographic.assert_called_once()
+        assert apply_bibliographic.call_args.args[0].language == "fre"
 
     def test_import_collection_basic(
         self,
