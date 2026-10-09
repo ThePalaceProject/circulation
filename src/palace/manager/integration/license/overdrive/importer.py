@@ -147,11 +147,18 @@ class OverdriveImporter(LoggerMixin):
         # fetch it because it was already processed by the parent collection.
         if book.get("metadata"):
             bibliographic = self._extractor.book_info_to_bibliographic(book["metadata"])
-            # The bibliographic should never be null here because there is a non-null entry for metadata in the
-            # book dictionary.  Mypy complains without an assertion or type hints.
-            assert bibliographic
-
-            if bibliographic.needs_apply(self._db):
+            if bibliographic is None:
+                # A non-empty metadata entry is not necessarily a usable record.
+                # Overdrive reports an unrecognized identifier as an HTTP 200 whose body
+                # is an error document (see OverdriveClientRequests.metadata), and such a
+                # document passes the check above while carrying no "id" for the extractor
+                # to key on. Skip the bibliographic update and carry on to the circulation
+                # update below, which is still worth attempting.
+                self.log.warning(
+                    f"Could not extract bibliographic data from Overdrive metadata for "
+                    f"{identifier}. Skipping bibliographic update."
+                )
+            elif bibliographic.needs_apply(self._db):
                 changed = True
                 apply_bibliographic(
                     bibliographic,
