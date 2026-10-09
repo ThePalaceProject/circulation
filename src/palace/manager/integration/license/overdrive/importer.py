@@ -13,6 +13,7 @@ from palace.manager.celery.tasks.apply import (
     ApplyBibliographicCallable,
     ApplyCirculationCallable,
 )
+from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.integration.license.overdrive.api import OverdriveAPI
@@ -96,6 +97,29 @@ class OverdriveImporter(LoggerMixin):
         )
         return timestamp
 
+    @staticmethod
+    def _bibliographic_matches_identifier(
+        bibliographic: BibliographicData, identifier: Identifier
+    ) -> bool:
+        """Whether converted bibliographic data describes the expected title.
+
+        The identifier comes from the product list, while the bibliographic data is
+        converted from the separately fetched metadata record, so the two can in
+        principle disagree -- for instance if Overdrive redirects a merged title to a
+        different id. The comparison is case-insensitive, mirroring
+        :meth:`BibliographicData._validate_primary_identifier`, because Overdrive is
+        not consistent about the case of its ids. Only the identifier is compared;
+        the type is always Identifier.OVERDRIVE_ID on both sides.
+
+        :param bibliographic: Bibliographic data converted from the metadata record.
+        :param identifier: The identifier taken from the product list.
+        :return: True if the data can safely be applied to ``identifier``.
+        """
+        primary = bibliographic.primary_identifier_data
+        if primary is None:
+            return False
+        return primary.identifier.lower() == identifier.identifier.lower()
+
     def _process_book(
         self,
         book: dict[str, Any],
@@ -157,6 +181,16 @@ class OverdriveImporter(LoggerMixin):
                 self.log.warning(
                     f"Could not extract bibliographic data from Overdrive metadata for "
                     f"{identifier}. Skipping bibliographic update."
+                )
+            elif not self._bibliographic_matches_identifier(bibliographic, identifier):
+                # The record we converted describes a different title than the one the
+                # product list pointed us at. Applying it would raise PalaceValueError
+                # deep inside the apply worker, where it is far harder to connect back
+                # to the collection being imported, so stop here instead.
+                self.log.warning(
+                    f"Overdrive metadata for {identifier} reports a different identifier "
+                    f"({bibliographic.primary_identifier_data}). Skipping bibliographic "
+                    f"update."
                 )
             elif bibliographic.needs_apply(self._db):
                 changed = True
