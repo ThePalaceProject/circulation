@@ -393,6 +393,108 @@ class TestOverdriveImporter:
         apply_circulation.assert_called_once()
         assert changed is True
 
+    def test_process_book_metadata_for_a_different_identifier_is_skipped(
+        self,
+        db: DatabaseTransactionFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
+        services_fixture: ServicesFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """Metadata describing a different title must not be applied.
+
+        The identifier comes from the product list while the bibliographic data comes
+        from the separately fetched metadata record, so the two can disagree. Applying
+        the mismatched data would raise PalaceValueError inside the apply worker, so
+        the importer stops first.
+        """
+        collection = overdrive_api_fixture.collection
+        registry = services_fixture.services.integration_registry.license_providers()
+
+        importer = OverdriveImporter(
+            db=db.session,
+            collection=collection,
+            registry=registry,
+            api=overdrive_api_fixture.api,
+        )
+
+        book_list_data = json.loads(
+            overdrive_files_fixture.sample_data("overdrive_book_list.json")
+        )
+        book = book_list_data["products"][0].copy()
+        metadata = json.loads(
+            overdrive_files_fixture.sample_data("overdrive_metadata.json")
+        )
+        # The fixtures describe two different titles, so leaving the ids as they are
+        # is exactly the mismatch we want to detect.
+        assert metadata["id"] != book["id"]
+        book["metadata"] = metadata
+        book["availabilityV2"] = json.loads(
+            overdrive_files_fixture.sample_data(
+                "overdrive_availability_information.json"
+            )
+        )
+
+        apply_bibliographic = Mock()
+
+        with caplog.at_level(logging.WARNING):
+            importer._process_book(
+                book=book,
+                fetch_metadata=True,
+                policy=ReplacementPolicy(),
+                apply_bibliographic=apply_bibliographic,
+                apply_circulation=Mock(),
+            )
+
+        apply_bibliographic.assert_not_called()
+        assert "reports a different identifier" in caplog.text
+
+    def test_process_book_identifier_case_mismatch_is_tolerated(
+        self,
+        db: DatabaseTransactionFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
+        services_fixture: ServicesFixture,
+    ):
+        """Overdrive is inconsistent about id case; that alone is not a mismatch."""
+        collection = overdrive_api_fixture.collection
+        registry = services_fixture.services.integration_registry.license_providers()
+
+        importer = OverdriveImporter(
+            db=db.session,
+            collection=collection,
+            registry=registry,
+            api=overdrive_api_fixture.api,
+        )
+
+        book_list_data = json.loads(
+            overdrive_files_fixture.sample_data("overdrive_book_list.json")
+        )
+        book = book_list_data["products"][0].copy()
+        metadata = json.loads(
+            overdrive_files_fixture.sample_data("overdrive_metadata.json")
+        )
+        metadata["id"] = book["id"].upper()
+        assert metadata["id"] != book["id"]
+        book["metadata"] = metadata
+        book["availabilityV2"] = json.loads(
+            overdrive_files_fixture.sample_data(
+                "overdrive_availability_information.json"
+            )
+        )
+
+        apply_bibliographic = Mock()
+
+        importer._process_book(
+            book=book,
+            fetch_metadata=True,
+            policy=ReplacementPolicy(),
+            apply_bibliographic=apply_bibliographic,
+            apply_circulation=Mock(),
+        )
+
+        apply_bibliographic.assert_called_once()
+
     def test_process_book_non_english_language_preserved(
         self,
         db: DatabaseTransactionFixture,
@@ -489,6 +591,11 @@ class TestOverdriveImporter:
         # Mock extractor methods
         mock_bibliographic = Mock(spec=BibliographicData)
         mock_bibliographic.needs_apply.return_value = True
+        # The real extractor keys the primary identifier off the record it is
+        # given, so the mock has to report one too.
+        mock_bibliographic.primary_identifier_data = IdentifierData(
+            type=Identifier.OVERDRIVE_ID, identifier=mock_book_data[0]["id"]
+        )
         mock_circulation = Mock(spec=CirculationData)
         mock_circulation.needs_apply.return_value = True
 
@@ -599,6 +706,11 @@ class TestOverdriveImporter:
         # Mock extractor
         mock_bibliographic = Mock(spec=BibliographicData)
         mock_bibliographic.needs_apply.return_value = True
+        # The real extractor keys the primary identifier off the record it is
+        # given, so the mock has to report one too.
+        mock_bibliographic.primary_identifier_data = IdentifierData(
+            type=Identifier.OVERDRIVE_ID, identifier="overdrive-id-1"
+        )
         mock_circulation = Mock(spec=CirculationData)
         mock_circulation.needs_apply.return_value = True
 
@@ -655,6 +767,11 @@ class TestOverdriveImporter:
         # Mock extractor - bibliographic hasn't changed
         mock_bibliographic = Mock(spec=BibliographicData)
         mock_bibliographic.needs_apply.return_value = False  # Not changed
+        # The real extractor keys the primary identifier off the record it is
+        # given, so the mock has to report one too.
+        mock_bibliographic.primary_identifier_data = IdentifierData(
+            type=Identifier.OVERDRIVE_ID, identifier="overdrive-id-1"
+        )
         mock_circulation = Mock(spec=CirculationData)
         mock_circulation.needs_apply.return_value = True
 
@@ -773,6 +890,11 @@ class TestOverdriveImporter:
         # Mock extractor
         mock_bibliographic = Mock(spec=BibliographicData)
         mock_bibliographic.needs_apply.return_value = True
+        # The real extractor keys the primary identifier off the record it is
+        # given, so the mock has to report one too.
+        mock_bibliographic.primary_identifier_data = IdentifierData(
+            type=Identifier.OVERDRIVE_ID, identifier="overdrive-id-1"
+        )
         mock_circulation = Mock(spec=CirculationData)
         mock_circulation.needs_apply.return_value = True
 
@@ -862,6 +984,11 @@ class TestOverdriveImporter:
         # Mock extractor
         mock_bibliographic = Mock(spec=BibliographicData)
         mock_bibliographic.needs_apply.return_value = True
+        # The real extractor keys the primary identifier off the record it is
+        # given, so the mock has to report one too.
+        mock_bibliographic.primary_identifier_data = IdentifierData(
+            type=Identifier.OVERDRIVE_ID, identifier="overdrive-id-3"
+        )
         mock_circulation = Mock(spec=CirculationData)
         mock_circulation.needs_apply.return_value = True
 
