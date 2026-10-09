@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime
 import json
+import logging
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -305,6 +306,92 @@ class TestOverdriveImporter:
         # ``calculate_hash`` tests in tests/manager/data_layer.
         assert bibliographic.circulation is not None
         assert len(bibliographic.circulation.formats) == 4
+
+    @pytest.mark.parametrize("fetch_metadata", [True, False])
+    def test_process_book_metadata_error_document_is_skipped(
+        self,
+        db: DatabaseTransactionFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
+        services_fixture: ServicesFixture,
+        caplog: pytest.LogCaptureFixture,
+        fetch_metadata: bool,
+    ):
+        """An Overdrive error document must not crash the import.
+
+        Overdrive reports an unrecognized identifier as an HTTP 200 whose body is an
+        error document rather than as an HTTP error, so ``book["metadata"]`` can be a
+        non-empty dict with no ``id`` in it. That passes the ``if book.get("metadata")``
+        guard but gives the extractor nothing to key on, and it returns None.
+
+        Both ingest paths are covered: ``fetch_metadata=True`` is the bulk path used for
+        main collections, where the error document is attached by the book-list fetch;
+        ``fetch_metadata=False`` is the lazy path used for advantage collections, where
+        it comes back from a per-title metadata lookup.
+        """
+        collection = overdrive_api_fixture.collection
+        registry = services_fixture.services.integration_registry.license_providers()
+
+        importer = OverdriveImporter(
+            db=db.session,
+            collection=collection,
+            registry=registry,
+            api=overdrive_api_fixture.api,
+        )
+
+        error_document = {
+            "errorCode": "NotFound",
+            "message": "The requested record was not found.",
+            "token": "a-token",
+        }
+
+        book_list_data = json.loads(
+            overdrive_files_fixture.sample_data("overdrive_book_list.json")
+        )
+        book = book_list_data["products"][0].copy()
+        book["availabilityV2"] = json.loads(
+            overdrive_files_fixture.sample_data(
+                "overdrive_availability_information.json"
+            )
+        )
+
+        if fetch_metadata:
+            # Bulk path: the error document is already attached to the book.
+            book["metadata"] = error_document
+            importer._api.metadata_lookup = Mock(
+                side_effect=AssertionError("Metadata lookup should not be called")
+            )
+        else:
+            # Lazy path: the error document comes back from the metadata lookup.
+            book.pop("metadata", None)
+            importer._api.metadata_lookup = Mock(
+                return_value=MetadataResponse.model_validate(error_document)
+            )
+
+        apply_bibliographic = Mock()
+        apply_circulation = Mock()
+
+        with caplog.at_level(logging.WARNING):
+            identifier, changed = importer._process_book(
+                book=book,
+                fetch_metadata=fetch_metadata,
+                policy=ReplacementPolicy(),
+                apply_bibliographic=apply_bibliographic,
+                apply_circulation=apply_circulation,
+            )
+
+        # The book is skipped rather than blowing up the whole import run.
+        assert isinstance(identifier, Identifier)
+        apply_bibliographic.assert_not_called()
+        assert (
+            "Could not extract bibliographic data from Overdrive metadata"
+            in caplog.text
+        )
+
+        # The circulation data is independent of the metadata record, so it is still
+        # applied -- availability must keep flowing even when the record is unusable.
+        apply_circulation.assert_called_once()
+        assert changed is True
 
     def test_process_book_non_english_language_preserved(
         self,
