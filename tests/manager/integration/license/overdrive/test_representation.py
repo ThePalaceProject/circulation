@@ -381,16 +381,21 @@ class TestOverdriveRepresentationExtractor:
                 in caplog.messages
             )
 
-    def test_book_info_requires_the_metadata_record(
+    def test_book_info_to_bibliographic_reads_only_the_record_it_is_given(
         self, overdrive_api_fixture: OverdriveAPIFixture
     ):
-        """The converter reads bibliographic fields off the top level of whatever
-        it is given, so it must be handed the metadata record.
+        """Characterise the converter: it reads bibliographic fields off the top
+        level of whatever dict it is handed, and silently yields empty values for
+        anything that dict does not contain.
 
         A product-list summary carries none of ``creators``, ``publisher``,
-        ``publishDate`` or ``languages``, and passing one in yields a record with
-        no author, no publisher, no publication date and a language silently
-        defaulted to English.
+        ``publishDate`` or ``languages``, so passing one in yields a record with no
+        author, no publisher, no publication date and a language defaulted to
+        English. That is why callers must hand it the metadata record.
+
+        This pins the converter's behaviour; it does not guard any caller. The
+        importer-side regression is covered by
+        ``TestOverdriveImporter.test_process_book_uses_metadata_record_not_product_summary``.
         """
         _, book_list = overdrive_api_fixture.sample_json("overdrive_book_list.json")
         summary = book_list["products"][0]
