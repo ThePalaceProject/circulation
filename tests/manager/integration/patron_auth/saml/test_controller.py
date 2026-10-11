@@ -1,21 +1,39 @@
+import base64
 import json
 import logging
+from collections.abc import Callable
 from contextlib import nullcontext
-from unittest.mock import MagicMock, Mock, PropertyMock, create_autospec, patch
+from unittest.mock import (
+    MagicMock,
+    Mock,
+    PropertyMock,
+    call,
+    create_autospec,
+    patch,
+)
 from urllib.parse import parse_qs, urlencode, urlsplit
 
 import pytest
 from flask import request
 from lxml import etree
+from onelogin.saml2.errors import OneLogin_Saml2_Error
+from onelogin.saml2.response import OneLogin_Saml2_Response
 from werkzeug import Response as wkResponse
 
 from palace.manager.api.authentication.base import PatronData
-from palace.manager.api.authenticator import Authenticator
+from palace.manager.api.authenticator import (
+    Authenticator,
+    BaseSAMLAuthenticationProvider,
+)
 from palace.manager.integration.patron_auth.constants import LOGOUT_REDIRECT_QUERY_PARAM
 from palace.manager.integration.patron_auth.saml.auth import (
     SAML_GENERIC_ERROR,
     SAML_INCORRECT_RESPONSE,
     SAMLAuthenticationManager,
+)
+from palace.manager.integration.patron_auth.saml.configuration.model import (
+    SAMLConfigurationError,
+    SAMLWebSSOAuthSettings,
 )
 from palace.manager.integration.patron_auth.saml.configuration.problem_details import (
     SAML_INCORRECT_METADATA,
@@ -38,6 +56,9 @@ from palace.manager.integration.patron_auth.saml.metadata.model import (
     SAMLSubject,
     SAMLUIInfo,
 )
+from palace.manager.integration.patron_auth.saml.metadata.parser import (
+    SAMLMetadataParsingError,
+)
 from palace.manager.integration.patron_auth.saml.provider import (
     SAML_CANNOT_DETERMINE_PATRON,
     SAMLWebSSOAuthenticationProvider,
@@ -51,6 +72,11 @@ from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.util import create
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.fixtures.api_controller import ControllerFixture
+from tests.fixtures.saml import (
+    KEY_INFO_KEY_NAME,
+    KEY_INFO_RETRIEVAL_METHOD_WITHOUT_TYPE,
+    encode_saml_response,
+)
 from tests.mocks import saml_strings
 
 CORRECT_XML_WITH_DECLARATION = (
@@ -89,6 +115,40 @@ def create_patron_data_mock():
     type(patron_data_mock).to_response_parameters = PropertyMock(return_value="")
 
     return patron_data_mock
+
+
+def create_authentication_manager_mock(finish_result: object) -> MagicMock:
+    """Returns an authentication manager with a canned result.
+
+    Its finish_authentication returns the given result, or raises it if it is an
+    exception.
+    """
+    manager = create_autospec(spec=SAMLAuthenticationManager)
+    if isinstance(finish_result, Exception):
+        manager.finish_authentication.side_effect = finish_result
+    else:
+        manager.finish_authentication.return_value = finish_result
+    return manager
+
+
+def create_web_sso_provider_mock(
+    library: Library,
+    integration_id: int,
+    accepted_idp: str,
+    manager: MagicMock,
+    promotes_libraries: bool = True,
+    promote_label: str | None = None,
+) -> MagicMock:
+    """Returns a SAML Web SSO provider for one library of an integration."""
+    provider = create_autospec(spec=SAMLWebSSOAuthenticationProvider)
+    provider.label = MagicMock(return_value=SAMLWebSSOAuthenticationProvider.label())
+    provider.library_id = library.id
+    provider.integration_id = integration_id
+    provider.identity_provider_entity_ids = frozenset({accepted_idp})
+    provider.promotes_libraries = promotes_libraries
+    provider.promote_label = MagicMock(return_value=promote_label)
+    provider.get_authentication_manager = MagicMock(return_value=manager)
+    return provider
 
 
 class TestSAMLController:
@@ -490,7 +550,7 @@ class TestSAMLController:
     ) -> None:
         """An unsolicited response, one whose RelayState carries none of our
         parameters, is never authenticated. The browser is sent to the IdP's
-        RelayState if it points at a known patron web client, else to the
+        RelayState if it points at a known web catalog, else to the
         sitewide default web catalog, else the response is rejected.
         """
         # Arrange
@@ -509,7 +569,7 @@ class TestSAMLController:
         authenticator.library_authenticators["default"].register_saml_provider(provider)
         controller = SAMLController(controller_fixture.app.manager, authenticator)
 
-        # Known patron web clients are built the way CirculationManager builds
+        # Known web catalogs are built the way CirculationManager builds
         # them: a sitewide hostname plus a registered web client URL (which may
         # carry a path). A "*" (development only) must never match anything, and
         # an entry that cannot be parsed must be skipped, not fail the request.
@@ -529,7 +589,7 @@ class TestSAMLController:
             "https://[unparseable",
         }
         controller_fixture.services_fixture.set_sitewide_config_option(
-            "patron_web_default_url", default_url
+            "web_catalog_default_url", default_url
         )
 
         data = {SAMLController.SAML_RESPONSE: "encoded"}
@@ -554,6 +614,462 @@ class TestSAMLController:
             assert result.headers.get("Location") == expected_location
 
         authentication_manager.finish_authentication.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "saml_response, expected",
+        [
+            pytest.param(
+                encode_saml_response("https://idp.example", "https://idp.example"),
+                "https://idp.example",
+                id="response-and-assertion-agree",
+            ),
+            pytest.param(
+                encode_saml_response(response_issuer="https://idp.example"),
+                "https://idp.example",
+                id="response-only",
+            ),
+            pytest.param(
+                encode_saml_response(assertion_issuer="https://idp.example"),
+                "https://idp.example",
+                id="assertion-only",
+            ),
+            pytest.param(
+                encode_saml_response("https://idp.example", "https://other.example"),
+                None,
+                id="issuers-disagree",
+            ),
+            pytest.param(encode_saml_response(), None, id="no-issuer"),
+            pytest.param("encoded", None, id="not-xml"),
+            pytest.param("é", None, id="not-base64"),
+            pytest.param(
+                base64.b64encode(
+                    b'<!DOCTYPE x [<!ENTITY e "https://idp.example">]>'
+                    b'<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol"'
+                    b' xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion">'
+                    b"<saml:Issuer>&e;</saml:Issuer></samlp:Response>"
+                ).decode(),
+                None,
+                id="dtd-is-forbidden",
+            ),
+        ],
+    )
+    def test_saml_response_issuer(
+        self, saml_response: str, expected: str | None
+    ) -> None:
+        assert SAMLController._saml_response_issuer(saml_response) == expected
+
+    IDP = "https://idp.example"
+    OTHER_IDP = "https://other-idp.example"
+    WEB_CATALOG = "https://catalog.example.com"
+
+    def _authenticator_with_integrations(
+        self,
+        controller_fixture: ControllerFixture,
+        managers: tuple[MagicMock, MagicMock],
+        accepted_idps: tuple[str, str] = (IDP, IDP),
+        promotes_libraries: tuple[bool, bool] = (True, True),
+        promote_labels: tuple[str | None, str | None] = (None, None),
+    ) -> tuple[Authenticator, list[MagicMock]]:
+        """Returns an authenticator with two SAML Web SSO integrations.
+
+        Integration 1 serves libraries lib-a and lib-b, and integration 2 serves
+        lib-c. The other arguments give each integration's settings, in order.
+
+        :return: The authenticator, and the providers in library order
+        """
+        db = controller_fixture.db
+        libraries = (
+            (db.library(short_name="lib-a"), db.library(short_name="lib-b")),
+            (db.library(short_name="lib-c"),),
+        )
+        authenticator = Authenticator(db.session, libraries=db.session.query(Library))
+        providers: list[MagicMock] = []
+        for index, integration_libraries in enumerate(libraries):
+            for library in integration_libraries:
+                provider = create_web_sso_provider_mock(
+                    library,
+                    index + 1,
+                    accepted_idps[index],
+                    managers[index],
+                    promotes_libraries[index],
+                    promote_labels[index],
+                )
+                providers.append(provider)
+                authenticator.library_authenticators[
+                    library.short_name
+                ].register_saml_provider(provider)
+        return authenticator, providers
+
+    def _post_unsolicited_response(
+        self,
+        controller_fixture: ControllerFixture,
+        authenticator: Authenticator,
+        saml_response: str,
+        relay_state: str | None = None,
+    ) -> str | None:
+        """Posts an unsolicited SAML response to the callback.
+
+        The default web catalog is the only known web catalog.
+
+        :return: The Location of the 303 redirect
+        """
+        controller = SAMLController(controller_fixture.app.manager, authenticator)
+        controller_fixture.app.manager.patron_web_domains = {self.WEB_CATALOG}
+        controller_fixture.services_fixture.set_sitewide_config_option(
+            "web_catalog_default_url", self.WEB_CATALOG
+        )
+
+        data = {SAMLController.SAML_RESPONSE: saml_response}
+        if relay_state is not None:
+            data[SAMLController.RELAY_STATE] = relay_state
+
+        with controller_fixture.app.test_request_context(
+            "/saml_callback", method="POST", data=data
+        ):
+            result = controller.saml_authentication_callback(
+                request, controller_fixture.db.session
+            )
+
+        assert isinstance(result, wkResponse)
+        assert result.status_code == 303
+        return result.headers.get("Location")
+
+    @pytest.mark.parametrize(
+        "saml_response, accepted_idps, finish_results, expected_location, "
+        "expected_validations",
+        [
+            pytest.param(
+                encode_saml_response(IDP),
+                (IDP, OTHER_IDP),
+                (MagicMock(spec=SAMLSubject), None),
+                "https://catalog.example.com?promote=lib-a,lib-b",
+                (True, False),
+                id="valid-response-promotes-integration-libraries",
+            ),
+            pytest.param(
+                encode_saml_response(IDP),
+                (IDP, OTHER_IDP),
+                (SAML_INVALID_RESPONSE, None),
+                "https://catalog.example.com",
+                (True, False),
+                id="invalid-response-promotes-nothing",
+            ),
+            pytest.param(
+                encode_saml_response(IDP),
+                (IDP, OTHER_IDP),
+                (SAMLConfigurationError("bad settings"), None),
+                "https://catalog.example.com",
+                (True, False),
+                id="configuration-error-promotes-nothing",
+            ),
+            pytest.param(
+                encode_saml_response(IDP),
+                (IDP, OTHER_IDP),
+                (OneLogin_Saml2_Error("bad settings"), None),
+                "https://catalog.example.com",
+                (True, False),
+                id="onelogin-settings-error-promotes-nothing",
+            ),
+            pytest.param(
+                encode_saml_response(IDP),
+                (IDP, OTHER_IDP),
+                (SAMLMetadataParsingError("bad metadata"), None),
+                "https://catalog.example.com",
+                (True, False),
+                id="metadata-error-promotes-nothing",
+            ),
+            pytest.param(
+                encode_saml_response(IDP),
+                (OTHER_IDP, OTHER_IDP),
+                (None, None),
+                "https://catalog.example.com",
+                (False, False),
+                id="issuer-not-accepted-promotes-nothing",
+            ),
+            pytest.param(
+                "encoded",
+                (IDP, IDP),
+                (None, None),
+                "https://catalog.example.com",
+                (False, False),
+                id="unreadable-response-promotes-nothing",
+            ),
+            pytest.param(
+                encode_saml_response(IDP),
+                (IDP, IDP),
+                (MagicMock(spec=SAMLSubject), MagicMock(spec=SAMLSubject)),
+                "https://catalog.example.com?promote=lib-a,lib-b,lib-c",
+                (True, True),
+                id="two-valid-integrations-promote-all-their-libraries",
+            ),
+            pytest.param(
+                encode_saml_response(IDP),
+                (IDP, IDP),
+                (SAML_INVALID_RESPONSE, MagicMock(spec=SAMLSubject)),
+                "https://catalog.example.com?promote=lib-c",
+                (True, True),
+                id="only-the-valid-integration-is-promoted",
+            ),
+        ],
+    )
+    def test_saml_authentication_callback_unsolicited_promotes_libraries(
+        self,
+        controller_fixture: ControllerFixture,
+        saml_response: str,
+        accepted_idps: tuple[str, str],
+        finish_results: tuple[object, object],
+        expected_location: str,
+        expected_validations: tuple[bool, bool],
+    ) -> None:
+        """A valid unsolicited response promotes its integrations' libraries.
+
+        The short names of the libraries associated with the auth integrations it
+        is valid for are promoted on the default catalog. Libraries of SAML
+        providers of other types are not promoted.
+        """
+        db = controller_fixture.db
+        # Library d has a SAML provider of another type, which is never matched.
+        library_d = db.library(short_name="lib-d")
+        managers = (
+            create_authentication_manager_mock(finish_results[0]),
+            create_authentication_manager_mock(finish_results[1]),
+        )
+        authenticator, _ = self._authenticator_with_integrations(
+            controller_fixture, managers, accepted_idps=accepted_idps
+        )
+        other_type_provider = create_autospec(spec=BaseSAMLAuthenticationProvider)
+        other_type_provider.label = MagicMock(return_value="Other SAML")
+        authenticator.library_authenticators[
+            library_d.short_name
+        ].register_saml_provider(other_type_provider)
+
+        location = self._post_unsolicited_response(
+            controller_fixture, authenticator, saml_response
+        )
+
+        assert location == expected_location
+        # Each integration is validated at most once, not once per library.
+        for manager, expect_validated in zip(managers, expected_validations):
+            if expect_validated:
+                manager.finish_authentication.assert_called_once_with(
+                    db.session, self.IDP
+                )
+            else:
+                manager.finish_authentication.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "promotes_libraries, promote_labels, relay_state, expected_location, "
+        "expected_relay_state_label",
+        [
+            pytest.param(
+                (False, True),
+                (None, None),
+                None,
+                "https://catalog.example.com?promote=lib-c",
+                None,
+                id="integration-that-disallows-promotion-is-skipped",
+            ),
+            pytest.param(
+                (False, False),
+                (None, None),
+                None,
+                "https://catalog.example.com",
+                None,
+                id="nothing-is-promoted-when-no-integration-allows-it",
+            ),
+            pytest.param(
+                (True, True),
+                ("Our schools", "Our schools"),
+                None,
+                "https://catalog.example.com"
+                "?promote=lib-a,lib-b,lib-c&promoteLabel=Our+schools",
+                None,
+                id="shared-label-is-sent",
+            ),
+            pytest.param(
+                (True, True),
+                ("District A", None),
+                None,
+                "https://catalog.example.com"
+                "?promote=lib-a,lib-b,lib-c&promoteLabel=District+A",
+                None,
+                id="only-label-is-sent",
+            ),
+            pytest.param(
+                (True, True),
+                ("District A", "District B"),
+                None,
+                "https://catalog.example.com?promote=lib-a,lib-b,lib-c",
+                None,
+                id="different-labels-send-no-label",
+            ),
+            # The integration's label decision differs from the relay state's
+            # label, so the Location shows that the integration decided it.
+            pytest.param(
+                (True, False),
+                ("Integration decision", None),
+                "https://catalog.example.com/lib"
+                "?promote=x&promoteLabel=From+relay+state&promoteOrder=listed",
+                "https://catalog.example.com/lib"
+                "?promoteOrder=listed&promote=lib-a,lib-b"
+                "&promoteLabel=Integration+decision",
+                "From relay state",
+                id="honored-relay-state-label-is-offered-to-the-integration",
+            ),
+            pytest.param(
+                (False, False),
+                (None, None),
+                "https://catalog.example.com/lib?promote=x&promoteLabel=Start",
+                "https://catalog.example.com/lib",
+                None,
+                id="relay-state-promote-parameters-are-removed",
+            ),
+        ],
+    )
+    def test_saml_authentication_callback_unsolicited_promote_settings(
+        self,
+        controller_fixture: ControllerFixture,
+        promotes_libraries: tuple[bool, bool],
+        promote_labels: tuple[str | None, str | None],
+        relay_state: str | None,
+        expected_location: str,
+        expected_relay_state_label: str | None,
+    ) -> None:
+        """Only integrations that allow promotion are validated and promoted.
+
+        This holds on the default catalog and on an honored relay state. The
+        relay state's promote parameters are replaced, and its label is offered
+        to each integration. The label is sent when the promoted integrations
+        agree on it.
+        """
+        managers = (
+            create_authentication_manager_mock(MagicMock(spec=SAMLSubject)),
+            create_authentication_manager_mock(MagicMock(spec=SAMLSubject)),
+        )
+        authenticator, providers = self._authenticator_with_integrations(
+            controller_fixture,
+            managers,
+            promotes_libraries=promotes_libraries,
+            promote_labels=promote_labels,
+        )
+
+        location = self._post_unsolicited_response(
+            controller_fixture,
+            authenticator,
+            encode_saml_response(self.IDP),
+            relay_state,
+        )
+
+        assert location == expected_location
+        for manager, promotes in zip(managers, promotes_libraries):
+            assert manager.finish_authentication.called is promotes
+        # One provider stands in for each promoted integration.
+        label_calls = [
+            label_call
+            for provider in providers
+            for label_call in provider.promote_label.mock_calls
+        ]
+        assert label_calls == [
+            call(controller_fixture.db.session, expected_relay_state_label)
+            for promotes in promotes_libraries
+            if promotes
+        ]
+
+    @pytest.mark.parametrize(
+        "saml_response, accept_response",
+        [
+            pytest.param(
+                encode_saml_response(saml_strings.IDP_1_ENTITY_ID),
+                False,
+                id="unsigned",
+            ),
+            pytest.param(
+                encode_saml_response(
+                    saml_strings.IDP_1_ENTITY_ID,
+                    encrypted_assertion_key_info=KEY_INFO_RETRIEVAL_METHOD_WITHOUT_TYPE,
+                ),
+                False,
+                id="encrypted-assertion-missing-key-attributes",
+            ),
+            pytest.param(
+                encode_saml_response(
+                    saml_strings.IDP_1_ENTITY_ID,
+                    encrypted_assertion_key_info=KEY_INFO_KEY_NAME,
+                ),
+                False,
+                id="encrypted-assertion-that-cannot-be-decrypted",
+            ),
+            pytest.param(
+                encode_saml_response(
+                    saml_strings.IDP_1_ENTITY_ID, saml_strings.IDP_1_ENTITY_ID
+                ),
+                True,
+                id="accepted-response-is-promoted",
+            ),
+        ],
+    )
+    def test_saml_authentication_callback_unsolicited_with_real_validation(
+        self,
+        controller_fixture: ControllerFixture,
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
+        create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
+        saml_response: str,
+        accept_response: bool,
+    ) -> None:
+        """Real validation decides whether a matching response promotes.
+
+        The response's issuer matches the integration. A rejected response
+        promotes nothing and does not fail the request. For the accepted case,
+        OneLogin's is_valid is patched out (the response is unsigned and has no
+        conditions), so the test covers processing and subject parsing, not
+        validation.
+        """
+        provider = create_saml_provider(
+            settings=create_saml_configuration(
+                non_federated_identity_provider_xml_metadata=saml_strings.CORRECT_XML_WITH_IDP_1,
+                service_provider_private_key=saml_strings.PRIVATE_KEY,
+                promote_libraries=True,
+                promote_label="Our libraries",
+            )
+        )
+        authenticator = Authenticator(
+            controller_fixture.db.session,
+            libraries=controller_fixture.db.session.query(Library),
+        )
+        authenticator.library_authenticators[
+            controller_fixture.db.default_library().short_name
+        ].register_saml_provider(provider)
+        controller = SAMLController(controller_fixture.app.manager, authenticator)
+        controller_fixture.services_fixture.set_sitewide_config_option(
+            "web_catalog_default_url", "https://catalog.example.com"
+        )
+
+        validation = (
+            patch.object(OneLogin_Saml2_Response, "is_valid", return_value=True)
+            if accept_response
+            else nullcontext()
+        )
+        with (
+            validation,
+            controller_fixture.app.test_request_context(
+                "/saml_callback",
+                method="POST",
+                data={SAMLController.SAML_RESPONSE: saml_response},
+            ),
+        ):
+            result = controller.saml_authentication_callback(
+                request, controller_fixture.db.session
+            )
+
+        library_short_name = controller_fixture.db.default_library().short_name
+        assert isinstance(result, wkResponse)
+        assert result.status_code == 303
+        assert result.headers.get("Location") == (
+            f"https://catalog.example.com?promote={library_short_name}"
+            "&promoteLabel=Our+libraries"
+            if accept_response
+            else "https://catalog.example.com"
+        )
 
     @pytest.mark.parametrize(
         "data, finish_authentication_result, saml_callback_result, bearer_token, expected_authentication_redirect_uri, expected_problem,",
@@ -611,7 +1127,7 @@ class TestSAMLController:
                 id="with_missing_saml_response_and_valid_relay_state",
             ),
             # A RelayState that is missing, empty, or carries none of our parameters
-            # is an unsolicited response. With no patron web default URL configured
+            # is an unsolicited response. With no web catalog default URL configured
             # (the test default), it is rejected. The redirect cases are covered by
             # test_saml_authentication_callback_unsolicited.
             pytest.param(

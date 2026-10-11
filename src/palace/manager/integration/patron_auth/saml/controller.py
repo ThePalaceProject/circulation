@@ -1,5 +1,6 @@
 import json
 import logging
+from collections import defaultdict
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
@@ -17,11 +18,17 @@ import sqlalchemy.orm.session
 from flask import Request, Response, redirect, request as flask_request, url_for
 from flask_babel import lazy_gettext as _
 from lxml import etree
+from onelogin.saml2.errors import OneLogin_Saml2_Error
+from onelogin.saml2.utils import OneLogin_Saml2_Utils
+from onelogin.saml2.xml_utils import OneLogin_Saml2_XML
 from werkzeug import Response as wkResponse
 from werkzeug.datastructures import MultiDict
 
 from palace.manager.api.util.flask import get_request_library
 from palace.manager.integration.patron_auth.constants import LOGOUT_REDIRECT_QUERY_PARAM
+from palace.manager.integration.patron_auth.saml.configuration.model import (
+    SAMLConfigurationError,
+)
 from palace.manager.integration.patron_auth.saml.configuration.problem_details import (
     SAML_INCORRECT_METADATA,
     SAML_METADATA_NOT_CONFIGURED,
@@ -43,10 +50,14 @@ from palace.manager.util.problem_detail import (
     ProblemDetailException,
     json as pd_json,
 )
+from palace.manager.util.web_catalog import promote_label, with_promoted_libraries
 
 if TYPE_CHECKING:
     from palace.manager.api.authenticator import Authenticator
     from palace.manager.api.circulation_manager import CirculationManager
+
+# One integration's SAML Web SSO providers, keyed by library short name.
+type ProvidersByLibrary = dict[str, SAMLWebSSOAuthenticationProvider]
 
 SAML_INVALID_REQUEST = pd(
     "http://palaceproject.io/terms/problem/auth/unrecoverable/saml/invalid-request",
@@ -335,10 +346,12 @@ class SAMLController:
             redirect_uri=redirect_uri,
         )
 
-    def _patron_web_url(self, url: str) -> str | None:
-        """Returns the URL, re-serialized from its parsed parts, if its scheme,
-        host, and port match a known patron web client, so it is safe to send a
-        browser there. Otherwise returns None.
+    def _web_catalog_url(self, url: str) -> str | None:
+        """Returns the URL if it points at a known web catalog.
+
+        The URL is known if its scheme, host, and port match a known web catalog,
+        so it is safe to send a browser there. It is returned re-serialized from
+        its parsed parts. Otherwise returns None.
 
         :param url: URL to check
         """
@@ -368,49 +381,230 @@ class SAMLController:
 
         return None
 
-    def _redirect_unsolicited_response(
-        self, relay_state: str | None
+    def _handle_unsolicited_response(
+        self,
+        db: sqlalchemy.orm.session.Session,
+        relay_state: str | None,
     ) -> wkResponse | ProblemDetail:
-        """Sends the browser that delivered an unsolicited SAML response to a web
-        catalog, where the patron can sign in.
+        """Handles an unsolicited SAML callback.
 
-        The IdP may supply its own relay state. It is honored only when it points
-        at a known patron web client; its path and query pass through as-is, so
-        it can land the patron on a specific library. Otherwise the sitewide
-        default web catalog is used. The response itself is not validated: no
-        token is issued, and the only destinations are hosts we already trust.
+        The browser that delivered the response is sent to a web catalog, where
+        the patron can sign in. The IdP may supply its own relay state, which is
+        honored only when it points at a known web catalog. Otherwise the
+        sitewide default web catalog is used. Either way, the libraries of the
+        patron's auth integrations are promoted when the response can be matched
+        to integrations that allow it. No token is issued, and the only
+        destinations are hosts we already trust.
 
+        :param db: Database session
         :param relay_state: Relay state returned by the IdP, if any
 
         :return: Redirection response, or a ProblemDetail if there is nowhere to send
             the patron
         """
-        destination: str | None = (
-            self._circulation_manager.services.config.sitewide.patron_web_default_url()
-        )
-
         if relay_state:
-            patron_web_url = self._patron_web_url(relay_state)
-            if patron_web_url is not None:
-                destination = patron_web_url
-            else:
-                self._logger.warning(
-                    "Ignoring the RelayState of an unsolicited SAML response because "
-                    f"it is not a known patron web client: {relay_state!r}"
+            web_catalog_url = self._web_catalog_url(relay_state)
+            if web_catalog_url is not None:
+                return self._redirect_to_web_catalog(
+                    self._with_promoted_libraries(
+                        db, web_catalog_url, promote_label(web_catalog_url)
+                    )
                 )
-
-        if destination is None:
             self._logger.warning(
-                "Rejecting an unsolicited SAML response: no patron web default URL "
+                "Ignoring the RelayState of an unsolicited SAML response because "
+                f"it is not a known web catalog: {relay_state!r}"
+            )
+
+        default_url: str | None = (
+            self._circulation_manager.services.config.sitewide.web_catalog_default_url()
+        )
+        if default_url is None:
+            self._logger.warning(
+                "Rejecting an unsolicited SAML response: no web catalog default URL "
                 "is configured"
             )
             return SAML_UNSOLICITED_RESPONSE
 
+        return self._redirect_to_web_catalog(
+            self._with_promoted_libraries(db, default_url, None)
+        )
+
+    def _with_promoted_libraries(
+        self,
+        db: sqlalchemy.orm.session.Session,
+        url: str,
+        relay_state_label: str | None,
+    ) -> str:
+        """Returns the web catalog URL with the matching libraries promoted.
+
+        The libraries promoted are those of the integrations that the SAML
+        response is valid for and that allow promotion. The promote parameters
+        already in the URL are replaced, so only the integrations' settings decide
+        what is promoted.
+
+        Several integrations can match one response, when they share an IdP, and
+        each one has its own promote label. The web catalog shows only one label,
+        so it is sent only when the matching integrations all have the same one.
+        Otherwise no label is sent, and the web catalog uses its default label.
+
+        :param db: Database session
+        :param url: Web catalog URL
+        :param relay_state_label: Promote label in the relay state, if any
+        """
+        libraries: set[str] = set()
+        labels: set[str] = set()
+        for providers in self._integrations_for_response(db):
+            libraries.update(providers)
+            label = self._representative(providers).promote_label(db, relay_state_label)
+            if label:
+                labels.add(label)
+
+        return with_promoted_libraries(
+            url, sorted(libraries), labels.pop() if len(labels) == 1 else None
+        )
+
+    def _redirect_to_web_catalog(self, destination: str) -> wkResponse:
+        """Redirects the browser that delivered an unsolicited SAML response.
+
+        :param destination: Web catalog URL to send the browser to
+        """
         self._logger.info(
             f"Redirecting an unsolicited SAML response to {destination!r}"
         )
         # The response arrives as a POST; 303 makes the browser follow with a GET.
         return redirect(destination, code=303)
+
+    @staticmethod
+    def _saml_response_issuer(saml_response: str) -> str | None:
+        """Returns the issuer of an unvalidated SAML response.
+
+        The issuer is the entity ID of the IdP that sent the response. It can
+        appear on the response and on each assertion. Returns None if the
+        response cannot be read, names no issuer, or names more than one
+        different issuer entity ID, so that the response matches no integration.
+
+        :param saml_response: Base64-encoded SAML response
+        """
+        try:
+            document = OneLogin_Saml2_XML.to_etree(
+                OneLogin_Saml2_Utils.b64decode(saml_response)
+            )
+        except (ValueError, etree.XMLSyntaxError):
+            return None
+
+        issuers = {
+            OneLogin_Saml2_XML.element_text(node)
+            for node in OneLogin_Saml2_XML.query(
+                document,
+                "/samlp:Response/saml:Issuer"
+                " | /samlp:Response/saml:Assertion/saml:Issuer",
+            )
+        }
+        issuers.discard(None)
+        return issuers.pop() if len(issuers) == 1 else None
+
+    def _saml_providers_by_integration(
+        self,
+    ) -> dict[int, ProvidersByLibrary]:
+        """Returns the SAML Web SSO providers of each patron auth integration.
+
+        The result is keyed by integration ID. Each library has its own provider
+        instance for an integration.
+        """
+        providers: dict[int, ProvidersByLibrary] = defaultdict(dict)
+        for (
+            short_name,
+            library_authenticator,
+        ) in self._authenticator.library_authenticators.items():
+            for provider in library_authenticator.saml_providers_by_name.values():
+                if isinstance(provider, SAMLWebSSOAuthenticationProvider):
+                    providers[provider.integration_id][short_name] = provider
+        return providers
+
+    @staticmethod
+    def _representative(
+        providers: ProvidersByLibrary,
+    ) -> SAMLWebSSOAuthenticationProvider:
+        """Returns one provider to stand in for its integration.
+
+        IdP, SP, and promotion settings belong to the integration, so any of its
+        libraries' providers will do.
+
+        :param providers: One integration's providers
+        """
+        return next(iter(providers.values()))
+
+    def _integrations_for_response(
+        self, db: sqlalchemy.orm.session.Session
+    ) -> list[ProvidersByLibrary]:
+        """Returns the providers of each integration to promote for the request.
+
+        These are the patron auth integrations that allow promotion and that the
+        SAML response in the current request is valid for. The response is
+        matched to integrations by its issuer, then validated against each one,
+        so a forged response matches nothing. Both steps read the response from
+        the current request, so they always check the same response.
+
+        :param db: Database session
+        """
+        issuer = self._saml_response_issuer(
+            flask_request.form.get(self.SAML_RESPONSE, "")
+        )
+        if issuer is None:
+            return []
+
+        # Cheapest checks first. Matching the issuer can parse the integration's
+        # IdP metadata, and validation is the most expensive.
+        integrations: list[ProvidersByLibrary] = []
+        for providers in self._saml_providers_by_integration().values():
+            provider = self._representative(providers)
+            if (
+                provider.promotes_libraries
+                and issuer in provider.identity_provider_entity_ids
+                and self._is_valid_response(db, provider, issuer)
+            ):
+                integrations.append(providers)
+
+        if integrations:
+            libraries = sorted(
+                {short_name for providers in integrations for short_name in providers}
+            )
+            self._logger.info(
+                f"Matched an unsolicited SAML response from {issuer!r} to "
+                f"libraries {libraries}"
+            )
+        return integrations
+
+    def _is_valid_response(
+        self,
+        db: sqlalchemy.orm.session.Session,
+        provider: SAMLWebSSOAuthenticationProvider,
+        idp_entity_id: str,
+    ) -> bool:
+        """Whether the SAML response in the current request is valid.
+
+        It is checked against the provider's integration and the given IdP.
+
+        :param db: Database session
+        :param provider: Provider for the integration to validate against
+        :param idp_entity_id: Entity ID of the IdP that issued the response
+        """
+        try:
+            subject = provider.get_authentication_manager().finish_authentication(
+                db, idp_entity_id
+            )
+        except (
+            OneLogin_Saml2_Error,
+            SAMLConfigurationError,
+            SAMLMetadataParsingError,
+        ) as e:
+            self._logger.error(
+                f"Unable to validate a SAML response from {idp_entity_id!r} for "
+                f"integration {provider.integration_id}: {e!r}",
+                exc_info=True,
+            )
+            return False
+        return not isinstance(subject, ProblemDetail)
 
     def _redirect_with_error(self, redirect_uri, problem_detail):
         """Redirects the patron to the given URL, with the given ProblemDetail encoded into the fragment identifier
@@ -542,7 +736,7 @@ class SAMLController:
         relay_state = request.form.get(self.RELAY_STATE)
         relay_params = self._parse_relay_state(relay_state) if relay_state else None
         if relay_params is None:
-            return self._redirect_unsolicited_response(relay_state)
+            return self._handle_unsolicited_response(db, relay_state)
         if isinstance(relay_params, ProblemDetail):
             return relay_params
 

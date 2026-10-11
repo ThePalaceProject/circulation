@@ -4,12 +4,13 @@ import logging
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
+import xmlsec
 from flask import request
 from flask_babel import lazy_gettext as _
-from lxml.etree import tostring
+from lxml.etree import XMLSyntaxError, tostring
 from onelogin.saml2.auth import OneLogin_Saml2_Auth
 from onelogin.saml2.authn_request import OneLogin_Saml2_Authn_Request
-from onelogin.saml2.errors import OneLogin_Saml2_Error
+from onelogin.saml2.errors import OneLogin_Saml2_Error, OneLogin_Saml2_ValidationError
 from onelogin.saml2.utils import OneLogin_Saml2_Utils
 from onelogin.saml2.xmlparser import fromstring
 
@@ -377,7 +378,29 @@ class SAMLAuthenticationManager:
                 idp_entity_id, asserted_acs_url, received_acs_url
             )
 
-        auth.process_response()
+        # OneLogin parses and decrypts the response before validating it, and
+        # raises instead of recording an error when the response is not base64
+        # or XML (ValueError, XMLSyntaxError), or has an encrypted assertion it
+        # cannot decrypt. KeyError comes from its reads of required attributes in
+        # such assertions. It also raises OneLogin_Saml2_ValidationError while
+        # reading the NameID and attributes of a response it has accepted.
+        try:
+            auth.process_response()
+        except (
+            OneLogin_Saml2_Error,
+            OneLogin_Saml2_ValidationError,
+            xmlsec.Error,
+            KeyError,
+            ValueError,
+            XMLSyntaxError,
+        ) as e:
+            self._logger.error(
+                f"Unable to process a SAML response from IdP '{idp_entity_id}': {e!r}",
+                exc_info=True,
+            )
+            return SAML_INCORRECT_RESPONSE.detailed(
+                "The SAML response could not be processed"
+            )
 
         if self._logger.isEnabledFor(logging.DEBUG):
             self._logger.debug(f"SAML response: {auth.get_last_response_xml()}")

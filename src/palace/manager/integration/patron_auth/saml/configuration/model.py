@@ -1,5 +1,5 @@
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from datetime import datetime
 from enum import StrEnum
 from re import Pattern
@@ -7,7 +7,7 @@ from threading import Lock
 from typing import Annotated, Any, Final
 
 from annotated_types import Ge, Le
-from flask_babel import lazy_gettext as _
+from flask_babel import LazyString, lazy_gettext as _
 from frozendict import frozendict
 from onelogin.saml2.settings import OneLogin_Saml2_Settings
 from pydantic import PositiveInt, field_validator
@@ -27,6 +27,13 @@ from palace.manager.integration.patron_auth.saml.configuration.problem_details i
     SAML_INCORRECT_METADATA,
     SAML_INCORRECT_PATRON_ID_REGULAR_EXPRESSION,
     SAML_INCORRECT_PRIVATE_KEY,
+)
+from palace.manager.integration.patron_auth.saml.configuration.promotion import (
+    ACCEPT_RELAY_STATE_PROMOTE_LABEL_ENV_VAR,
+    ALLOW_PROMOTION_ENV_VAR,
+    DEFAULT_ACCEPT_RELAY_STATE_PROMOTE_LABEL,
+    DEFAULT_ALLOW_PROMOTION,
+    promotion_configuration,
 )
 from palace.manager.integration.patron_auth.saml.configuration.service_provider import (
     ACS_SELECTION_POLICY_ENV_VAR,
@@ -223,6 +230,54 @@ AUTHN_CONTEXT_COMPARISON_LABELS: Final[Mapping[SAMLAuthnContextComparison, str]]
         }
     )
 )
+
+
+# Names shown in the administrative interface for the web catalog promotion settings.
+PROMOTION_LABELS: Final[Mapping[bool, str]] = frozendict(
+    {True: "Allow promotion", False: "Do not allow promotion"}
+)
+RELAY_STATE_PROMOTE_LABEL_LABELS: Final[Mapping[bool, str]] = frozendict(
+    {True: "Accept a relay state label", False: "Ignore a relay state label"}
+)
+
+
+def _promotion_setting_description(
+    intro: str,
+    system_wide_default: Callable[[], bool | None],
+    built_in_default: bool,
+    labels: Mapping[bool, str],
+    env_var: str,
+) -> LazyString:
+    """Returns the description of a web catalog promotion setting.
+
+    The description is built when the form is shown, so it states the
+    system-wide default currently in effect.
+
+    :param intro: What the setting does
+    :param system_wide_default: Returns the default set by the environment, or
+        None if it sets none
+    :param built_in_default: Default used when the environment sets none
+    :param labels: Names of the setting's values
+    :param env_var: Environment variable that sets the default
+    """
+
+    def describe() -> str:
+        configured = system_wide_default()
+        if configured is None:
+            default = (
+                f"'{labels[built_in_default]}'. The {env_var} environment variable "
+                "can override it."
+            )
+        else:
+            default = (
+                f"'{labels[configured]}' (set by the {env_var} environment variable)."
+            )
+        return (
+            f"{intro} Leave unset to use the system-wide default, which is "
+            f"currently {default}"
+        )
+
+    return LazyString(describe)
 
 
 class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
@@ -525,6 +580,55 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
             use_monospace_font=True,
         ),
     ] = None
+    promote_libraries: Annotated[
+        bool | None,
+        FormMetadata(
+            label="Web Catalog: Promote Libraries",
+            description=_promotion_setting_description(
+                "Whether the web catalog may promote the libraries that use this "
+                "integration, to make them easier to find, when a patron's sign-in "
+                "starts at the identity provider rather than in a Palace app or the "
+                "web catalog.",
+                lambda: promotion_configuration().allow_promotion,
+                DEFAULT_ALLOW_PROMOTION,
+                PROMOTION_LABELS,
+                ALLOW_PROMOTION_ENV_VAR,
+            ),
+            type=FormFieldType.SELECT,
+            options={"": "Use system-wide default", **PROMOTION_LABELS},
+        ),
+    ] = None
+    promote_label_from_relay_state: Annotated[
+        bool | None,
+        FormMetadata(
+            label="Web Catalog: Relay State Promote Label",
+            description=_promotion_setting_description(
+                "Whether to accept a label in the relay state (the promoteLabel "
+                "query parameter of the RelayState that the identity provider "
+                "sends, which some identity providers call the start URL). An "
+                "accepted label replaces this integration's <b>Web Catalog: "
+                "Promote Label</b>.",
+                lambda: promotion_configuration().accept_relay_state_promote_label,
+                DEFAULT_ACCEPT_RELAY_STATE_PROMOTE_LABEL,
+                RELAY_STATE_PROMOTE_LABEL_LABELS,
+                ACCEPT_RELAY_STATE_PROMOTE_LABEL_ENV_VAR,
+            ),
+            type=FormFieldType.SELECT,
+            options={"": "Use system-wide default", **RELAY_STATE_PROMOTE_LABEL_LABELS},
+        ),
+    ] = None
+    promote_label: Annotated[
+        str | None,
+        FormMetadata(
+            label="Web Catalog: Promote Label",
+            description=(
+                "The label the web catalog uses for the promoted libraries. Leave "
+                "empty to use this integration's name. A label in the relay state "
+                "replaces this one when <b>Web Catalog: Relay State Promote "
+                "Label</b> accepts it."
+            ),
+        ),
+    ] = None
     service_provider_strict_mode: Annotated[
         int,
         FormMetadata(
@@ -803,15 +907,7 @@ class SAMLOneLoginConfiguration(LoggerMixin):
 
         :raise: SAMLParsingError
         """
-        identity_providers = []
-
-        if self._configuration.non_federated_identity_provider_xml_metadata:
-            parsing_results = self._metadata_parser.parse(
-                self._configuration.non_federated_identity_provider_xml_metadata
-            )
-            identity_providers = [
-                parsing_result.provider for parsing_result in parsing_results
-            ]
+        identity_providers = self._load_non_federated_identity_providers()
 
         if self._configuration.federated_identity_provider_entity_ids:
             for identity_provider_metadata in self._get_federated_identity_providers(
@@ -906,6 +1002,37 @@ class SAMLOneLoginConfiguration(LoggerMixin):
             service_provider.private_key = private_key
 
         return service_provider
+
+    def _load_non_federated_identity_providers(
+        self,
+    ) -> list[SAMLIdentityProviderMetadata]:
+        """Parses the IdPs in the non-federated IdP metadata setting.
+
+        :raise: SAMLMetadataParsingError
+        """
+        xml_metadata = self._configuration.non_federated_identity_provider_xml_metadata
+        if not xml_metadata:
+            return []
+        return [result.provider for result in self._metadata_parser.parse(xml_metadata)]
+
+    def get_identity_provider_entity_ids(self) -> frozenset[str]:
+        """Returns the entity IDs of the IdPs this configuration accepts.
+
+        Federated IdPs are read from the settings without loading their metadata.
+        If the non-federated IdP metadata cannot be parsed, its IdPs are left out.
+        """
+        entity_ids = set(
+            self._configuration.federated_identity_provider_entity_ids or []
+        )
+        try:
+            non_federated = self._load_non_federated_identity_providers()
+        except SAMLMetadataParsingError:
+            self.log.warning(
+                "Unable to parse the non-federated IdP metadata; leaving its IdPs out"
+            )
+        else:
+            entity_ids.update(provider.entity_id for provider in non_federated)
+        return frozenset(entity_ids)
 
     def get_identity_providers(self, db: Session) -> list[SAMLIdentityProviderMetadata]:
         """Returns identity providers

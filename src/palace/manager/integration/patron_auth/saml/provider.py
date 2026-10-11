@@ -1,4 +1,5 @@
 from collections.abc import Iterable
+from functools import cached_property
 
 from flask import url_for
 from flask_babel import lazy_gettext as _
@@ -19,8 +20,15 @@ from palace.manager.integration.patron_auth.saml.auth import (
     SAMLAuthenticationManagerFactory,
 )
 from palace.manager.integration.patron_auth.saml.configuration.model import (
+    SAMLOneLoginConfiguration,
     SAMLWebSSOAuthLibrarySettings,
     SAMLWebSSOAuthSettings,
+)
+from palace.manager.integration.patron_auth.saml.configuration.promotion import (
+    DEFAULT_ACCEPT_RELAY_STATE_PROMOTE_LABEL,
+    DEFAULT_ALLOW_PROMOTION,
+    promotion_configuration,
+    resolve_promotion_setting,
 )
 from palace.manager.integration.patron_auth.saml.configuration.service_provider import (
     SamlServiceProviderConfiguration,
@@ -366,6 +374,62 @@ class SAMLWebSSOAuthenticationProvider(
         )
 
         return authentication_manager
+
+    @cached_property
+    def identity_provider_entity_ids(self) -> frozenset[str]:
+        """The entity IDs of the IdPs this provider accepts.
+
+        Computed once per provider, since its settings do not change during its
+        life. Federated IdPs are read from the settings, so integrations that are
+        only checked against an entity ID never load their metadata.
+        """
+        return SAMLOneLoginConfiguration(
+            self._settings
+        ).get_identity_provider_entity_ids()
+
+    @property
+    def promotes_libraries(self) -> bool:
+        """Whether the web catalog may promote this integration's libraries.
+
+        The integration's own setting wins over the system-wide default.
+        """
+        return resolve_promotion_setting(
+            self._settings.promote_libraries,
+            promotion_configuration().allow_promotion,
+            DEFAULT_ALLOW_PROMOTION,
+        )
+
+    @property
+    def accepts_relay_state_promote_label(self) -> bool:
+        """Whether this integration accepts a promote label in the relay state.
+
+        An accepted label replaces the integration's own label. The integration's
+        own setting wins over the system-wide default.
+        """
+        return resolve_promotion_setting(
+            self._settings.promote_label_from_relay_state,
+            promotion_configuration().accept_relay_state_promote_label,
+            DEFAULT_ACCEPT_RELAY_STATE_PROMOTE_LABEL,
+        )
+
+    def promote_label(self, db: Session, relay_state_label: str | None) -> str | None:
+        """The label for this integration's promoted libraries.
+
+        A label from the relay state is used if the integration accepts it.
+        Otherwise the integration's promote label is used, and failing that, its
+        name.
+
+        :param db: Database session
+        :param relay_state_label: Promote label in the relay state, if any
+
+        :return: The label, or None if the integration no longer exists
+        """
+        if relay_state_label and self.accepts_relay_state_promote_label:
+            return relay_state_label
+        if self._settings.promote_label:
+            return self._settings.promote_label
+        integration = self.integration(db)
+        return integration.name if integration else None
 
     def get_sp_metadata_xml(self) -> str | None:
         """Returns the raw SP metadata XML string for this integration.

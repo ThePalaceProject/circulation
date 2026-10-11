@@ -25,6 +25,10 @@ from palace.manager.integration.patron_auth.saml.configuration.problem_details i
     SAML_INCORRECT_METADATA,
     SAML_INCORRECT_PRIVATE_KEY,
 )
+from palace.manager.integration.patron_auth.saml.configuration.promotion import (
+    ACCEPT_RELAY_STATE_PROMOTE_LABEL_ENV_VAR,
+    ALLOW_PROMOTION_ENV_VAR,
+)
 from palace.manager.integration.patron_auth.saml.configuration.service_provider import (
     ACS_SELECTION_POLICY_ENV_VAR,
 )
@@ -629,6 +633,81 @@ class TestSAMLSettings:
             if setting["key"] == "federated_identity_provider_entity_ids"
         ]
         assert 2 == len(federated_identity_provider_entity_ids["options"])
+
+    @pytest.mark.parametrize(
+        "key, env_var, options",
+        [
+            pytest.param(
+                "promote_libraries",
+                ALLOW_PROMOTION_ENV_VAR,
+                ("Allow promotion", "Do not allow promotion"),
+                id="promotion",
+            ),
+            pytest.param(
+                "promote_label_from_relay_state",
+                ACCEPT_RELAY_STATE_PROMOTE_LABEL_ENV_VAR,
+                ("Accept a relay state label", "Ignore a relay state label"),
+                id="relay-state-label",
+            ),
+        ],
+    )
+    @pytest.mark.parametrize(
+        "env_value, expected_default_text",
+        [
+            pytest.param(
+                None,
+                "which is currently '{disallow}'. The {env_var} environment "
+                "variable can override it.",
+                id="built-in-default",
+            ),
+            pytest.param(
+                "maybe",
+                "which is currently '{disallow}'. The {env_var} environment "
+                "variable can override it.",
+                id="unrecognized-environment-uses-built-in-default",
+            ),
+            pytest.param(
+                "true",
+                "which is currently '{allow}' (set by the {env_var} environment "
+                "variable).",
+                id="environment-default",
+            ),
+            pytest.param(
+                "false",
+                "which is currently '{disallow}' (set by the {env_var} environment "
+                "variable).",
+                id="environment-default-matches-built-in",
+            ),
+        ],
+    )
+    def test_promotion_settings_state_current_default(
+        self,
+        db: DatabaseTransactionFixture,
+        monkeypatch_env: MonkeyPatchEnvFixture,
+        key: str,
+        env_var: str,
+        options: tuple[str, str],
+        env_value: str | None,
+        expected_default_text: str,
+    ) -> None:
+        """The form states the system-wide default in effect when it is shown."""
+        monkeypatch_env(env_var, env_value)
+
+        [setting] = [
+            setting
+            for setting in SAMLWebSSOAuthSettings.configuration_form(db.session)
+            if setting["key"] == key
+        ]
+
+        allow, disallow = options
+        assert expected_default_text.format(
+            allow=allow, disallow=disallow, env_var=env_var
+        ) in str(setting["description"])
+        assert setting["options"] == [
+            {"key": "", "label": "Use system-wide default"},
+            {"key": "true", "label": allow},
+            {"key": "false", "label": disallow},
+        ]
 
     def test_service_provider_mode_constraints(self):
         """Test that service_provider_strict_mode and service_provider_debug_mode enforce ge=0, le=1 constraints."""
@@ -1431,3 +1510,63 @@ class TestSAMLOneLoginConfiguration:
 
         # Assert
         assert result["sp"]["singleLogoutService"] == {}
+
+    @pytest.mark.parametrize(
+        "federated, non_federated, expected, expect_warning",
+        [
+            pytest.param(None, None, frozenset(), False, id="none"),
+            pytest.param(
+                ["https://fed-1.example", "https://fed-2.example"],
+                None,
+                frozenset({"https://fed-1.example", "https://fed-2.example"}),
+                False,
+                id="federated-only",
+            ),
+            pytest.param(
+                None,
+                saml_strings.CORRECT_XML_WITH_MULTIPLE_IDPS,
+                frozenset({saml_strings.IDP_1_ENTITY_ID, saml_strings.IDP_2_ENTITY_ID}),
+                False,
+                id="non-federated-only",
+            ),
+            pytest.param(
+                ["https://fed-1.example"],
+                saml_strings.CORRECT_XML_WITH_IDP_1,
+                frozenset({"https://fed-1.example", saml_strings.IDP_1_ENTITY_ID}),
+                False,
+                id="both",
+            ),
+            pytest.param(
+                ["https://fed-1.example"],
+                "<not-metadata",
+                frozenset({"https://fed-1.example"}),
+                True,
+                id="unparseable-non-federated-is-left-out",
+            ),
+        ],
+    )
+    def test_get_identity_provider_entity_ids(
+        self,
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
+        caplog: pytest.LogCaptureFixture,
+        federated: list[str] | None,
+        non_federated: str | None,
+        expected: frozenset[str],
+        expect_warning: bool,
+    ) -> None:
+        # model_copy skips validation, so the setting can hold unparseable XML,
+        # as it could if stored before validation was added.
+        settings = create_saml_configuration().model_copy(
+            update={
+                "federated_identity_provider_entity_ids": federated,
+                "non_federated_identity_provider_xml_metadata": non_federated,
+            }
+        )
+        caplog.set_level(logging.WARNING)
+
+        result = SAMLOneLoginConfiguration(settings).get_identity_provider_entity_ids()
+
+        assert result == expected
+        assert (
+            "Unable to parse the non-federated IdP metadata" in caplog.text
+        ) is expect_warning

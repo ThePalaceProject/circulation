@@ -13,6 +13,7 @@ from onelogin.saml2.xmlparser import fromstring
 from palace.util.datetime_helpers import datetime_utc
 
 from palace.manager.integration.patron_auth.saml.auth import (
+    SAML_INCORRECT_RESPONSE,
     SAMLAuthenticationManager,
     SAMLAuthenticationManagerFactory,
 )
@@ -42,6 +43,11 @@ from palace.manager.integration.patron_auth.saml.metadata.parser import (
 from palace.manager.util import base64
 from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.api_controller import ControllerFixture
+from tests.fixtures.saml import (
+    KEY_INFO_KEY_NAME,
+    KEY_INFO_RETRIEVAL_METHOD_WITHOUT_TYPE,
+    encode_saml_response,
+)
 from tests.mocks import saml_strings
 
 SERVICE_PROVIDER_WITH_UNSIGNED_REQUESTS = SAMLServiceProviderMetadata(
@@ -84,6 +90,8 @@ IDENTITY_PROVIDERS = [
 
 
 class TestSAMLAuthenticationManager:
+    IDP_ENTITY_ID = "http://idp.hilbertteam.net/idp/shibboleth"
+
     @pytest.mark.parametrize(
         "service_provider, identity_providers",
         [
@@ -296,6 +304,7 @@ class TestSAMLAuthenticationManager:
         identity_provider_entity_id: str,
         strict_mode: bool,
         acs_selection_policy: SAMLACSSelectionPolicy = SAMLACSSelectionPolicy.FIRST_INDEX,
+        service_provider: SAMLServiceProviderMetadata = SERVICE_PROVIDER_WITH_UNSIGNED_REQUESTS,
     ) -> SAMLAuthenticationManager:
         """Build a manager whose SP asserts saml_strings.SP_ACS_URL."""
         identity_providers = [
@@ -309,7 +318,7 @@ class TestSAMLAuthenticationManager:
             service_provider_acs_selection_policy=acs_selection_policy,
         )
         onelogin_configuration = create_mock_onelogin_configuration(
-            SERVICE_PROVIDER_WITH_UNSIGNED_REQUESTS, identity_providers, configuration
+            service_provider, identity_providers, configuration
         )
 
         return SAMLAuthenticationManager(onelogin_configuration, SAMLSubjectParser())
@@ -717,6 +726,82 @@ class TestSAMLAuthenticationManager:
         if expected_warning:
             assert saml_strings.SP_ACS_URL in caplog.text
             assert "http://localhost/SAML2/POST" in caplog.text
+
+    @pytest.mark.parametrize(
+        "service_provider, saml_response",
+        [
+            pytest.param(
+                SERVICE_PROVIDER_WITH_SIGNED_REQUESTS,
+                encode_saml_response(
+                    IDP_ENTITY_ID,
+                    encrypted_assertion_key_info=KEY_INFO_RETRIEVAL_METHOD_WITHOUT_TYPE,
+                ),
+                id="missing-key-attributes-key-error",
+            ),
+            pytest.param(
+                SERVICE_PROVIDER_WITH_SIGNED_REQUESTS,
+                encode_saml_response(
+                    IDP_ENTITY_ID, encrypted_assertion_key_info=KEY_INFO_KEY_NAME
+                ),
+                id="undecryptable-xmlsec-error",
+            ),
+            pytest.param(
+                SERVICE_PROVIDER_WITH_SIGNED_REQUESTS,
+                encode_saml_response(IDP_ENTITY_ID, encrypted_assertion_key_info=""),
+                id="empty-key-info-validation-error",
+            ),
+            pytest.param(
+                SERVICE_PROVIDER_WITH_UNSIGNED_REQUESTS,
+                encode_saml_response(
+                    IDP_ENTITY_ID, encrypted_assertion_key_info=KEY_INFO_KEY_NAME
+                ),
+                id="no-private-key-onelogin-error",
+            ),
+            pytest.param(
+                SERVICE_PROVIDER_WITH_UNSIGNED_REQUESTS,
+                "encoded",
+                id="not-xml",
+            ),
+            pytest.param(
+                SERVICE_PROVIDER_WITH_UNSIGNED_REQUESTS,
+                "é",
+                id="not-base64",
+            ),
+        ],
+    )
+    def test_finish_authentication_rejects_unprocessable_response(
+        self,
+        controller_fixture: ControllerFixture,
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
+        create_mock_onelogin_configuration: Callable[..., SAMLOneLoginConfiguration],
+        caplog: pytest.LogCaptureFixture,
+        service_provider: SAMLServiceProviderMetadata,
+        saml_response: str,
+    ) -> None:
+        """An unreadable response is rejected instead of failing the request.
+
+        Unreadable means OneLogin raises while reading it, for example on an
+        encrypted assertion it cannot decrypt.
+        """
+        caplog.set_level(logging.ERROR)
+        authentication_manager = self._create_authentication_manager(
+            create_saml_configuration,
+            create_mock_onelogin_configuration,
+            self.IDP_ENTITY_ID,
+            strict_mode=False,
+            service_provider=service_provider,
+        )
+
+        with controller_fixture.app.test_request_context(
+            "/SAML2/POST", data={"SAMLResponse": saml_response}
+        ):
+            result = authentication_manager.finish_authentication(
+                controller_fixture.db.session, self.IDP_ENTITY_ID
+            )
+
+        assert isinstance(result, ProblemDetail)
+        assert result.uri == SAML_INCORRECT_RESPONSE.uri
+        assert "Unable to process a SAML response" in caplog.text
 
     def test_finish_authentication_failure_logs_acs_endpoints(
         self,

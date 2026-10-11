@@ -13,6 +13,7 @@ from werkzeug.datastructures import Authorization
 from palace.util.datetime_helpers import datetime_utc, utc_now
 
 from palace.manager.api.authentication.base import PatronData, PatronLookupNotSupported
+from palace.manager.integration.goals import Goals
 from palace.manager.integration.patron_auth.saml import provider as saml_provider
 from palace.manager.integration.patron_auth.saml.auth import (
     SAML_GENERIC_ERROR,
@@ -24,6 +25,10 @@ from palace.manager.integration.patron_auth.saml.configuration.model import (
     SAMLOneLoginConfiguration,
     SAMLWebSSOAuthLibrarySettings,
     SAMLWebSSOAuthSettings,
+)
+from palace.manager.integration.patron_auth.saml.configuration.promotion import (
+    ACCEPT_RELAY_STATE_PROMOTE_LABEL_ENV_VAR,
+    ALLOW_PROMOTION_ENV_VAR,
 )
 from palace.manager.integration.patron_auth.saml.credential import SAMLCredentialManager
 from palace.manager.integration.patron_auth.saml.metadata.model import (
@@ -54,6 +59,7 @@ from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.fixtures.api_controller import ControllerFixture
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.test_utils import MonkeyPatchEnvFixture
 from tests.mocks import saml_strings
 
 SERVICE_PROVIDER = SAMLServiceProviderMetadata(
@@ -1648,3 +1654,149 @@ class TestSAMLWebSSOAuthenticationProvider:
             ]
             assert len(warning_records) == 1
             assert "idp.example.com" in warning_records[0].getMessage()
+
+    def test_identity_provider_entity_ids(
+        self,
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
+        create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
+    ) -> None:
+        """The provider reports its integration's IdPs, computed only once."""
+        provider = create_saml_provider(
+            settings=create_saml_configuration(
+                federated_identity_provider_entity_ids=["https://fed-1.example"],
+                non_federated_identity_provider_xml_metadata=saml_strings.CORRECT_XML_WITH_IDP_1,
+            )
+        )
+
+        with patch.object(
+            SAMLOneLoginConfiguration,
+            "get_identity_provider_entity_ids",
+            autospec=True,
+            side_effect=SAMLOneLoginConfiguration.get_identity_provider_entity_ids,
+        ) as get_entity_ids:
+            first = provider.identity_provider_entity_ids
+            second = provider.identity_provider_entity_ids
+
+        assert first == frozenset(
+            {"https://fed-1.example", saml_strings.IDP_1_ENTITY_ID}
+        )
+        assert second is first
+        get_entity_ids.assert_called_once()
+
+    @pytest.mark.parametrize(
+        "setting, env_value, expected",
+        [
+            pytest.param(None, None, False, id="unset-uses-default-disallow"),
+            pytest.param(None, "true", True, id="unset-uses-environment-default"),
+            pytest.param(True, None, True, id="allow-overrides-default"),
+            pytest.param(False, "true", False, id="disallow-overrides-default"),
+        ],
+    )
+    def test_promotes_libraries(
+        self,
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
+        create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
+        monkeypatch_env: MonkeyPatchEnvFixture,
+        setting: bool | None,
+        env_value: str | None,
+        expected: bool,
+    ) -> None:
+        monkeypatch_env(ALLOW_PROMOTION_ENV_VAR, env_value)
+        provider = create_saml_provider(
+            settings=create_saml_configuration(promote_libraries=setting)
+        )
+
+        assert provider.promotes_libraries is expected
+
+    @pytest.mark.parametrize(
+        "setting, env_value, promote_label, relay_state_label, integration_exists, "
+        "expected",
+        [
+            pytest.param(
+                True,
+                None,
+                "Own",
+                "Relay",
+                True,
+                "Relay",
+                id="relay-state-label-accepted",
+            ),
+            pytest.param(
+                None,
+                "true",
+                "Own",
+                "Relay",
+                True,
+                "Relay",
+                id="relay-state-label-accepted-by-environment-default",
+            ),
+            pytest.param(
+                None,
+                None,
+                "Own",
+                "Relay",
+                True,
+                "Own",
+                id="relay-state-label-ignored-by-default",
+            ),
+            pytest.param(
+                False,
+                "true",
+                "Own",
+                "Relay",
+                True,
+                "Own",
+                id="relay-state-label-ignored-overrides-default",
+            ),
+            pytest.param(
+                True,
+                None,
+                "Own",
+                None,
+                True,
+                "Own",
+                id="no-relay-state-label-uses-own-label",
+            ),
+            pytest.param(
+                None,
+                None,
+                None,
+                None,
+                True,
+                "Springfield Schools",
+                id="no-own-label-uses-integration-name",
+            ),
+            pytest.param(None, None, None, None, False, None, id="missing-integration"),
+        ],
+    )
+    def test_promote_label(
+        self,
+        db: DatabaseTransactionFixture,
+        create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
+        create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
+        monkeypatch_env: MonkeyPatchEnvFixture,
+        setting: bool | None,
+        env_value: str | None,
+        promote_label: str | None,
+        relay_state_label: str | None,
+        integration_exists: bool,
+        expected: str | None,
+    ) -> None:
+        monkeypatch_env(ACCEPT_RELAY_STATE_PROMOTE_LABEL_ENV_VAR, env_value)
+        settings = create_saml_configuration(
+            promote_label_from_relay_state=setting, promote_label=promote_label
+        )
+        integration_id = -1
+        if integration_exists:
+            integration = db.integration_configuration(
+                SAMLWebSSOAuthenticationProvider,
+                Goals.PATRON_AUTH_GOAL,
+                name="Springfield Schools",
+            )
+            assert integration.id is not None
+            integration_id = integration.id
+        provider = create_saml_provider(
+            integration_id=integration_id, settings=settings
+        )
+
+        assert provider.promote_label(db.session, relay_state_label) == expected
