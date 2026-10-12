@@ -1426,3 +1426,250 @@ class TestOverdriveReaper:
         assert "skipped" in caplog.text
         assert "already in progress" in caplog.text
         workflow_lock.release()
+
+
+class TestBackfillCollection:
+    """Tests for the Overdrive backfill tasks."""
+
+    @staticmethod
+    def _healthy_pool(db: DatabaseTransactionFixture, collection):
+        """Build a pool showing none of the three damage symptoms."""
+        edition = db.edition(authors=["Author, An"])
+        edition.publisher = "A Publisher"
+        work = db.work(presentation_edition=edition)
+        work.presentation_ready = True
+        pool = db.licensepool(
+            edition,
+            collection=collection,
+            with_open_access_download=True,
+            set_edition_as_presentation=True,
+            work=work,
+        )
+        db.session.flush()
+        return pool
+
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
+    def test_backfill_skips_healthy_pools(
+        self,
+        mock_api_class: MagicMock,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        redis_fixture: RedisFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """A pool with none of the three symptoms is left alone."""
+        collection = overdrive_api_fixture.collection
+        caplog.set_level(LogLevel.info)
+        self._healthy_pool(db, collection)
+
+        overdrive.backfill_collection.delay(collection.id).wait()
+
+        mock_api_class.return_value._ensure_bibliographic_coverage.assert_not_called()
+        assert "complete" in caplog.text
+
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
+    def test_backfill_selects_pool_with_no_delivery_mechanism(
+        self,
+        mock_api_class: MagicMock,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        redis_fixture: RedisFixture,
+    ):
+        """Symptom (a): nothing a patron could open."""
+        collection = overdrive_api_fixture.collection
+        pool = self._healthy_pool(db, collection)
+        for lpdm in list(pool.delivery_mechanisms):
+            lpdm.delete()
+        db.session.flush()
+
+        overdrive.backfill_collection.delay(collection.id).wait()
+
+        mock_api = mock_api_class.return_value
+        assert [
+            c.args[0] for c in mock_api._ensure_bibliographic_coverage.call_args_list
+        ] == [pool]
+
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
+    def test_backfill_selects_pool_without_presentation_ready_work(
+        self,
+        mock_api_class: MagicMock,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        redis_fixture: RedisFixture,
+    ):
+        """Symptom (b): the title cannot surface in the search index."""
+        collection = overdrive_api_fixture.collection
+        pool = self._healthy_pool(db, collection)
+        pool.work.presentation_ready = False
+        db.session.flush()
+
+        overdrive.backfill_collection.delay(collection.id).wait()
+
+        mock_api = mock_api_class.return_value
+        assert [
+            c.args[0] for c in mock_api._ensure_bibliographic_coverage.call_args_list
+        ] == [pool]
+
+    @pytest.mark.parametrize("symptom", ["no_publisher", "no_contributions"])
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
+    def test_backfill_selects_pool_with_degraded_bibliographic_data(
+        self,
+        mock_api_class: MagicMock,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        redis_fixture: RedisFixture,
+        symptom: str,
+    ):
+        """Symptom (c): fields the product-list summary never carried."""
+        collection = overdrive_api_fixture.collection
+        pool = self._healthy_pool(db, collection)
+        edition = pool.presentation_edition
+        if symptom == "no_publisher":
+            edition.publisher = None
+        else:
+            for contribution in list(edition.contributions):
+                db.session.delete(contribution)
+        db.session.flush()
+
+        overdrive.backfill_collection.delay(collection.id).wait()
+
+        mock_api = mock_api_class.return_value
+        assert [
+            c.args[0] for c in mock_api._ensure_bibliographic_coverage.call_args_list
+        ] == [pool]
+
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
+    def test_backfill_visits_a_multi_symptom_pool_once(
+        self,
+        mock_api_class: MagicMock,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        redis_fixture: RedisFixture,
+    ):
+        """The selectors are OR'd, so overlapping damage is still paid for once."""
+        collection = overdrive_api_fixture.collection
+        pool = self._healthy_pool(db, collection)
+        # All three symptoms at once.
+        for lpdm in list(pool.delivery_mechanisms):
+            lpdm.delete()
+        pool.work.presentation_ready = False
+        pool.presentation_edition.publisher = None
+        db.session.flush()
+
+        overdrive.backfill_collection.delay(collection.id).wait()
+
+        mock_api = mock_api_class.return_value
+        assert mock_api._ensure_bibliographic_coverage.call_count == 1
+
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
+    def test_backfill_forces_the_apply(
+        self,
+        mock_api_class: MagicMock,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        redis_fixture: RedisFixture,
+    ):
+        """The stored fingerprint cannot see this damage, so the apply must be forced."""
+        collection = overdrive_api_fixture.collection
+        db.licensepool(db.edition(), collection=collection)
+        db.session.flush()
+
+        overdrive.backfill_collection.delay(collection.id).wait()
+
+        mock_api = mock_api_class.return_value
+        assert mock_api._ensure_bibliographic_coverage.call_args.kwargs == {
+            "force": True
+        }
+
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
+    def test_backfill_ignores_other_collections(
+        self,
+        mock_api_class: MagicMock,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        redis_fixture: RedisFixture,
+    ):
+        collection = overdrive_api_fixture.collection
+        mine = db.licensepool(db.edition(), collection=collection)
+        db.licensepool(db.edition(), collection=db.collection())
+        db.session.flush()
+
+        overdrive.backfill_collection.delay(collection.id).wait()
+
+        mock_api = mock_api_class.return_value
+        assert [
+            c.args[0] for c in mock_api._ensure_bibliographic_coverage.call_args_list
+        ] == [mine]
+
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
+    def test_backfill_replaces_when_full_batch(
+        self,
+        mock_api_class: MagicMock,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        redis_fixture: RedisFixture,
+    ):
+        """A full batch re-queues the task at the next offset."""
+        collection = overdrive_api_fixture.collection
+        batch_size = 3
+        pools = [
+            db.licensepool(db.edition(), collection=collection)
+            for _ in range(batch_size)
+        ]
+        db.session.flush()
+        last_id = max(p.id for p in pools)
+
+        with patch.object(overdrive.backfill_collection, "replace") as mock_replace:
+            mock_replace.side_effect = Exception("replaced")
+            with pytest.raises(Exception, match="replaced"):
+                overdrive.backfill_collection.delay(
+                    collection.id, batch_size=batch_size
+                ).wait()
+
+            replace_sig = mock_replace.call_args[0][0]
+            assert replace_sig.kwargs["offset"] == last_id
+            assert "lock_value" not in replace_sig.kwargs
+
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
+    def test_backfill_stops_on_partial_batch(
+        self,
+        mock_api_class: MagicMock,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        redis_fixture: RedisFixture,
+    ):
+        collection = overdrive_api_fixture.collection
+        db.licensepool(db.edition(), collection=collection)
+        db.session.flush()
+
+        with patch.object(overdrive.backfill_collection, "replace") as mock_replace:
+            overdrive.backfill_collection.delay(collection.id, batch_size=10).wait()
+
+        mock_replace.assert_not_called()
+
+    def test_backfill_all_collections_queues_each_collection(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        redis_fixture: RedisFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        caplog.set_level(LogLevel.info)
+        collection = overdrive_api_fixture.collection
+
+        with patch.object(overdrive.backfill_collection, "delay") as mock_delay:
+            overdrive.backfill_all_collections.delay().wait()
+
+        queued = {c.args[0] for c in mock_delay.call_args_list}
+        assert collection.id in queued
+        assert "Queued" in caplog.text

@@ -8,7 +8,9 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 
 from palace.util.datetime_helpers import utc_now
+from palace.util.exceptions import PalaceValueError
 
+from palace.manager.celery.tasks import overdrive
 from palace.manager.integration.license.overdrive.advantage import (
     OverdriveAdvantageAccount,
 )
@@ -17,6 +19,7 @@ from palace.manager.integration.license.overdrive.api import (
     OverdriveToken,
 )
 from palace.manager.integration.license.overdrive.script import (
+    BackfillCollection,
     GenerateOverdriveAdvantageAccountList,
     ImportCollection,
     ImportCollectionGroup,
@@ -461,3 +464,73 @@ class TestImportCollectionGroup:
             collection_id=collection.id,
             import_all=False,
         )
+
+
+class TestBackfillCollection:
+    """Tests for the BackfillCollection script."""
+
+    @pytest.fixture
+    def script(self, db: DatabaseTransactionFixture):
+        return BackfillCollection(db.session)
+
+    def test_arg_parser_requires_a_target(self):
+        """Neither naming a collection nor asking for all of them is an error."""
+        parser = BackfillCollection.arg_parser(MagicMock())
+        with pytest.raises(SystemExit):
+            parser.parse_args([])
+
+    def test_arg_parser_rejects_both_targets(self):
+        parser = BackfillCollection.arg_parser(MagicMock())
+        with pytest.raises(SystemExit):
+            parser.parse_args(
+                ["--collection-name", "My Collection", "--all-collections"]
+            )
+
+    def test_arg_parser_batch_size_defaults(self):
+        parser = BackfillCollection.arg_parser(MagicMock())
+        args = parser.parse_args(["--collection-name", "My Collection"])
+        assert args.collection_name == "My Collection"
+        assert args.all_collections is False
+        assert args.batch_size == overdrive.BACKFILL_BATCH_SIZE
+
+    @patch(
+        "palace.manager.integration.license.overdrive.script.overdrive.backfill_collection"
+    )
+    def test_do_run_queues_backfill_for_named_collection(
+        self,
+        mock_task: MagicMock,
+        script: BackfillCollection,
+        db: DatabaseTransactionFixture,
+    ):
+        collection = db.collection(protocol=OverdriveAPI)
+
+        script.do_run(["--collection-name", collection.name, "--batch-size", "7"])
+
+        mock_task.delay.assert_called_once_with(
+            collection_id=collection.id, batch_size=7
+        )
+
+    @patch(
+        "palace.manager.integration.license.overdrive.script.overdrive.backfill_all_collections"
+    )
+    def test_do_run_queues_backfill_for_all_collections(
+        self,
+        mock_task: MagicMock,
+        script: BackfillCollection,
+        db: DatabaseTransactionFixture,
+    ):
+        script.do_run(["--all-collections"])
+        mock_task.delay.assert_called_once_with()
+
+    def test_do_run_rejects_unknown_collection(
+        self, script: BackfillCollection, db: DatabaseTransactionFixture
+    ):
+        with pytest.raises(PalaceValueError, match="No collection found named"):
+            script.do_run(["--collection-name", "Does Not Exist"])
+
+    def test_do_run_rejects_non_overdrive_collection(
+        self, script: BackfillCollection, db: DatabaseTransactionFixture
+    ):
+        collection = db.collection()
+        with pytest.raises(PalaceValueError, match="is not an Overdrive collection"):
+            script.do_run(["--collection-name", collection.name])

@@ -3,11 +3,12 @@ from typing import Any, Literal, TypedDict, TypeGuard
 from uuid import uuid4
 
 from celery import chain, chord, group, shared_task
-from sqlalchemy import select
+from sqlalchemy import and_, exists, or_, select
 
 from palace.util.datetime_helpers import utc_now
 
 from palace.manager.celery.importer import (
+    backfill_workflow_lock,
     import_all as create_import_tasks,
     import_key,
     import_workflow_lock,
@@ -23,8 +24,14 @@ from palace.manager.integration.license.overdrive.requests import BookInfoEndpoi
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.set import IdentifierSet
 from palace.manager.sqlalchemy.model.collection import Collection
+from palace.manager.sqlalchemy.model.contributor import Contribution
+from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.sqlalchemy.model.licensing import LicensePool
+from palace.manager.sqlalchemy.model.licensing import (
+    LicensePool,
+    LicensePoolDeliveryMechanism,
+)
+from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.http.exception import (
     BadResponseException,
     RemoteIntegrationException,
@@ -563,3 +570,191 @@ def reap_collection(
                     offset=new_offset,
                 )
             )
+
+
+# How many titles a single backfill batch processes before the task re-queues
+# itself. Each title costs one blocking Overdrive metadata request, so batches are
+# kept small to keep any one task short.
+BACKFILL_BATCH_SIZE: int = 50
+
+
+def _needs_backfill() -> Any:
+    """Build the filter identifying pools left damaged by the old Overdrive importer.
+
+    Until it was fixed, the importer converted the product-list summary rather than
+    the fetched metadata record. The summary carries no ``creators``, ``publisher``,
+    ``publishDate`` or ``languages``, and its ``formats`` entries carry only an id and
+    a name, so the resulting records lost their author, publisher, publication date,
+    subjects and per-format identifiers. Separately, a title's formats could not
+    trigger a re-apply, so a book that gained a usable format after it was first
+    imported never picked it up.
+
+    Three symptoms follow from that, and a pool showing any of them is worth
+    refreshing. They are combined with OR rather than queried separately so that a
+    pool showing more than one symptom is still visited, and paid for, exactly once.
+
+    :return: A SQLAlchemy clause suitable for a ``LicensePool`` query that has been
+        outer-joined to ``Work`` and to the presentation ``Edition``.
+    """
+    # (a) Nothing a patron could actually open.
+    no_delivery_mechanism = ~exists().where(
+        and_(
+            LicensePoolDeliveryMechanism.data_source_id == LicensePool.data_source_id,
+            LicensePoolDeliveryMechanism.identifier_id == LicensePool.identifier_id,
+            LicensePoolDeliveryMechanism.available == True,  # noqa: E712
+        )
+    )
+
+    # (b) No work at all, or one that never became presentation ready, so the title
+    #     cannot surface in the search index.
+    no_presentation_ready_work = or_(
+        LicensePool.work_id.is_(None),
+        Work.presentation_ready.is_(False),
+    )
+
+    # (c) A presentation edition missing fields the summary never carried.
+    #
+    #     Be precise about what this detects. A summary-derived apply never
+    #     *erases* a publisher or a contribution: _update_basic_fields skips None
+    #     and empty values, and update_contributions collects the existing
+    #     contributors only when the incoming data has contributors of its own, so
+    #     an empty incoming list deletes nothing. These columns being empty
+    #     therefore means no import ever supplied them -- not that a bad import
+    #     overwrote them.
+    #
+    #     The consequence is a blind spot: a title imported correctly before the
+    #     regression and then re-imported by the broken importer keeps its
+    #     publisher and contributors, so it does not match here. Clause (a) is
+    #     what catches that case. This clause is cheap belt-and-braces, not the
+    #     primary signal -- on the one production copy measured it selected no
+    #     pool that (a) had not already selected.
+    degraded_bibliographic_data = or_(
+        LicensePool.presentation_edition_id.is_(None),
+        Edition.publisher.is_(None),
+        ~exists().where(Contribution.edition_id == Edition.id),
+    )
+
+    return or_(
+        no_delivery_mechanism,
+        no_presentation_ready_work,
+        degraded_bibliographic_data,
+    )
+
+
+@shared_task(
+    queue=QueueNames.default,
+    bind=True,
+    max_retries=4,
+    autoretry_for=(BadResponseException, RequestTimedOut),
+    throws=(RemoteIntegrationException,),
+    retry_backoff=60,
+)
+def backfill_collection(
+    task: Task,
+    collection_id: int,
+    *,
+    offset: int = 0,
+    batch_size: int = BACKFILL_BATCH_SIZE,
+) -> None:
+    """Re-fetch Overdrive metadata for the titles the old importer damaged.
+
+    Walks the collection's damaged pools in batches of ``batch_size``, re-queuing
+    itself via ``task.replace()`` until none are left. Concurrency is governed by
+    :func:`~palace.manager.celery.importer.workflow_lock_guard`.
+
+    This is a repair pass, not an import: it is driven by what our own database looks
+    like rather than by what Overdrive reports as changed, because the affected titles
+    are wrong for reasons Overdrive knows nothing about and will never report as
+    modified. See :func:`_needs_backfill` for what counts as damaged.
+
+    .. warning::
+       Each title costs one blocking Overdrive metadata request, the same shape as the
+       reaper, which is known to monopolise the default queue. Pace runs accordingly.
+
+    :param collection_id: The ID of the Overdrive collection to back-fill.
+    :param offset: The last LicensePool.id processed; used to resume across batches.
+    :param batch_size: Number of pools to process per batch.
+    """
+    with workflow_lock_guard(
+        task,
+        collection_id,
+        label="Overdrive backfill",
+        lock_factory=backfill_workflow_lock,
+    ) as proceed:
+        if not proceed:
+            return
+
+        with task.transaction() as session:
+            collection = load_from_id(session, Collection, collection_id)
+            collection_name = collection.name
+
+            pools = (
+                session.execute(
+                    select(LicensePool)
+                    .outerjoin(Work, LicensePool.work_id == Work.id)
+                    .outerjoin(
+                        Edition, LicensePool.presentation_edition_id == Edition.id
+                    )
+                    .where(
+                        LicensePool.collection_id == collection_id,
+                        LicensePool.id > offset,
+                        _needs_backfill(),
+                    )
+                    .order_by(LicensePool.id)
+                    .limit(batch_size)
+                )
+                .unique()
+                .scalars()
+                .all()
+            )
+
+            if not pools:
+                task.log.info(
+                    f"Overdrive backfill complete for collection '{collection_name}'."
+                )
+                return
+
+            api = OverdriveAPI(session, collection)
+            for pool in pools:
+                # force=True: these records are wrong in ways the stored fingerprint
+                # cannot see, so an unforced apply could decide there is nothing to do.
+                api._ensure_bibliographic_coverage(pool, force=True)
+
+            new_offset = pools[-1].id
+            processed_count = len(pools)
+
+        task.log.info(
+            f"Overdrive backfill: processed {processed_count} pools for collection "
+            f"'{collection_name}' (offset: {offset} -> {new_offset})."
+        )
+
+        if processed_count == batch_size:
+            raise task.replace(
+                signature_with(
+                    task,
+                    offset=new_offset,
+                )
+            )
+
+
+@shared_task(queue=QueueNames.default, bind=True)
+def backfill_all_collections(task: Task) -> None:
+    """Queue a backfill task for every Overdrive collection.
+
+    Includes both parent collections and Advantage (child) collections, since a
+    damaged title can sit in either.
+
+    This is deliberately not on a schedule. A backfill is a one-off repair whose cost
+    scales with the number of damaged titles, so it is kicked off by hand once the
+    queues can absorb it.
+    """
+    with task.session() as session:
+        registry = task.services.integration_registry().license_providers()
+        collection_query = Collection.select_by_protocol(
+            OverdriveAPI, registry=registry
+        )
+        collections = session.scalars(collection_query).all()
+    for collection in collections:
+        backfill_collection.delay(collection.id)
+
+    task.log.info(f"Queued {len(collections)} Overdrive collection(s) for backfill.")

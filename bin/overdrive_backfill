@@ -1,0 +1,6 @@
+#!/usr/bin/env python
+"""Re-fetch OverDrive metadata for titles damaged by the old importer"""
+
+from palace.manager.integration.license.overdrive.script import BackfillCollection
+
+BackfillCollection().run()
