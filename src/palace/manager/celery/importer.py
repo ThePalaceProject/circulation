@@ -100,6 +100,34 @@ def reap_workflow_lock(
     )
 
 
+def backfill_workflow_key(collection_id: int) -> list[str]:
+    """
+    Generate a Redis key for the backfill workflow-level lock for the given collection.
+    """
+    return [
+        "BackfillCollectionWorkflow",
+        Collection.redis_key_from_id(collection_id),
+    ]
+
+
+def backfill_workflow_lock(
+    client: Redis, collection_id: int, random_value: str
+) -> RedisLock:
+    """
+    Create a workflow-level lock spanning all batches of a single backfill run.
+
+    Held across task.replace() calls so at most one backfill runs per collection at a
+    time. A backfill makes one blocking request per title and can run for hours, so the
+    timeout is longer than the import and reap locks'.
+    """
+    return RedisLock(
+        client,
+        backfill_workflow_key(collection_id),
+        random_value=random_value,
+        lock_timeout=timedelta(hours=6),
+    )
+
+
 @contextmanager
 def workflow_lock_guard(
     task: Task,

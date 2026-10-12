@@ -248,3 +248,75 @@ class ImportCollectionGroup(Script):
             collection_id=collection.id,
             import_all=parsed.import_all,
         )
+
+
+class BackfillCollection(Script):
+    """A convenient script for manually kicking off an OverDrive backfill.
+
+    The backfill re-fetches metadata for titles the old importer damaged. It is driven
+    by the state of our own database rather than by what Overdrive reports as changed,
+    because those titles are wrong for reasons Overdrive will never report.
+    """
+
+    @classmethod
+    def arg_parser(cls, _db: Session) -> argparse.ArgumentParser:
+        parser = argparse.ArgumentParser(
+            description="Manually kick off the Overdrive backfill Celery task."
+        )
+        group = parser.add_mutually_exclusive_group(required=True)
+        group.add_argument(
+            "--collection-name",
+            type=str,
+            help="Name of the Overdrive collection to back-fill.",
+        )
+        group.add_argument(
+            "--all-collections",
+            action="store_true",
+            help=(
+                "Back-fill every Overdrive collection. Each title costs one blocking "
+                "Overdrive request, so prefer one collection at a time unless the "
+                "queues have room."
+            ),
+        )
+        parser.add_argument(
+            "--batch-size",
+            type=int,
+            default=overdrive.BACKFILL_BATCH_SIZE,
+            help=(
+                "Titles to process per batch "
+                f"(default: {overdrive.BACKFILL_BATCH_SIZE}). Ignored with "
+                "--all-collections."
+            ),
+        )
+        return parser
+
+    def do_run(self, cmd_args: list[str] | None = None) -> None:
+        parsed = self.parse_command_line(self._db, cmd_args=cmd_args)
+
+        if parsed.all_collections:
+            overdrive.backfill_all_collections.delay()
+            self.log.info(
+                'The "backfill_all_collections" task has been queued for execution. '
+                "See the celery logs for details."
+            )
+            return
+
+        collection_name = parsed.collection_name
+        collection = Collection.by_name(self._db, collection_name)
+        if not collection:
+            raise PalaceValueError(f'No collection found named "{collection_name}".')
+
+        if collection.protocol != OverdriveAPI.label():
+            raise PalaceValueError(
+                f'Collection "{collection_name}" is not an Overdrive collection '
+                f'(protocol: "{collection.protocol}").'
+            )
+
+        overdrive.backfill_collection.delay(
+            collection_id=collection.id,
+            batch_size=parsed.batch_size,
+        )
+        self.log.info(
+            f'The "backfill_collection" task has been queued for collection '
+            f"'{collection_name}'. See the celery logs for details."
+        )
