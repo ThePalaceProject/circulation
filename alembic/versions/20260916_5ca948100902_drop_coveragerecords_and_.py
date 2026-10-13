@@ -4,9 +4,11 @@ The CoverageProvider machinery that read and wrote ``coveragerecords`` was retir
 two releases ago, and the previous release removed the ``coverage_records``
 relationships that were still making SQLAlchemy read the table on every parent
 delete (see 58ebd34c5092). The equivalent-identifiers refresh that wrote
-``equivalentscoveragerecords`` moved to a Celery task before either. N-1 therefore
-maps neither table, so both are dropped here along with their shared
-``coverage_status`` enum type.
+``equivalentscoveragerecords`` moved to a Celery task before either. N-1 still
+maps both tables -- the dormant model classes are what keep ``create_all``
+emitting them for freshly initialized databases -- but never reads or writes
+them, which is what makes dropping them here safe. Both go, along with their
+shared ``coverage_status`` enum type.
 
 The ``timestamps`` table and its separate ``service_type`` enum are unaffected.
 
