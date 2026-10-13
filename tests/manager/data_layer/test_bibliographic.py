@@ -1152,13 +1152,18 @@ class TestBibliographicData:
         assert edition.updated_at == now
         assert edition.updated_at_data_hash == same_time_changed.calculate_hash()
 
-    def test_calculate_hash_includes_formats(self) -> None:
-        # CirculationData as a whole is excluded from the hash, but the delivery
-        # formats it carries are folded back in, because a book gaining (or
-        # losing) a usable format is a real change that must trigger a re-apply.
-        def bibliographic_with(
-            formats: list[FormatData], **circulation_kwargs: object
-        ) -> BibliographicData:
+    def test_calculate_hash_excludes_circulation_including_formats(self) -> None:
+        """The delivery formats do not influence the bibliographic fingerprint.
+
+        They are tracked by ``CirculationData``'s own fingerprint instead. Every
+        importer carries one ``CirculationData`` per title and dispatches a single
+        apply, so a format change is detected there -- see
+        ``OverdriveImporter._process_book`` and ``opds/importer.py``. Folding formats
+        in here would instead change the fingerprint of every record in every license
+        source, forcing a one-time re-save across all of them for no added coverage.
+        """
+
+        def bibliographic_with(formats: list[FormatData]) -> BibliographicData:
             return BibliographicData(
                 data_source_name=DataSource.OVERDRIVE,
                 title="Test Title",
@@ -1168,7 +1173,6 @@ class TestBibliographicData:
                         type=Identifier.OVERDRIVE_ID, identifier="overdrive-id"
                     ),
                     formats=formats,
-                    **circulation_kwargs,
                 ),
             )
 
@@ -1176,89 +1180,18 @@ class TestBibliographicData:
             content_type=Representation.EPUB_MEDIA_TYPE,
             drm_scheme=DeliveryMechanism.ADOBE_DRM,
         )
-        epub_no_drm = FormatData(
-            content_type=Representation.EPUB_MEDIA_TYPE,
-            drm_scheme=DeliveryMechanism.NO_DRM,
-        )
 
-        # A book with no circulation at all, and one with a circulation that has
-        # no formats, hash identically -- there is nothing to fold in.
-        no_circulation = BibliographicData(
-            data_source_name=DataSource.OVERDRIVE, title="Test Title"
-        )
+        # Gaining a format leaves the bibliographic fingerprint untouched...
         assert (
-            bibliographic_with([]).calculate_hash() == no_circulation.calculate_hash()
+            bibliographic_with([]).calculate_hash()
+            == bibliographic_with([epub_adobe]).calculate_hash()
         )
 
-        # Adding a format changes the hash.
-        one_format = bibliographic_with([epub_adobe])
-        assert one_format.calculate_hash() != bibliographic_with([]).calculate_hash()
-
-        # So does adding another one.
-        two_formats = bibliographic_with([epub_adobe, epub_no_drm])
-        assert two_formats.calculate_hash() != one_format.calculate_hash()
-
-        # But the order Overdrive happens to list them in does not -- the format
-        # list is sorted before hashing, so an unstable ordering upstream can't
-        # cause spurious re-imports.
-        assert (
-            bibliographic_with([epub_no_drm, epub_adobe]).calculate_hash()
-            == two_formats.calculate_hash()
-        )
-
-        # A format's availability is part of the fingerprint.
-        unavailable = FormatData(
-            content_type=Representation.EPUB_MEDIA_TYPE,
-            drm_scheme=DeliveryMechanism.ADOBE_DRM,
-            available=False,
-        )
-        assert (
-            bibliographic_with([unavailable]).calculate_hash()
-            != one_format.calculate_hash()
-        )
-
-        # The availability *counts*, on the other hand, are circulation data
-        # proper. They change constantly and are tracked separately, so they must
-        # not perturb the bibliographic fingerprint.
-        assert (
-            bibliographic_with(
-                [epub_adobe],
-                licenses_owned=10,
-                licenses_available=3,
-                licenses_reserved=1,
-                patrons_in_hold_queue=7,
-            ).calculate_hash()
-            == one_format.calculate_hash()
-        )
-
-        # Nor does CirculationData's own created_at, which defaults to "now" and
-        # would otherwise re-import every book on every run.
-        with freeze_time(utc_now() + datetime.timedelta(days=1)):
-            assert bibliographic_with([epub_adobe]).calculate_hash() == (
-                one_format.calculate_hash()
-            )
-
-    def test_calculate_hash_cache_invalidated_by_circulation_assignment(self) -> None:
-        # The cached hash is cleared when a public field is assigned, so swapping
-        # in a new CirculationData with different formats is picked up.
-        bibliographic = BibliographicData(
-            data_source_name=DataSource.OVERDRIVE, title="Test Title"
-        )
-        before = bibliographic.calculate_hash()
-
-        bibliographic.circulation = CirculationData(
-            data_source_name=DataSource.OVERDRIVE,
-            primary_identifier_data=IdentifierData(
-                type=Identifier.OVERDRIVE_ID, identifier="overdrive-id"
-            ),
-            formats=[
-                FormatData(
-                    content_type=Representation.EPUB_MEDIA_TYPE,
-                    drm_scheme=DeliveryMechanism.ADOBE_DRM,
-                )
-            ],
-        )
-        assert bibliographic.calculate_hash() != before
+        # ...because the circulation fingerprint is what notices.
+        no_formats = bibliographic_with([]).circulation
+        one_format = bibliographic_with([epub_adobe]).circulation
+        assert no_formats is not None and one_format is not None
+        assert no_formats.calculate_hash() != one_format.calculate_hash()
 
     def test_validate_primary_identifier_case_insensitive(
         self, db: DatabaseTransactionFixture
