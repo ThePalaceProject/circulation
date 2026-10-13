@@ -81,7 +81,7 @@ def test_upgrade_does_not_leak_lock_timeout(
     reset is a safeguard rather than something anything currently depends on:
     the drop that follows sets its own ``lock_timeout`` as its first
     statement, so it would overwrite a value leaked from here. Keeping the
-    reset means this revision's guarantee does not rest on what its neighbour
+    reset means this revision's guarantee does not rest on what its neighbor
     happens to do first.
 
     Driving the migration through ``alembic_runner`` could not catch that: it
