@@ -97,7 +97,10 @@ def test_upgrade_does_not_leak_lock_timeout(
     situation env.py actually creates.
     """
     # Step back over this revision so its downgrade recreates the tables the
-    # upgrade below drops.
+    # upgrade below drops. migrate_down_to first, as test_drop_coverage_tables
+    # does: the runner starts at head, so stepping down blind would land on the
+    # wrong revision once a newer migration exists.
+    alembic_runner.migrate_down_to(REVISION)
     alembic_runner.migrate_down_one()
     assert alembic_runner.current == DOWN_REVISION
 
