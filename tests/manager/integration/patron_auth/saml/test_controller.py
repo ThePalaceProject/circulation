@@ -17,7 +17,6 @@ import pytest
 from flask import request
 from lxml import etree
 from onelogin.saml2.errors import OneLogin_Saml2_Error
-from onelogin.saml2.response import OneLogin_Saml2_Response
 from werkzeug import Response as wkResponse
 
 from palace.manager.api.authentication.base import PatronData
@@ -75,7 +74,10 @@ from tests.fixtures.api_controller import ControllerFixture
 from tests.fixtures.saml import (
     KEY_INFO_KEY_NAME,
     KEY_INFO_RETRIEVAL_METHOD_WITHOUT_TYPE,
+    SAMLSigningKey,
+    create_saml_signing_key,
     encode_saml_response,
+    encode_signed_saml_response,
 )
 from tests.mocks import saml_strings
 
@@ -149,6 +151,9 @@ def create_web_sso_provider_mock(
     provider.promote_label = MagicMock(return_value=promote_label)
     provider.get_authentication_manager = MagicMock(return_value=manager)
     return provider
+
+
+UNSOLICITED_CALLBACK_URL = "http://localhost/saml_callback"
 
 
 class TestSAMLController:
@@ -976,34 +981,68 @@ class TestSAMLController:
         ]
 
     @pytest.mark.parametrize(
-        "saml_response, accept_response",
+        "saml_response, expected_error",
         [
             pytest.param(
-                encode_saml_response(saml_strings.IDP_1_ENTITY_ID),
-                False,
+                lambda key: encode_saml_response(saml_strings.IDP_1_ENTITY_ID),
+                "Missing Status on response",
                 id="unsigned",
             ),
             pytest.param(
-                encode_saml_response(
+                lambda key: encode_saml_response(
                     saml_strings.IDP_1_ENTITY_ID,
                     encrypted_assertion_key_info=KEY_INFO_RETRIEVAL_METHOD_WITHOUT_TYPE,
                 ),
-                False,
+                "KeyError('Type')",
                 id="encrypted-assertion-missing-key-attributes",
             ),
             pytest.param(
-                encode_saml_response(
+                lambda key: encode_saml_response(
                     saml_strings.IDP_1_ENTITY_ID,
                     encrypted_assertion_key_info=KEY_INFO_KEY_NAME,
                 ),
-                False,
+                "failed to decrypt",
                 id="encrypted-assertion-that-cannot-be-decrypted",
             ),
             pytest.param(
-                encode_saml_response(
-                    saml_strings.IDP_1_ENTITY_ID, saml_strings.IDP_1_ENTITY_ID
+                lambda key: encode_signed_saml_response(
+                    saml_strings.IDP_1_ENTITY_ID,
+                    "http://localhost/another_callback",
+                    saml_strings.SP_ENTITY_ID,
+                    key,
                 ),
-                True,
+                "The response was received at http://localhost/saml_callback "
+                "instead of http://localhost/another_callback",
+                id="signed-for-another-destination",
+            ),
+            pytest.param(
+                lambda key: encode_signed_saml_response(
+                    saml_strings.IDP_1_ENTITY_ID,
+                    UNSOLICITED_CALLBACK_URL,
+                    "http://another-sp.example.com",
+                    key,
+                ),
+                f"{saml_strings.SP_ENTITY_ID} is not a valid audience",
+                id="signed-for-another-audience",
+            ),
+            pytest.param(
+                lambda key: encode_signed_saml_response(
+                    saml_strings.IDP_1_ENTITY_ID,
+                    UNSOLICITED_CALLBACK_URL,
+                    saml_strings.SP_ENTITY_ID,
+                    create_saml_signing_key(),
+                ),
+                "Signature validation failed",
+                id="signed-with-another-key",
+            ),
+            pytest.param(
+                lambda key: encode_signed_saml_response(
+                    saml_strings.IDP_1_ENTITY_ID,
+                    UNSOLICITED_CALLBACK_URL,
+                    saml_strings.SP_ENTITY_ID,
+                    key,
+                ),
+                None,
                 id="accepted-response-is-promoted",
             ),
         ],
@@ -1013,21 +1052,24 @@ class TestSAMLController:
         controller_fixture: ControllerFixture,
         create_saml_configuration: Callable[..., SAMLWebSSOAuthSettings],
         create_saml_provider: Callable[..., SAMLWebSSOAuthenticationProvider],
-        saml_response: str,
-        accept_response: bool,
+        saml_response: Callable[[SAMLSigningKey], str],
+        expected_error: str | None,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Real validation decides whether a matching response promotes.
 
-        The response's issuer matches the integration. A rejected response
-        promotes nothing and does not fail the request. For the accepted case,
-        OneLogin's is_valid is patched out (the response is unsigned and has no
-        conditions), so the test covers processing and subject parsing, not
-        validation.
+        The response's issuer matches the integration, and OneLogin validates it
+        in strict mode, with no patches. A rejected response promotes nothing and
+        does not fail the request, and the logged error gives the reason.
         """
+        signing_key = create_saml_signing_key()
         provider = create_saml_provider(
             settings=create_saml_configuration(
-                non_federated_identity_provider_xml_metadata=saml_strings.CORRECT_XML_WITH_IDP_1,
+                non_federated_identity_provider_xml_metadata=saml_strings.CORRECT_XML_WITH_IDP_1.replace(
+                    saml_strings.SIGNING_CERTIFICATE, signing_key.certificate
+                ),
                 service_provider_private_key=saml_strings.PRIVATE_KEY,
+                service_provider_strict_mode=1,
                 promote_libraries=True,
                 promote_label="Our libraries",
             )
@@ -1044,18 +1086,11 @@ class TestSAMLController:
             "web_catalog_default_url", "https://catalog.example.com"
         )
 
-        validation = (
-            patch.object(OneLogin_Saml2_Response, "is_valid", return_value=True)
-            if accept_response
-            else nullcontext()
-        )
-        with (
-            validation,
-            controller_fixture.app.test_request_context(
-                "/saml_callback",
-                method="POST",
-                data={SAMLController.SAML_RESPONSE: saml_response},
-            ),
+        caplog.set_level(logging.ERROR)
+        with controller_fixture.app.test_request_context(
+            UNSOLICITED_CALLBACK_URL,
+            method="POST",
+            data={SAMLController.SAML_RESPONSE: saml_response(signing_key)},
         ):
             result = controller.saml_authentication_callback(
                 request, controller_fixture.db.session
@@ -1067,9 +1102,13 @@ class TestSAMLController:
         assert result.headers.get("Location") == (
             f"https://catalog.example.com?promote={library_short_name}"
             "&promoteLabel=Our+libraries"
-            if accept_response
+            if expected_error is None
             else "https://catalog.example.com"
         )
+        if expected_error is None:
+            assert caplog.messages == []
+        else:
+            assert expected_error in caplog.text
 
     @pytest.mark.parametrize(
         "data, finish_authentication_result, saml_callback_result, bearer_token, expected_authentication_redirect_uri, expected_problem,",
