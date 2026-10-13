@@ -77,9 +77,12 @@ def test_upgrade_does_not_leak_lock_timeout(
     which lasts to the end of the *transaction* rather than the end of this
     revision. ``alembic/env.py`` runs every pending revision inside a single
     ``context.begin_transaction()``, so without an explicit reset the timeout
-    would silently apply to every later revision in the same upgrade. That is
-    not hypothetical after this release: a database older than this revision
-    upgrades through it and the following drop in one transaction.
+    would silently apply to every later revision in the same upgrade. The
+    reset is a safeguard rather than something anything currently depends on:
+    the drop that follows sets its own ``lock_timeout`` as its first
+    statement, so it would overwrite a value leaked from here. Keeping the
+    reset means this revision's guarantee does not rest on what its neighbour
+    happens to do first.
 
     Driving the migration through ``alembic_runner`` could not catch that: it
     commits between revisions, which discards the setting regardless of what
