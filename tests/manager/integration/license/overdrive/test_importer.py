@@ -307,6 +307,69 @@ class TestOverdriveImporter:
         assert bibliographic.circulation is not None
         assert len(bibliographic.circulation.formats) == 4
 
+    def test_process_book_dispatches_a_single_apply_carrying_both_halves(
+        self,
+        db: DatabaseTransactionFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
+        services_fixture: ServicesFixture,
+    ):
+        """Formats and availability must travel together, in one task.
+
+        Overdrive is the only distributor that reads them from two documents, and
+        converting them yields two CirculationData objects. Dispatching both as
+        independent tasks makes two writers for one pool: each stamps
+        ``pool.updated_at`` with its own ``as_of_timestamp`` and ``should_apply_to``
+        rejects anything strictly older, so whichever lands second is discarded. When
+        that is the formats half, the edition's hash is stamped anyway and no later
+        import retries it -- the title keeps zero delivery mechanisms permanently.
+        """
+        collection = overdrive_api_fixture.collection
+        registry = services_fixture.services.integration_registry.license_providers()
+        importer = OverdriveImporter(
+            db=db.session,
+            collection=collection,
+            registry=registry,
+            api=overdrive_api_fixture.api,
+        )
+
+        book = json.loads(
+            overdrive_files_fixture.sample_data("overdrive_book_list.json")
+        )["products"][0].copy()
+        metadata = json.loads(
+            overdrive_files_fixture.sample_data("overdrive_metadata.json")
+        )
+        metadata["id"] = book["id"]
+        book["metadata"] = metadata
+        availability = json.loads(
+            overdrive_files_fixture.sample_data(
+                "overdrive_availability_information.json"
+            )
+        )
+        availability["reserveId"] = book["id"]
+        book["availabilityV2"] = availability
+
+        apply_bibliographic = Mock()
+        apply_circulation = Mock()
+        importer._process_book(
+            book=book,
+            fetch_metadata=True,
+            policy=ReplacementPolicy(),
+            apply_bibliographic=apply_bibliographic,
+            apply_circulation=apply_circulation,
+        )
+
+        # Exactly one task, never two.
+        apply_bibliographic.assert_called_once()
+        apply_circulation.assert_not_called()
+
+        # And the one object it carries holds both halves: the formats from the
+        # metadata record and the counts from the availability document.
+        circulation = apply_bibliographic.call_args.args[0].circulation
+        assert circulation is not None
+        assert len(circulation.formats) == 4
+        assert circulation.licenses_owned is not None
+
     @pytest.mark.parametrize("fetch_metadata", [True, False])
     def test_process_book_metadata_error_document_is_skipped(
         self,
@@ -590,6 +653,11 @@ class TestOverdriveImporter:
 
         # Mock extractor methods
         mock_bibliographic = Mock(spec=BibliographicData)
+        # The real extractor always attaches a CirculationData carrying the
+        # metadata record's formats, which _process_book folds into the
+        # availability snapshot.
+        mock_bibliographic.circulation = Mock(spec=CirculationData)
+        mock_bibliographic.circulation.formats = []
         mock_bibliographic.needs_apply.return_value = True
         # The real extractor keys the primary identifier off the record it is
         # given, so the mock has to report one too.
@@ -618,9 +686,10 @@ class TestOverdriveImporter:
         assert result.processed_count == 1
         assert result.next_page == mock_next_endpoint
 
-        # Verify apply functions were called
+        # Exactly one apply is dispatched per book. The bibliographic data changed,
+        # so it carries the circulation update with it rather than racing a second task.
         assert mock_apply_bib.call_count == 1
-        assert mock_apply_circ.call_count == 1
+        assert mock_apply_circ.call_count == 0
 
         # Verify identifier was created
         identifier, _ = Identifier.for_foreign_id(
@@ -705,6 +774,11 @@ class TestOverdriveImporter:
 
         # Mock extractor
         mock_bibliographic = Mock(spec=BibliographicData)
+        # The real extractor always attaches a CirculationData carrying the
+        # metadata record's formats, which _process_book folds into the
+        # availability snapshot.
+        mock_bibliographic.circulation = Mock(spec=CirculationData)
+        mock_bibliographic.circulation.formats = []
         mock_bibliographic.needs_apply.return_value = True
         # The real extractor keys the primary identifier off the record it is
         # given, so the mock has to report one too.
@@ -766,6 +840,11 @@ class TestOverdriveImporter:
 
         # Mock extractor - bibliographic hasn't changed
         mock_bibliographic = Mock(spec=BibliographicData)
+        # The real extractor always attaches a CirculationData carrying the
+        # metadata record's formats, which _process_book folds into the
+        # availability snapshot.
+        mock_bibliographic.circulation = Mock(spec=CirculationData)
+        mock_bibliographic.circulation.formats = []
         mock_bibliographic.needs_apply.return_value = False  # Not changed
         # The real extractor keys the primary identifier off the record it is
         # given, so the mock has to report one too.
@@ -889,6 +968,11 @@ class TestOverdriveImporter:
         )
         # Mock extractor
         mock_bibliographic = Mock(spec=BibliographicData)
+        # The real extractor always attaches a CirculationData carrying the
+        # metadata record's formats, which _process_book folds into the
+        # availability snapshot.
+        mock_bibliographic.circulation = Mock(spec=CirculationData)
+        mock_bibliographic.circulation.formats = []
         mock_bibliographic.needs_apply.return_value = True
         # The real extractor keys the primary identifier off the record it is
         # given, so the mock has to report one too.
@@ -983,6 +1067,11 @@ class TestOverdriveImporter:
 
         # Mock extractor
         mock_bibliographic = Mock(spec=BibliographicData)
+        # The real extractor always attaches a CirculationData carrying the
+        # metadata record's formats, which _process_book folds into the
+        # availability snapshot.
+        mock_bibliographic.circulation = Mock(spec=CirculationData)
+        mock_bibliographic.circulation.formats = []
         mock_bibliographic.needs_apply.return_value = True
         # The real extractor keys the primary identifier off the record it is
         # given, so the mock has to report one too.
@@ -1015,11 +1104,12 @@ class TestOverdriveImporter:
         # Verify metadata_lookup was called once for the book NOT in parent set
         assert api.metadata_lookup.call_count == 1
 
-        # Bibliographic should be applied once (only for the new book with metadata)
+        # One apply per book, never two. The book with metadata takes the
+        # bibliographic branch, which carries its circulation data along; the book
+        # already covered by the parent has no metadata, so it takes the circulation
+        # branch on its own.
         assert mock_apply_bib.call_count == 1
-
-        # Circulation should be applied for both books
-        assert mock_apply_circ.call_count == 2
+        assert mock_apply_circ.call_count == 1
 
         assert result.processed_count == 2
 

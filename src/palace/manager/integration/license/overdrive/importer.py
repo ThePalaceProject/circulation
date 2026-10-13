@@ -120,6 +120,50 @@ class OverdriveImporter(LoggerMixin):
             return False
         return primary.identifier.lower() == identifier.identifier.lower()
 
+    def _usable_bibliographic(
+        self, book: dict[str, Any], identifier: Identifier
+    ) -> BibliographicData | None:
+        """Convert a book's metadata record, or return None if it is not usable.
+
+        :param book: Book data dictionary, whose ``metadata`` key holds the record.
+        :param identifier: The identifier the product list pointed us at.
+        :return: The converted data, or None if there is no metadata, it could not be
+            converted, or it describes a different title.
+        """
+        # It is possible that we attempted to fetch metadata but got nothing back from
+        # Overdrive, or that we did not attempt to fetch it because the parent
+        # collection already processed it.
+        if not book.get("metadata"):
+            return None
+
+        bibliographic = self._extractor.book_info_to_bibliographic(book["metadata"])
+        if bibliographic is None:
+            # A non-empty metadata entry is not necessarily a usable record.
+            # Overdrive reports an unrecognized identifier as an HTTP 200 whose body
+            # is an error document (see OverdriveClientRequests.metadata), and such a
+            # document passes the check above while carrying no "id" for the extractor
+            # to key on. Skip the bibliographic update and carry on to the circulation
+            # update, which is still worth attempting.
+            self.log.warning(
+                f"Could not extract bibliographic data from Overdrive metadata for "
+                f"{identifier}. Skipping bibliographic update."
+            )
+            return None
+
+        if not self._bibliographic_matches_identifier(bibliographic, identifier):
+            # The record we converted describes a different title than the one the
+            # product list pointed us at. Applying it would raise PalaceValueError
+            # deep inside the apply worker, where it is far harder to connect back
+            # to the collection being imported, so stop here instead.
+            self.log.warning(
+                f"Overdrive metadata for {identifier} reports a different identifier "
+                f"({bibliographic.primary_identifier_data}). Skipping bibliographic "
+                f"update."
+            )
+            return None
+
+        return bibliographic
+
     def _process_book(
         self,
         book: dict[str, Any],
@@ -169,39 +213,11 @@ class OverdriveImporter(LoggerMixin):
         # we need to check that there is metadata because it is possible that we attempted to fetch it, but we
         # didn't get anything back from overdrive (ie from the book list fetch above) or we did not attempt to
         # fetch it because it was already processed by the parent collection.
-        if book.get("metadata"):
-            bibliographic = self._extractor.book_info_to_bibliographic(book["metadata"])
-            if bibliographic is None:
-                # A non-empty metadata entry is not necessarily a usable record.
-                # Overdrive reports an unrecognized identifier as an HTTP 200 whose body
-                # is an error document (see OverdriveClientRequests.metadata), and such a
-                # document passes the check above while carrying no "id" for the extractor
-                # to key on. Skip the bibliographic update and carry on to the circulation
-                # update below, which is still worth attempting.
-                self.log.warning(
-                    f"Could not extract bibliographic data from Overdrive metadata for "
-                    f"{identifier}. Skipping bibliographic update."
-                )
-            elif not self._bibliographic_matches_identifier(bibliographic, identifier):
-                # The record we converted describes a different title than the one the
-                # product list pointed us at. Applying it would raise PalaceValueError
-                # deep inside the apply worker, where it is far harder to connect back
-                # to the collection being imported, so stop here instead.
-                self.log.warning(
-                    f"Overdrive metadata for {identifier} reports a different identifier "
-                    f"({bibliographic.primary_identifier_data}). Skipping bibliographic "
-                    f"update."
-                )
-            elif bibliographic.needs_apply(self._db):
-                changed = True
-                apply_bibliographic(
-                    bibliographic,
-                    collection_id=self._collection.id,
-                    replace=policy,
-                )
+        bibliographic = self._usable_bibliographic(book, identifier)
 
         # availability needs to be checked/updated in all but a few instances so it is
         # probably not worth the compute time to save ourselves a handful of unnecessary updates.
+        circulation = None
         availability_data = book.get("availabilityV2", None)
         if not availability_data:
             # This is a rare and probably transient case where the availabilityV2
@@ -217,9 +233,46 @@ class OverdriveImporter(LoggerMixin):
             # book dictionary.  Mypy complains without an assertion or type hints.
             assert circulation
 
-            if circulation.needs_apply(self._db, self._collection):
-                changed = True
-                apply_circulation(circulation, collection_id=self._collection.id)
+        # Overdrive is the only distributor whose formats and availability counts come
+        # from two different documents, and converting them produced two separate
+        # CirculationData objects. Fold them into one before anything is dispatched.
+        #
+        # This is not tidying. Each object stamps ``pool.updated_at`` with its own
+        # ``as_of_timestamp`` on apply, and ``should_apply_to`` rejects any snapshot
+        # strictly older than that stamp. Two objects built microseconds apart and
+        # queued as two independent tasks can therefore arrive in either order, and if
+        # the availability one lands first the formats one is discarded -- while the
+        # edition's hash is still stamped, so no later import retries it. One object
+        # has one timestamp and cannot race itself. OPDS, ODL and Boundless have always
+        # worked this way; see ``opds/importer.py`` and ``boundless/importer.py``.
+        if bibliographic is not None and bibliographic.circulation is not None:
+            if circulation is None:
+                # No availability document, so the formats-only snapshot the converter
+                # built is all we have. Dispatch it as-is.
+                circulation = bibliographic.circulation
+            else:
+                # Assignment re-runs CirculationData's normalising validator, which is
+                # what we want; it also clears the memoised hash.
+                circulation.formats = bibliographic.circulation.formats
+                bibliographic.circulation = circulation
+
+        # Dispatch exactly one task. ``BibliographicData.apply`` applies the circulation
+        # data hanging off it, so queuing both would make two writers for one pool.
+        if bibliographic is not None and bibliographic.needs_apply(self._db):
+            changed = True
+            apply_bibliographic(
+                bibliographic,
+                collection_id=self._collection.id,
+                replace=policy,
+            )
+        elif circulation is not None and circulation.needs_apply(
+            self._db, self._collection
+        ):
+            # The bibliographic data is unchanged but the circulation data is not --
+            # an availability flip, or a format that has only just appeared. Apply it
+            # on its own.
+            changed = True
+            apply_circulation(circulation, collection_id=self._collection.id)
 
         return identifier, changed
 
