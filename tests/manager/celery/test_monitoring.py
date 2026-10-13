@@ -9,7 +9,7 @@ from freezegun import freeze_time
 from palace.util.log import LogLevel
 
 from palace.manager.celery.celery import Celery
-from palace.manager.celery.monitoring import Cloudwatch, QueueStats
+from palace.manager.celery.monitoring import Cloudwatch, QueueStats, QueueStatsReporter
 
 
 class CloudwatchCameraFixture:
@@ -23,6 +23,11 @@ class CloudwatchCameraFixture:
         with patch.object(Cloudwatch, "get_redis_client") as mock_get_redis:
             self._mock_get_redis = mock_get_redis
             return Cloudwatch(state=MagicMock(), app=self.app)
+
+    def create_reporter(self):
+        with patch.object(QueueStatsReporter, "get_redis_client") as mock_get_redis:
+            self._mock_get_redis = mock_get_redis
+            return QueueStatsReporter(self.app)
 
     @property
     def mock_get_redis(self):
@@ -339,3 +344,35 @@ class TestCloudwatch:
         cloudwatch.publish(queues, timestamp)
         mock_put_metric_data.assert_not_called()
         assert "Dry run enabled. Not sending metrics to Cloudwatch." in caplog.text
+
+
+class TestQueueStatsReporter:
+    def test_logger_name(self, cloudwatch_camera: CloudwatchCameraFixture):
+        reporter = cloudwatch_camera.create_reporter()
+        assert (
+            reporter.logger.name
+            == "palace.manager.celery.monitoring.QueueStatsReporter"
+        )
+
+    def test_run(self, cloudwatch_camera: CloudwatchCameraFixture):
+        # The reporter can be driven directly (no events camera): run() snapshots
+        # every queue and publishes a QueueWaiting metric for each.
+        reporter = cloudwatch_camera.create_reporter()
+        cloudwatch_camera.mock_get_redis.return_value.llen.return_value = 3
+        cloudwatch_camera.mock_get_redis.return_value.lindex.return_value = None
+        put_metric_data = cloudwatch_camera.client.return_value.put_metric_data
+
+        with freeze_time("2021-01-01"):
+            reporter.run()
+
+        put_metric_data.assert_called_once()
+        metric_data = put_metric_data.call_args.kwargs["MetricData"]
+        assert {metric["MetricName"] for metric in metric_data} == {"QueueWaiting"}
+        assert all(metric["Value"] == 3 for metric in metric_data)
+        queue_dimensions = {
+            dimension["Value"]
+            for metric in metric_data
+            for dimension in metric["Dimensions"]
+            if dimension["Name"] == "QueueName"
+        }
+        assert queue_dimensions == {"queue1", "queue2"}
