@@ -1082,6 +1082,55 @@ class TestCirculationData:
         # A snapshot that matches the (drifted) live columns needs no apply.
         assert circ(5, 2).needs_apply(db.session, collection) is False
 
+    def test_needs_apply_detects_a_format_only_change(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        """A format appearing, with the counts unchanged, must trigger an apply.
+
+        This is what lets a title repair itself after the distributor starts listing a
+        usable format. It works because ``formats`` rides this object's fingerprint --
+        it is deliberately absent from :meth:`fields_excluded_from_hash`, unlike the
+        volatile counts. Nothing on ``BibliographicData`` needs to know about formats
+        for this to hold.
+        """
+        collection = db.collection()
+        identifier = IdentifierData(type="test identifier", identifier="repairable")
+
+        def snapshot(formats: list[FormatData]) -> CirculationData:
+            return CirculationData(
+                data_source_name="Test data source",
+                primary_identifier_data=identifier,
+                licenses_owned=5,
+                licenses_available=3,
+                licenses_reserved=0,
+                patrons_in_hold_queue=0,
+                formats=formats,
+            )
+
+        epub_adobe = FormatData(
+            content_type=Representation.EPUB_MEDIA_TYPE,
+            drm_scheme=DeliveryMechanism.ADOBE_DRM,
+            available=True,
+        )
+
+        # The damaged state: owned, but with nothing a patron could open.
+        pool, _ = snapshot([]).apply(db.session, collection)
+        db.session.flush()
+        assert pool is not None
+        assert len(pool.delivery_mechanisms) == 0
+
+        # Control: an identical snapshot asks for nothing, so a True below can only
+        # have come from the formats.
+        assert snapshot([]).needs_apply(db.session, collection) is False
+
+        # The distributor now lists a usable format. Counts are untouched.
+        repaired = snapshot([epub_adobe])
+        assert repaired.needs_apply(db.session, collection) is True
+
+        repaired.apply(db.session, collection)
+        db.session.flush()
+        assert len(pool.delivery_mechanisms) == 1
+
     def test_needs_apply_skips_older_snapshot_even_when_counts_differ(
         self, db: DatabaseTransactionFixture
     ) -> None:
