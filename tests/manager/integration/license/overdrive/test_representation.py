@@ -29,7 +29,9 @@ from tests.fixtures.overdrive import OverdriveAPIFixture
 
 
 class TestOverdriveRepresentationExtractor:
-    def test_availability_info(self, overdrive_api_fixture: OverdriveAPIFixture):
+    def test_availability_info(
+        self, overdrive_api_fixture: OverdriveAPIFixture
+    ) -> None:
         data, raw = overdrive_api_fixture.sample_json("overdrive_book_list.json")
         availability = OverdriveRepresentationExtractor.availability_link_list(
             raw["products"]
@@ -48,7 +50,7 @@ class TestOverdriveRepresentationExtractor:
 
     def test_availability_info_missing_data(
         self, overdrive_api_fixture: OverdriveAPIFixture
-    ):
+    ) -> None:
         # overdrive_book_list_missing_data.json has two products. One
         # only has a title, the other only has an ID.
         data, raw = overdrive_api_fixture.sample_json(
@@ -69,7 +71,9 @@ class TestOverdriveRepresentationExtractor:
         # title, because an ID is required -- otherwise we don't know
         # what book we're talking about.
 
-    def test_book_info_to_circulation(self, overdrive_api_fixture: OverdriveAPIFixture):
+    def test_book_info_to_circulation(
+        self, overdrive_api_fixture: OverdriveAPIFixture
+    ) -> None:
         # Tests that can convert an overdrive availability document into a CirculationData object.
         fixture = overdrive_api_fixture
         session = overdrive_api_fixture.db.session
@@ -99,7 +103,7 @@ class TestOverdriveRepresentationExtractor:
 
     def test_book_info_to_circulation_advantage(
         self, overdrive_api_fixture: OverdriveAPIFixture
-    ):
+    ) -> None:
         # Overdrive Advantage accounts (a.k.a. "child" or "sub" accounts derive
         # different information from the same API responses as "main" Overdrive
         # accounts.
@@ -152,7 +156,7 @@ class TestOverdriveRepresentationExtractor:
 
     def test_not_found_error_to_circulationdata(
         self, overdrive_api_fixture: OverdriveAPIFixture
-    ):
+    ) -> None:
         fixture = overdrive_api_fixture
         transaction = fixture.db
         raw, _ = fixture.sample_json("overdrive_availability_not_found.json")
@@ -181,7 +185,7 @@ class TestOverdriveRepresentationExtractor:
 
     def test_book_info_to_circulation_no_ownership_data(
         self, overdrive_api_fixture: OverdriveAPIFixture
-    ):
+    ) -> None:
         """
         Test that status is None when we don't have ownership information.
 
@@ -208,7 +212,9 @@ class TestOverdriveRepresentationExtractor:
         # Status should also be None when we don't have ownership information
         assert data.status is None
 
-    def test_book_info_with_metadata(self, overdrive_api_fixture: OverdriveAPIFixture):
+    def test_book_info_with_metadata(
+        self, overdrive_api_fixture: OverdriveAPIFixture
+    ) -> None:
         # Tests that can convert an overdrive json block into a Metadata object.
 
         raw, info = overdrive_api_fixture.sample_json("overdrive_metadata.json")
@@ -383,7 +389,7 @@ class TestOverdriveRepresentationExtractor:
 
     def test_book_info_to_bibliographic_reads_only_the_record_it_is_given(
         self, overdrive_api_fixture: OverdriveAPIFixture
-    ):
+    ) -> None:
         """Characterise the converter: it reads bibliographic fields off the top
         level of whatever dict it is handed, and silently yields empty values for
         anything that dict does not contain.
@@ -428,7 +434,7 @@ class TestOverdriveRepresentationExtractor:
         self,
         overdrive_api_fixture: OverdriveAPIFixture,
         caplog: pytest.LogCaptureFixture,
-    ):
+    ) -> None:
         # Tests that we can convert an overdrive json block into a Metadata object
         # with series information.
         raw, info = overdrive_api_fixture.sample_json("overdrive_metadata_series.json")
@@ -445,7 +451,7 @@ class TestOverdriveRepresentationExtractor:
         assert metadata.publisher == "Candlewick Press"
         assert metadata.imprint == "Walker Books US"
 
-    def test_audiobook_info(self, overdrive_api_fixture: OverdriveAPIFixture):
+    def test_audiobook_info(self, overdrive_api_fixture: OverdriveAPIFixture) -> None:
         # This book will be available in three formats: a link to the
         # Overdrive Read website, a manifest file that SimplyE can
         # download, and the legacy format used by the mobile app
@@ -469,7 +475,9 @@ class TestOverdriveRepresentationExtractor:
             bibliographic.duration == 12 * 3600 + 20 * 60 + 38
         )  # The last (and only) format's duration is used
 
-    def test_book_info_with_sample(self, overdrive_api_fixture: OverdriveAPIFixture):
+    def test_book_info_with_sample(
+        self, overdrive_api_fixture: OverdriveAPIFixture
+    ) -> None:
         # This book has one sample, available as a direct download
         raw, info = overdrive_api_fixture.sample_json("has_sample.json")
         bibliographic = OverdriveRepresentationExtractor.book_info_to_bibliographic(
@@ -489,7 +497,7 @@ class TestOverdriveRepresentationExtractor:
 
     def test_book_info_with_unknown_sample(
         self, overdrive_api_fixture: OverdriveAPIFixture
-    ):
+    ) -> None:
         raw, info = overdrive_api_fixture.sample_json("has_sample.json")
 
         # Just use one format, and change a sample type to unknown, we should
@@ -505,7 +513,7 @@ class TestOverdriveRepresentationExtractor:
 
     def test_book_info_with_grade_levels(
         self, overdrive_api_fixture: OverdriveAPIFixture
-    ):
+    ) -> None:
         raw, info = overdrive_api_fixture.sample_json("has_grade_levels.json")
         bibliographic = OverdriveRepresentationExtractor.book_info_to_bibliographic(
             info
@@ -518,7 +526,9 @@ class TestOverdriveRepresentationExtractor:
         )
         assert ["Grade 4", "Grade 5", "Grade 6", "Grade 7", "Grade 8"] == grade_levels
 
-    def test_book_info_with_awards(self, overdrive_api_fixture: OverdriveAPIFixture):
+    def test_book_info_with_awards(
+        self, overdrive_api_fixture: OverdriveAPIFixture
+    ) -> None:
         raw, info = overdrive_api_fixture.sample_json("has_awards.json")
         bibliographic = OverdriveRepresentationExtractor.book_info_to_bibliographic(
             info
@@ -532,7 +542,7 @@ class TestOverdriveRepresentationExtractor:
         assert 1 == awards.value
         assert 1 == awards.weight
 
-    def test_image_link_to_linkdata(self):
+    def test_image_link_to_linkdata(self) -> None:
         def m(link):
             return OverdriveRepresentationExtractor.image_link_to_linkdata(link, "rel")
 

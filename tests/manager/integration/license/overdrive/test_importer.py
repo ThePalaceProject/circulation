@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime
 import json
 import logging
+from typing import Any
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -53,7 +54,7 @@ class TestOverdriveImporter:
         db: DatabaseTransactionFixture,
         overdrive_api_fixture: OverdriveAPIFixture,
         services_fixture: ServicesFixture,
-    ):
+    ) -> None:
         """Test successful initialization of OverdriveImporter."""
         collection = overdrive_api_fixture.collection
         registry = services_fixture.services.integration_registry.license_providers()
@@ -74,7 +75,7 @@ class TestOverdriveImporter:
         db: DatabaseTransactionFixture,
         overdrive_api_fixture: OverdriveAPIFixture,
         services_fixture: ServicesFixture,
-    ):
+    ) -> None:
         """Test initialization when API instance is provided."""
         collection = overdrive_api_fixture.collection
         registry = services_fixture.services.integration_registry.license_providers()
@@ -91,7 +92,7 @@ class TestOverdriveImporter:
         db: DatabaseTransactionFixture,
         overdrive_api_fixture: OverdriveAPIFixture,
         services_fixture: ServicesFixture,
-    ):
+    ) -> None:
         """Test initialization with identifier_set provided."""
         collection = overdrive_api_fixture.collection
         registry = services_fixture.services.integration_registry.license_providers()
@@ -111,7 +112,7 @@ class TestOverdriveImporter:
         db: DatabaseTransactionFixture,
         overdrive_api_fixture: OverdriveAPIFixture,
         services_fixture: ServicesFixture,
-    ):
+    ) -> None:
         """Test initialization with parent_identifier_set."""
         collection = overdrive_api_fixture.collection
         registry = services_fixture.services.integration_registry.license_providers()
@@ -135,7 +136,7 @@ class TestOverdriveImporter:
         self,
         db: DatabaseTransactionFixture,
         services_fixture: ServicesFixture,
-    ):
+    ) -> None:
         """Test that initialization fails with invalid collection protocol."""
         # Create a collection with wrong protocol
         collection = db.collection(protocol="Not Overdrive")
@@ -151,7 +152,7 @@ class TestOverdriveImporter:
         db: DatabaseTransactionFixture,
         overdrive_api_fixture: OverdriveAPIFixture,
         services_fixture: ServicesFixture,
-    ):
+    ) -> None:
         """Test get_timestamp creates or retrieves a timestamp."""
         collection = overdrive_api_fixture.collection
         registry = services_fixture.services.integration_registry.license_providers()
@@ -178,7 +179,7 @@ class TestOverdriveImporter:
         overdrive_files_fixture: OverdriveFilesFixture,
         services_fixture: ServicesFixture,
         redis_fixture: RedisFixture,
-    ):
+    ) -> None:
         """Ensure _process_book skips metadata update if identifier is in the parent identifier set."""
 
         collection = overdrive_api_fixture.collection
@@ -240,7 +241,7 @@ class TestOverdriveImporter:
         overdrive_api_fixture: OverdriveAPIFixture,
         overdrive_files_fixture: OverdriveFilesFixture,
         services_fixture: ServicesFixture,
-    ):
+    ) -> None:
         """_process_book must convert the fetched metadata record, not the product summary.
 
         The product-list summary does not carry ``creators``, ``publisher``,
@@ -258,27 +259,16 @@ class TestOverdriveImporter:
             api=overdrive_api_fixture.api,
         )
 
-        book_list_data = json.loads(
+        book = self._book_with_both_documents(overdrive_files_fixture)
+        summary = json.loads(
             overdrive_files_fixture.sample_data("overdrive_book_list.json")
-        )
-        book = book_list_data["products"][0].copy()
-        metadata = json.loads(
-            overdrive_files_fixture.sample_data("overdrive_metadata.json")
-        )
-        # In production the metadata record is looked up by the summary's id, so
-        # the two always agree.
-        metadata["id"] = book["id"]
-        book["metadata"] = metadata
-        book["availabilityV2"] = json.loads(
-            overdrive_files_fixture.sample_data(
-                "overdrive_availability_information.json"
-            )
-        )
+        )["products"][0]
+        metadata = book["metadata"]
 
         # Sanity check on the fixture: the fields we care about really are absent
         # from the summary and present in the metadata record.
         for field in ("creators", "publisher", "publishDate", "languages"):
-            assert field not in book_list_data["products"][0]
+            assert field not in summary
             assert field in metadata
 
         apply_bibliographic = Mock()
@@ -300,10 +290,11 @@ class TestOverdriveImporter:
             "Andreas Rüping"
         ]
         assert bibliographic.published == datetime.date(2005, 1, 31)
-        # "en" in the metadata record, normalized to alpha-3 -- not the "eng"
-        # default that an absent ``languages`` key would have produced.
-        assert bibliographic.language == "eng"
         assert bibliographic.title == metadata["title"]
+        # The language is not checked here. This record's language is English and
+        # so is the value an absent ``languages`` key falls back to, so the check
+        # would pass either way. ``test_process_book_non_english_language_preserved``
+        # covers it with a record that is not in English.
 
         # Formats are deliberately not part of what converting the metadata record
         # recovers. The product-list summary carries a ``formats`` list of its own,
@@ -319,7 +310,7 @@ class TestOverdriveImporter:
 
     def _book_with_both_documents(
         self, overdrive_files_fixture: OverdriveFilesFixture
-    ) -> dict:
+    ) -> dict[str, Any]:
         """A product-list entry with its metadata record and availability attached."""
         book = json.loads(
             overdrive_files_fixture.sample_data("overdrive_book_list.json")
@@ -344,7 +335,7 @@ class TestOverdriveImporter:
         overdrive_api_fixture: OverdriveAPIFixture,
         overdrive_files_fixture: OverdriveFilesFixture,
         services_fixture: ServicesFixture,
-    ):
+    ) -> None:
         """Formats and availability must travel together, in one task.
 
         Overdrive is the only distributor that reads them from two documents, and
@@ -395,7 +386,7 @@ class TestOverdriveImporter:
         overdrive_files_fixture: OverdriveFilesFixture,
         services_fixture: ServicesFixture,
         bibliographic_changed: bool,
-    ):
+    ) -> None:
         """Metadata present but no availability document -- a real Overdrive 404.
 
         The converter's formats-only snapshot is then the only circulation data we
@@ -462,7 +453,7 @@ class TestOverdriveImporter:
         has_metadata: bool,
         expected_format_count: int,
         may_remove_formats: bool,
-    ):
+    ) -> None:
         """Only a snapshot built from the metadata record may remove a format.
 
         Both cases take the circulation branch, and getting either one wrong does
@@ -522,7 +513,7 @@ class TestOverdriveImporter:
         services_fixture: ServicesFixture,
         caplog: pytest.LogCaptureFixture,
         fetch_metadata: bool,
-    ):
+    ) -> None:
         """An Overdrive error document must not crash the import.
 
         Overdrive reports an unrecognized identifier as an HTTP 200 whose body is an
@@ -606,7 +597,7 @@ class TestOverdriveImporter:
         overdrive_files_fixture: OverdriveFilesFixture,
         services_fixture: ServicesFixture,
         caplog: pytest.LogCaptureFixture,
-    ):
+    ) -> None:
         """Metadata describing a different title must not be applied.
 
         The identifier comes from the product list while the bibliographic data comes
@@ -661,7 +652,7 @@ class TestOverdriveImporter:
         overdrive_api_fixture: OverdriveAPIFixture,
         overdrive_files_fixture: OverdriveFilesFixture,
         services_fixture: ServicesFixture,
-    ):
+    ) -> None:
         """Overdrive is inconsistent about id case; that alone is not a mismatch."""
         collection = overdrive_api_fixture.collection
         registry = services_fixture.services.integration_registry.license_providers()
@@ -673,21 +664,9 @@ class TestOverdriveImporter:
             api=overdrive_api_fixture.api,
         )
 
-        book_list_data = json.loads(
-            overdrive_files_fixture.sample_data("overdrive_book_list.json")
-        )
-        book = book_list_data["products"][0].copy()
-        metadata = json.loads(
-            overdrive_files_fixture.sample_data("overdrive_metadata.json")
-        )
-        metadata["id"] = book["id"].upper()
-        assert metadata["id"] != book["id"]
-        book["metadata"] = metadata
-        book["availabilityV2"] = json.loads(
-            overdrive_files_fixture.sample_data(
-                "overdrive_availability_information.json"
-            )
-        )
+        book = self._book_with_both_documents(overdrive_files_fixture)
+        book["metadata"]["id"] = book["id"].upper()
+        assert book["metadata"]["id"] != book["id"]
 
         apply_bibliographic = Mock()
 
@@ -707,7 +686,7 @@ class TestOverdriveImporter:
         overdrive_api_fixture: OverdriveAPIFixture,
         overdrive_files_fixture: OverdriveFilesFixture,
         services_fixture: ServicesFixture,
-    ):
+    ) -> None:
         """A non-English book must not be miscatalogued as English."""
         collection = overdrive_api_fixture.collection
         registry = services_fixture.services.integration_registry.license_providers()
@@ -719,21 +698,8 @@ class TestOverdriveImporter:
             api=overdrive_api_fixture.api,
         )
 
-        book_list_data = json.loads(
-            overdrive_files_fixture.sample_data("overdrive_book_list.json")
-        )
-        book = book_list_data["products"][0].copy()
-        metadata = json.loads(
-            overdrive_files_fixture.sample_data("overdrive_metadata.json")
-        )
-        metadata["id"] = book["id"]
-        metadata["languages"] = [{"code": "fr", "name": "French"}]
-        book["metadata"] = metadata
-        book["availabilityV2"] = json.loads(
-            overdrive_files_fixture.sample_data(
-                "overdrive_availability_information.json"
-            )
-        )
+        book = self._book_with_both_documents(overdrive_files_fixture)
+        book["metadata"]["languages"] = [{"code": "fr", "name": "French"}]
 
         apply_bibliographic = Mock()
 
@@ -754,7 +720,7 @@ class TestOverdriveImporter:
         overdrive_api_fixture: OverdriveAPIFixture,
         overdrive_files_fixture: OverdriveFilesFixture,
         services_fixture: ServicesFixture,
-    ):
+    ) -> None:
         """Test import_collection with basic book data."""
         collection = overdrive_api_fixture.collection
         registry = services_fixture.services.integration_registry.license_providers()
@@ -847,7 +813,7 @@ class TestOverdriveImporter:
         db: DatabaseTransactionFixture,
         overdrive_api_fixture: OverdriveAPIFixture,
         services_fixture: ServicesFixture,
-    ):
+    ) -> None:
         """Test import_collection when endpoint is provided."""
         collection = overdrive_api_fixture.collection
         registry = services_fixture.services.integration_registry.license_providers()
@@ -885,7 +851,7 @@ class TestOverdriveImporter:
         db: DatabaseTransactionFixture,
         overdrive_api_fixture: OverdriveAPIFixture,
         services_fixture: ServicesFixture,
-    ):
+    ) -> None:
         """Test import_collection adds identifiers to identifier_set."""
         collection = overdrive_api_fixture.collection
         registry = services_fixture.services.integration_registry.license_providers()
@@ -953,7 +919,7 @@ class TestOverdriveImporter:
         db: DatabaseTransactionFixture,
         overdrive_api_fixture: OverdriveAPIFixture,
         services_fixture: ServicesFixture,
-    ):
+    ) -> None:
         """Test import_collection skips unchanged bibliographic data."""
         collection = overdrive_api_fixture.collection
         registry = services_fixture.services.integration_registry.license_providers()
@@ -1021,7 +987,7 @@ class TestOverdriveImporter:
         db: DatabaseTransactionFixture,
         overdrive_api_fixture: OverdriveAPIFixture,
         services_fixture: ServicesFixture,
-    ):
+    ) -> None:
         """Test import_collection handles books with missing metadata."""
         collection = overdrive_api_fixture.collection
         registry = services_fixture.services.integration_registry.license_providers()
@@ -1076,7 +1042,7 @@ class TestOverdriveImporter:
         db: DatabaseTransactionFixture,
         overdrive_api_fixture: OverdriveAPIFixture,
         services_fixture: ServicesFixture,
-    ):
+    ) -> None:
         """Test import_collection without parent identifiers fetches metadata upfront."""
         collection = overdrive_api_fixture.collection
         registry = services_fixture.services.integration_registry.license_providers()
@@ -1155,7 +1121,7 @@ class TestOverdriveImporter:
         db: DatabaseTransactionFixture,
         overdrive_api_fixture: OverdriveAPIFixture,
         services_fixture: ServicesFixture,
-    ):
+    ) -> None:
         """Test import_collection with parent identifiers skips fetching metadata for books in parent set."""
         collection = overdrive_api_fixture.collection
         registry = services_fixture.services.integration_registry.license_providers()
@@ -1260,7 +1226,7 @@ class TestOverdriveImporter:
 class TestFeedImportResult:
     """Tests for the FeedImportResult dataclass."""
 
-    def test_feed_import_result_basic(self):
+    def test_feed_import_result_basic(self) -> None:
         """Test FeedImportResult creation with basic data."""
         current_page = BookInfoEndpoint(url="http://current.page")
         result = FeedImportResult(current_page=current_page)
@@ -1269,7 +1235,7 @@ class TestFeedImportResult:
         assert result.next_page is None
         assert result.processed_count == 0
 
-    def test_feed_import_result_with_all_fields(self):
+    def test_feed_import_result_with_all_fields(self) -> None:
         """Test FeedImportResult with all fields populated."""
         current_page = BookInfoEndpoint(url="http://current.page")
         next_page = BookInfoEndpoint(url="http://next.page")
@@ -1282,11 +1248,13 @@ class TestFeedImportResult:
         assert result.next_page == next_page
         assert result.processed_count == 42
 
-    def test_feed_import_result_frozen(self):
+    def test_feed_import_result_frozen(self) -> None:
         """Test that FeedImportResult is immutable (frozen)."""
         current_page = BookInfoEndpoint(url="http://current.page")
         result = FeedImportResult(current_page=current_page)
 
         # Should raise an error when trying to modify
         with pytest.raises(AttributeError):
-            result.processed_count = 100
+            # Assigning to a read-only property is exactly what this test is
+            # checking raises, so mypy's complaint about it is the point.
+            result.processed_count = 100  # type: ignore[misc]
