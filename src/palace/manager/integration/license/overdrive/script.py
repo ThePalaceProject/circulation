@@ -316,6 +316,22 @@ class BackfillCollection(Script):
             ),
         )
         parser.add_argument(
+            "--include-suspected-magazines",
+            action="store_true",
+            help=(
+                "Repair suspected magazines too. They are skipped by default. "
+                "THE HEURISTIC: a title is suspected of being a magazine when its "
+                "series name is identical to its own title, which is how a magazine "
+                "issue is shaped. This is a guess about the shape of our data, not a "
+                "field Overdrive gives us -- on one production copy it matched 8,233 "
+                "of the 8,242 titles that had nothing to open, and 20 of the 626 "
+                "that did. They are skipped because we have no magazine support: "
+                "Overdrive serves them under a format id we do not recognise, so "
+                "repairing one spends a blocking Overdrive request and rewrites both "
+                "of its hashes to leave it exactly as damaged as it was."
+            ),
+        )
+        parser.add_argument(
             "--dry-run",
             action="store_true",
             help=(
@@ -350,13 +366,19 @@ class BackfillCollection(Script):
         )
 
         if parsed.dry_run:
-            self._report_dry_run(collections, imported_since, parsed.max_titles)
+            self._report_dry_run(
+                collections,
+                imported_since,
+                parsed.max_titles,
+                parsed.include_suspected_magazines,
+            )
             return
 
         if parsed.all_collections:
             overdrive.backfill_all_collections.delay(
                 max_titles=parsed.max_titles,
                 imported_since=imported_since,
+                include_suspected_magazines=parsed.include_suspected_magazines,
             )
             self.log.info(
                 'The "backfill_all_collections" task has been queued for execution. '
@@ -370,6 +392,7 @@ class BackfillCollection(Script):
             batch_size=parsed.batch_size,
             max_titles=parsed.max_titles,
             imported_since=imported_since,
+            include_suspected_magazines=parsed.include_suspected_magazines,
         )
         self.log.info(
             f'The "backfill_collection" task has been queued for collection '
@@ -403,18 +426,39 @@ class BackfillCollection(Script):
         collections: list[Collection],
         imported_since: datetime.datetime | None,
         max_titles: int | None,
+        include_suspected_magazines: bool,
     ) -> None:
         """Report what a real run would process, without queuing or fetching anything.
 
-        Counts through the same query the task uses, so the estimate cannot drift
-        from the run it is estimating.
+        Counts through the same query the task uses, so the estimate cannot drift from
+        the run it is estimating.
+
+        The suspected-magazine count is reported whether or not they are being
+        excluded, because it is the number that decides whether a run is worth making
+        at all: a collection that is mostly magazines would spend nearly all of its
+        blocking Overdrive requests, and nearly all of its rewritten hashes, on titles
+        it cannot make openable.
         """
         clauses = overdrive._backfill_clauses()
+        found_only_by_the_others = and_(
+            or_(clauses.unsearchable, clauses.incomplete),
+            not_(clauses.unopenable),
+        )
         total = 0
+
         for collection in collections:
-            candidates = overdrive.count_backfill_candidates(
+            damaged = overdrive.count_backfill_candidates(
+                self._db,
+                collection.id,
+                imported_since,
+                include_suspected_magazines=True,
+            )
+            not_magazines = overdrive.count_backfill_candidates(
                 self._db, collection.id, imported_since
             )
+            suspected_magazines = damaged - not_magazines
+
+            candidates = damaged if include_suspected_magazines else not_magazines
             # max_titles caps each collection separately, matching how
             # backfill_all_collections forwards it.
             to_process = (
@@ -422,26 +466,36 @@ class BackfillCollection(Script):
             )
             total += to_process
 
-            # Report the symptoms apart as well as together. "Unopenable" is
-            # expected to cover nearly everything; the other two are worth keeping
-            # only if they find titles it misses, and this is how you find out.
+            # Report the symptoms apart as well as together. "Unopenable" is expected
+            # to cover nearly everything; the other two are worth keeping only if they
+            # find titles it misses, and this is how you find out.
             unopenable = overdrive.count_backfill_candidates(
-                self._db, collection.id, imported_since, clause=clauses.unopenable
+                self._db,
+                collection.id,
+                imported_since,
+                clause=clauses.unopenable,
+                include_suspected_magazines=include_suspected_magazines,
             )
             only_others = overdrive.count_backfill_candidates(
                 self._db,
                 collection.id,
                 imported_since,
-                clause=and_(
-                    or_(clauses.unsearchable, clauses.incomplete),
-                    not_(clauses.unopenable),
-                ),
+                clause=found_only_by_the_others,
+                include_suspected_magazines=include_suspected_magazines,
+            )
+
+            disposition = (
+                "included; pass no flag to skip them"
+                if include_suspected_magazines
+                else "skipped by default"
             )
             self.log.info(
                 f"[dry run] '{collection.name}' (id={collection.id}): "
-                f"{candidates} damaged title(s), {to_process} would be processed "
-                f"({unopenable} unopenable; {only_others} found only by the "
-                f"other two symptoms)."
+                f"{damaged} damaged title(s), of which {suspected_magazines} "
+                f"suspected magazine(s) ({disposition}). "
+                f"{to_process} would be processed "
+                f"({unopenable} unopenable; {only_others} found only by the other "
+                f"two symptoms)."
             )
 
         self.log.info(
