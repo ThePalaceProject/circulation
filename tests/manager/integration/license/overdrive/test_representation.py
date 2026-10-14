@@ -410,6 +410,7 @@ class TestOverdriveRepresentationExtractor:
         )
         assert from_summary.contributors == []
         assert from_summary.publisher is None
+        assert from_summary.published is None
         
         # The misleading part: a missing language is not None, it is "eng".
         assert from_summary.language == "eng"
