@@ -142,8 +142,8 @@ class OverdriveImporter(LoggerMixin):
             # Overdrive reports an unrecognized identifier as an HTTP 200 whose body
             # is an error document (see OverdriveClientRequests.metadata), and such a
             # document passes the check above while carrying no "id" for the extractor
-            # to key on. Skip the bibliographic update and carry on to the circulation
-            # update, which is still worth attempting.
+            # to key on. Report it as unusable; the caller still attempts the
+            # circulation update, which is worth doing on its own.
             self.log.warning(
                 f"Could not extract bibliographic data from Overdrive metadata for "
                 f"{identifier}. Skipping bibliographic update."
@@ -176,7 +176,9 @@ class OverdriveImporter(LoggerMixin):
 
         :param book: Book data dictionary from OverDrive API
         :param fetch_metadata: Whether metadata was already fetched
-        :param policy: Replacement policy for bibliographic updates
+        :param policy: Replacement policy for the apply. Passed to a bibliographic
+            apply, and to a circulation apply whose formats came from the metadata
+            record -- see the dispatch below for why the two differ.
         :param apply_bibliographic: Callback to apply bibliographic updates
         :param apply_circulation: Callback to apply circulation updates
         :return: Tuple of (identifier, changed) where changed is True if any data changed
@@ -210,9 +212,6 @@ class OverdriveImporter(LoggerMixin):
         ):
             book["metadata"] = self._api.metadata_lookup(identifier=identifier).raw
 
-        # we need to check that there is metadata because it is possible that we attempted to fetch it, but we
-        # didn't get anything back from overdrive (ie from the book list fetch above) or we did not attempt to
-        # fetch it because it was already processed by the parent collection.
         bibliographic = self._usable_bibliographic(book, identifier)
 
         # availability needs to be checked/updated in all but a few instances so it is
@@ -317,8 +316,12 @@ class OverdriveImporter(LoggerMixin):
              skipping books that are already in the parent collection
 
         2. **Change Detection**:
-           - Only applies bibliographic updates if metadata has changed
-           - Always checks circulation data as availability changes frequently and applies changes only if changed.
+           - Each book queues at most one apply. If its metadata changed, the
+             bibliographic apply runs and carries the circulation data with it.
+             Otherwise the circulation data is checked on its own, and applied if
+             the availability or the format list has moved.
+           - See :meth:`_process_book` for why the two halves have to travel on a
+             single object rather than as two independent tasks.
 
         :param apply_bibliographic: Callback to apply bibliographic metadata updates (title, author, etc.)
         :param apply_circulation: Callback to apply circulation data updates (copies owned, available, etc.)
