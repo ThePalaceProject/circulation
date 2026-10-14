@@ -498,8 +498,33 @@ class BackfillCollection(Script):
                 f"two symptoms)."
             )
 
+        # The per-collection numbers above count pools. A title held by more than one
+        # collection -- a parent and its Advantage children, or two libraries on this
+        # manager -- appears in each of them, but a run repairs it once and the other
+        # collections then stop selecting it, because every damage symptom is keyed on
+        # the title rather than the collection. So summing those numbers overstates
+        # the job. Count the distinct titles for the figure that matters: how many
+        # blocking Overdrive requests the run will actually make.
+        titles = overdrive.count_backfill_titles(
+            self._db,
+            [collection.id for collection in collections],
+            imported_since,
+            include_suspected_magazines=include_suspected_magazines,
+        )
+        shared = total - titles
+        shared_note = (
+            f" That is {shared} fewer than the per-collection totals above, because"
+            f" a title in more than one collection is repaired once."
+            if shared > 0
+            else ""
+        )
+        capped_note = (
+            f" A cap of {max_titles} per collection applies on top of this."
+            if max_titles is not None
+            else ""
+        )
         self.log.info(
-            f"[dry run] {total} title(s) would be processed across "
-            f"{len(collections)} collection(s). Each costs one blocking Overdrive "
-            f"request. Nothing has been queued."
+            f"[dry run] {titles} distinct title(s) across "
+            f"{len(collections)} collection(s), one blocking Overdrive request each."
+            f"{shared_note}{capped_note} Nothing has been queued."
         )

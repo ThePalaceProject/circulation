@@ -1,5 +1,6 @@
 import datetime
 from collections import defaultdict
+from collections.abc import Sequence
 from typing import Any, Literal, NamedTuple, TypedDict, TypeGuard
 from uuid import uuid4
 
@@ -702,7 +703,7 @@ def _needs_backfill() -> Any:
 
 
 def backfill_query(
-    collection_id: int,
+    collections: int | Sequence[int],
     imported_since: datetime.datetime | None = None,
     *,
     clause: Any = None,
@@ -713,7 +714,7 @@ def backfill_query(
     Shared by :func:`backfill_collection` and :func:`count_backfill_candidates` so a
     dry run can never report a different set than the run it is estimating.
 
-    :param collection_id: The Overdrive collection to search.
+    :param collections: The Overdrive collection to search, or several of them.
     :param imported_since: Restrict to titles whose presentation edition was last
         written at or after this time -- that is, titles imported by the damaged
         code. A pool with no presentation edition has no such time and is therefore
@@ -731,7 +732,11 @@ def backfill_query(
         .outerjoin(Work, LicensePool.work_id == Work.id)
         .outerjoin(Edition, LicensePool.presentation_edition_id == Edition.id)
         .where(
-            LicensePool.collection_id == collection_id,
+            (
+                LicensePool.collection_id == collections
+                if isinstance(collections, int)
+                else LicensePool.collection_id.in_(collections)
+            ),
             _needs_backfill() if clause is None else clause,
         )
     )
@@ -744,7 +749,7 @@ def backfill_query(
 
 def count_backfill_candidates(
     session: Session,
-    collection_id: int,
+    collections: int | Sequence[int],
     imported_since: datetime.datetime | None = None,
     *,
     clause: Any = None,
@@ -753,20 +758,56 @@ def count_backfill_candidates(
     """Count the titles a backfill would process, without contacting Overdrive.
 
     :param session: An active database session.
-    :param collection_id: The Overdrive collection to search.
+    :param collections: The Overdrive collection to search, or several of them.
     :param imported_since: See :func:`backfill_query`.
-    :return: The number of damaged titles in the collection.
+    :return: The number of damaged *pools*. A title held by more than one collection
+        is counted once per collection; see :func:`count_backfill_titles`.
     """
     count = session.scalar(
         select(func.count()).select_from(
             backfill_query(
-                collection_id,
+                collections,
                 imported_since,
                 clause=clause,
                 include_suspected_magazines=include_suspected_magazines,
             ).subquery()
         )
     )
+    return count or 0
+
+
+def count_backfill_titles(
+    session: Session,
+    collections: int | Sequence[int],
+    imported_since: datetime.datetime | None = None,
+    *,
+    include_suspected_magazines: bool = False,
+) -> int:
+    """Count the distinct titles a backfill would fetch, not the pools it would select.
+
+    These differ whenever one title sits in more than one collection, which is normal:
+    a parent and its Advantage children share titles, and so do two libraries' separate
+    collections on the same manager. All three damage symptoms are keyed on the title
+    rather than the collection -- delivery mechanisms belong to a book and a
+    distributor, and pools sharing an identifier share a work and an edition -- so
+    repairing a title through one collection stops every other collection from
+    selecting it.
+
+    Summing the per-collection counts therefore overstates what a run costs. This is
+    the number of blocking Overdrive requests it will actually make.
+
+    :param session: An active database session.
+    :param collections: The Overdrive collection to search, or several of them.
+    :param imported_since: See :func:`backfill_query`.
+    :param include_suspected_magazines: See :func:`backfill_query`.
+    :return: The number of distinct damaged titles.
+    """
+    damaged = backfill_query(
+        collections,
+        imported_since,
+        include_suspected_magazines=include_suspected_magazines,
+    ).subquery()
+    count = session.scalar(select(func.count(func.distinct(damaged.c.identifier_id))))
     return count or 0
 
 
