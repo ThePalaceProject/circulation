@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+import json
 from unittest.mock import MagicMock, Mock, call, patch
 from uuid import uuid4
 
@@ -27,10 +28,13 @@ from palace.manager.service.redis.models.set import IdentifierSet
 from palace.manager.sqlalchemy.constants import IdentifierType
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.coverage import Timestamp
+from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
+from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.util.http.exception import BadResponseException
 from tests.fixtures.celery import ApplyTaskFixture, CeleryFixture
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.files import OverdriveFilesFixture
 from tests.fixtures.overdrive import OverdriveAPIFixture
 from tests.fixtures.redis import RedisFixture
 from tests.mocks.mock import MockRequestsResponse
@@ -1466,7 +1470,7 @@ class TestBackfillCollection:
 
         overdrive.backfill_collection.delay(collection.id).wait()
 
-        mock_api_class.return_value._ensure_bibliographic_coverage.assert_not_called()
+        mock_api_class.return_value.ensure_bibliographic_coverage.assert_not_called()
         assert "complete" in caplog.text
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
@@ -1489,7 +1493,7 @@ class TestBackfillCollection:
 
         mock_api = mock_api_class.return_value
         assert [
-            c.args[0] for c in mock_api._ensure_bibliographic_coverage.call_args_list
+            c.args[0] for c in mock_api.ensure_bibliographic_coverage.call_args_list
         ] == [pool]
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
@@ -1511,7 +1515,7 @@ class TestBackfillCollection:
 
         mock_api = mock_api_class.return_value
         assert [
-            c.args[0] for c in mock_api._ensure_bibliographic_coverage.call_args_list
+            c.args[0] for c in mock_api.ensure_bibliographic_coverage.call_args_list
         ] == [pool]
 
     @pytest.mark.parametrize("symptom", ["no_publisher", "no_contributions"])
@@ -1540,7 +1544,7 @@ class TestBackfillCollection:
 
         mock_api = mock_api_class.return_value
         assert [
-            c.args[0] for c in mock_api._ensure_bibliographic_coverage.call_args_list
+            c.args[0] for c in mock_api.ensure_bibliographic_coverage.call_args_list
         ] == [pool]
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
@@ -1565,7 +1569,7 @@ class TestBackfillCollection:
         overdrive.backfill_collection.delay(collection.id).wait()
 
         mock_api = mock_api_class.return_value
-        assert mock_api._ensure_bibliographic_coverage.call_count == 1
+        assert mock_api.ensure_bibliographic_coverage.call_count == 1
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
     def test_backfill_forces_the_apply(
@@ -1584,7 +1588,7 @@ class TestBackfillCollection:
         overdrive.backfill_collection.delay(collection.id).wait()
 
         mock_api = mock_api_class.return_value
-        assert mock_api._ensure_bibliographic_coverage.call_args.kwargs == {
+        assert mock_api.ensure_bibliographic_coverage.call_args.kwargs == {
             "force": True
         }
 
@@ -1606,7 +1610,7 @@ class TestBackfillCollection:
 
         mock_api = mock_api_class.return_value
         assert [
-            c.args[0] for c in mock_api._ensure_bibliographic_coverage.call_args_list
+            c.args[0] for c in mock_api.ensure_bibliographic_coverage.call_args_list
         ] == [mine]
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
@@ -1684,7 +1688,7 @@ class TestBackfillCollection:
                 collection.id, batch_size=10, max_titles=2
             ).wait()
 
-        coverage = mock_api_class.return_value._ensure_bibliographic_coverage
+        coverage = mock_api_class.return_value.ensure_bibliographic_coverage
         assert coverage.call_count == 2
         mock_replace.assert_not_called()
         assert "reached the 2-title cap" in caplog.text
@@ -1744,7 +1748,7 @@ class TestBackfillCollection:
 
         overdrive.backfill_collection.delay(collection.id, imported_since=cutoff).wait()
 
-        coverage = mock_api_class.return_value._ensure_bibliographic_coverage
+        coverage = mock_api_class.return_value.ensure_bibliographic_coverage
         repaired = {call.args[0].id for call in coverage.call_args_list}
         assert repaired == {recent_pool.id}
 
@@ -1774,6 +1778,73 @@ class TestBackfillCollection:
             overdrive.count_backfill_candidates(db.session, collection.id, cutoff) == 0
         )
 
+    @patch(
+        target="palace.manager.celery.tasks.overdrive.OverdriveAPI",
+        new=SeededOverdriveAPI,
+    )
+    def test_backfill_actually_clears_the_damage(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
+        redis_fixture: RedisFixture,
+    ) -> None:
+        """A repaired pool stops being selected.
+
+        Every other test here patches the API away, so none of them check that a
+        repair actually fixes anything. It matters: the batch moves past a pool
+        whether or not the repair worked, and the run logs "complete" either way, so
+        a repair that left the pool damaged would look like a success.
+        """
+        collection = overdrive_api_fixture.collection
+        metadata = json.loads(
+            overdrive_files_fixture.sample_data("overdrive_metadata.json")
+        )
+        pool, _ = LicensePool.for_foreign_id(
+            db.session,
+            DataSource.OVERDRIVE,
+            Identifier.OVERDRIVE_ID,
+            metadata["id"],
+            collection=collection,
+        )
+        db.session.flush()
+        assert overdrive.count_backfill_candidates(db.session, collection.id) == 1
+
+        overdrive_api_fixture.mock_http.queue_response(
+            200, content=json.dumps(metadata)
+        )
+        overdrive.backfill_collection.delay(collection.id).wait()
+        db.session.expire_all()
+
+        assert any(lpdm.available for lpdm in pool.delivery_mechanisms)
+        assert overdrive.count_backfill_candidates(db.session, collection.id) == 0
+
+    @patch("palace.manager.celery.tasks.overdrive.chain")
+    def test_backfill_all_collections_runs_children_after_their_parent(
+        self,
+        mock_chain: MagicMock,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+    ) -> None:
+        """A parent and its Advantage children must not run at the same time.
+
+        They share delivery mechanisms and an edition, so running them together
+        means paying twice for the same metadata request and writing the same rows
+        from two workers -- which can deadlock, and which the task does not retry.
+        """
+        parent = overdrive_api_fixture.collection
+        child = db.collection(protocol=OverdriveAPI)
+        child.parent = parent
+        db.session.flush()
+
+        overdrive.backfill_all_collections.delay().wait()
+
+        assert mock_chain.call_count == 1
+        queued = [signature.args[0] for signature in mock_chain.call_args.args]
+        assert queued == [parent.id, child.id]
+
     def test_backfill_all_collections_queues_each_collection(
         self,
         db: DatabaseTransactionFixture,
@@ -1785,9 +1856,9 @@ class TestBackfillCollection:
         caplog.set_level(LogLevel.info)
         collection = overdrive_api_fixture.collection
 
-        with patch.object(overdrive.backfill_collection, "delay") as mock_delay:
+        with patch.object(overdrive.backfill_collection, "si") as mock_signature:
             overdrive.backfill_all_collections.delay().wait()
 
-        queued = {c.args[0] for c in mock_delay.call_args_list}
+        queued = {c.args[0] for c in mock_signature.call_args_list}
         assert collection.id in queued
         assert "Queued" in caplog.text

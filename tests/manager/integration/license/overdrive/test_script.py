@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import os
 from datetime import timedelta
+from typing import Any
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
@@ -556,6 +557,68 @@ class TestBackfillCollection:
         collection = db.collection(protocol=OverdriveAPI)
         with pytest.raises(PalaceValueError, match="at least 1"):
             script.do_run(["--collection-name", collection.name, "--max-titles", "0"])
+
+    @pytest.mark.parametrize("batch_size", ["0", "-1"])
+    def test_do_run_rejects_a_useless_batch_size(
+        self,
+        script: BackfillCollection,
+        db: DatabaseTransactionFixture,
+        batch_size: str,
+    ) -> None:
+        """Zero would select nothing and call the backfill finished; negative is invalid SQL."""
+        collection = db.collection(protocol=OverdriveAPI)
+        with pytest.raises(PalaceValueError, match="at least 1"):
+            script.do_run(
+                ["--collection-name", collection.name, "--batch-size", batch_size]
+            )
+
+    @patch(
+        "palace.manager.integration.license.overdrive.script.overdrive.backfill_collection"
+    )
+    def test_dry_run_reports_each_symptom_separately(
+        self,
+        mock_task: MagicMock,
+        script: BackfillCollection,
+        db: DatabaseTransactionFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """The report has to show whether the three symptoms overlap.
+
+        One symptom is expected to cover nearly every damaged title. The other two
+        are worth keeping only if they find titles it misses, and a single combined
+        total cannot answer that.
+        """
+        caplog.set_level(LogLevel.info)
+        collection = db.collection(protocol=OverdriveAPI)
+
+        def pool(publisher: str | None) -> Any:
+            edition = db.edition(authors=["Author, An"])
+            edition.publisher = publisher
+            work = db.work(presentation_edition=edition)
+            work.presentation_ready = True
+            return db.licensepool(
+                edition,
+                collection=collection,
+                with_open_access_download=True,
+                set_edition_as_presentation=True,
+                work=work,
+            )
+
+        # Unopenable, but otherwise complete: found only by the first symptom.
+        unopenable = pool("A Publisher")
+        for mechanism in list(unopenable.delivery_mechanisms):
+            mechanism.delete()
+
+        # Openable and searchable, but with no publisher: found only by the third.
+        pool(None)
+        db.session.flush()
+
+        script.do_run(["--collection-name", collection.name, "--dry-run"])
+
+        mock_task.delay.assert_not_called()
+        assert "2 damaged title(s)" in caplog.text
+        assert "1 unopenable" in caplog.text
+        assert "1 found only by the other two symptoms" in caplog.text
 
     @patch(
         "palace.manager.integration.license.overdrive.script.overdrive.backfill_collection"
