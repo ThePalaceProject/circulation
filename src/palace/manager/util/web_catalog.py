@@ -3,15 +3,24 @@
 from collections.abc import Iterable
 from urllib.parse import parse_qs, unquote_plus, urlencode, urlsplit
 
-# Query parameter the web catalog reads for the libraries to promote, to make them
+# Query parameter for the libraries to promote in the web catalog, to make them
 # easier to find. Libraries are named by short name, comma-separated, so a short
 # name containing a comma cannot be promoted.
 PROMOTE_LIBRARIES_PARAM = "promote"
 
-# Query parameter the web catalog reads for the label of the promoted libraries.
+# Query parameter for the label of the promoted libraries.
 PROMOTE_LABEL_PARAM = "promoteLabel"
 
-_PROMOTE_PARAMS = frozenset({PROMOTE_LIBRARIES_PARAM, PROMOTE_LABEL_PARAM})
+# Query parameter for the order of the promoted libraries.
+PROMOTE_ORDER_PARAM = "promoteOrder"
+
+# Value of the order parameter that instructs the web catalog to sort the
+# promoted libraries by name.
+PROMOTE_ORDER_BY_NAME = "name"
+
+_PROMOTE_PARAMS = frozenset(
+    {PROMOTE_LIBRARIES_PARAM, PROMOTE_LABEL_PARAM, PROMOTE_ORDER_PARAM}
+)
 
 
 def promote_label(url: str) -> str | None:
@@ -32,12 +41,13 @@ def with_promoted_libraries(
 ) -> str:
     """Returns the web catalog URL with the given libraries promoted.
 
-    Any promoted libraries and promote label already in the URL are replaced, or
-    removed if no libraries are given. Other query parameters and the fragment are
-    kept as written, though empty query pairs are dropped.
+    The URL instructs the web catalog to sort the promoted libraries by name.
+    Any promote parameters already in the URL are replaced, or removed if no
+    libraries are given. Other query parameters and the fragment are kept as
+    written, though empty query pairs are dropped.
 
     :param url: Web catalog URL
-    :param libraries: Short names of the libraries to promote, in display order
+    :param libraries: Short names of the libraries to promote
     :param label: Label for the promoted libraries, if any
 
     :return: The URL with the promoted libraries
@@ -53,6 +63,7 @@ def with_promoted_libraries(
         params = {PROMOTE_LIBRARIES_PARAM: library_list}
         if label:
             params[PROMOTE_LABEL_PARAM] = label
+        params[PROMOTE_ORDER_PARAM] = PROMOTE_ORDER_BY_NAME
         query.append(urlencode(params, safe=","))
 
     return parts._replace(query="&".join(query)).geturl()

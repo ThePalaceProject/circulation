@@ -678,14 +678,19 @@ class TestSAMLController:
         """Returns an authenticator with two SAML Web SSO integrations.
 
         Integration 1 serves libraries lib-a and lib-b, and integration 2 serves
-        lib-c. The other arguments give each integration's settings, in order.
+        lib-c. Their names sort as lib-b, lib-c, lib-a, so neither short name nor
+        integration order matches name order. The other arguments give each
+        integration's settings, in order.
 
         :return: The authenticator, and the providers in library order
         """
         db = controller_fixture.db
         libraries = (
-            (db.library(short_name="lib-a"), db.library(short_name="lib-b")),
-            (db.library(short_name="lib-c"),),
+            (
+                db.library(name="Library C", short_name="lib-a"),
+                db.library(name="Library A", short_name="lib-b"),
+            ),
+            (db.library(name="Library B", short_name="lib-c"),),
         )
         authenticator = Authenticator(db.session, libraries=db.session.query(Library))
         providers: list[MagicMock] = []
@@ -747,7 +752,7 @@ class TestSAMLController:
                 encode_saml_response(IDP),
                 (IDP, OTHER_IDP),
                 (MagicMock(spec=SAMLSubject), None),
-                "https://catalog.example.com?promote=lib-a,lib-b",
+                "https://catalog.example.com?promote=lib-b,lib-a&promoteOrder=name",
                 (True, False),
                 id="valid-response-promotes-integration-libraries",
             ),
@@ -803,7 +808,7 @@ class TestSAMLController:
                 encode_saml_response(IDP),
                 (IDP, IDP),
                 (MagicMock(spec=SAMLSubject), MagicMock(spec=SAMLSubject)),
-                "https://catalog.example.com?promote=lib-a,lib-b,lib-c",
+                "https://catalog.example.com?promote=lib-b,lib-c,lib-a&promoteOrder=name",
                 (True, True),
                 id="two-valid-integrations-promote-all-their-libraries",
             ),
@@ -811,7 +816,7 @@ class TestSAMLController:
                 encode_saml_response(IDP),
                 (IDP, IDP),
                 (SAML_INVALID_RESPONSE, MagicMock(spec=SAMLSubject)),
-                "https://catalog.example.com?promote=lib-c",
+                "https://catalog.example.com?promote=lib-c&promoteOrder=name",
                 (True, True),
                 id="only-the-valid-integration-is-promoted",
             ),
@@ -870,7 +875,7 @@ class TestSAMLController:
                 (False, True),
                 (None, None),
                 None,
-                "https://catalog.example.com?promote=lib-c",
+                "https://catalog.example.com?promote=lib-c&promoteOrder=name",
                 None,
                 id="integration-that-disallows-promotion-is-skipped",
             ),
@@ -887,7 +892,7 @@ class TestSAMLController:
                 ("Our schools", "Our schools"),
                 None,
                 "https://catalog.example.com"
-                "?promote=lib-a,lib-b,lib-c&promoteLabel=Our+schools",
+                "?promote=lib-b,lib-c,lib-a&promoteLabel=Our+schools&promoteOrder=name",
                 None,
                 id="shared-label-is-sent",
             ),
@@ -896,7 +901,7 @@ class TestSAMLController:
                 ("District A", None),
                 None,
                 "https://catalog.example.com"
-                "?promote=lib-a,lib-b,lib-c&promoteLabel=District+A",
+                "?promote=lib-b,lib-c,lib-a&promoteLabel=District+A&promoteOrder=name",
                 None,
                 id="only-label-is-sent",
             ),
@@ -904,7 +909,7 @@ class TestSAMLController:
                 (True, True),
                 ("District A", "District B"),
                 None,
-                "https://catalog.example.com?promote=lib-a,lib-b,lib-c",
+                "https://catalog.example.com?promote=lib-b,lib-c,lib-a&promoteOrder=name",
                 None,
                 id="different-labels-send-no-label",
             ),
@@ -916,15 +921,16 @@ class TestSAMLController:
                 "https://catalog.example.com/lib"
                 "?promote=x&promoteLabel=From+relay+state&promoteOrder=listed",
                 "https://catalog.example.com/lib"
-                "?promoteOrder=listed&promote=lib-a,lib-b"
-                "&promoteLabel=Integration+decision",
+                "?promote=lib-b,lib-a&promoteLabel=Integration+decision"
+                "&promoteOrder=name",
                 "From relay state",
                 id="honored-relay-state-label-is-offered-to-the-integration",
             ),
             pytest.param(
                 (False, False),
                 (None, None),
-                "https://catalog.example.com/lib?promote=x&promoteLabel=Start",
+                "https://catalog.example.com/lib"
+                "?promote=x&promoteLabel=Start&promoteOrder=listed",
                 "https://catalog.example.com/lib",
                 None,
                 id="relay-state-promote-parameters-are-removed",
@@ -1101,7 +1107,7 @@ class TestSAMLController:
         assert result.status_code == 303
         assert result.headers.get("Location") == (
             f"https://catalog.example.com?promote={library_short_name}"
-            "&promoteLabel=Our+libraries"
+            "&promoteLabel=Our+libraries&promoteOrder=name"
             if expected_error is None
             else "https://catalog.example.com"
         )

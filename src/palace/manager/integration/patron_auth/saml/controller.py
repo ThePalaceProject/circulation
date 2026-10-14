@@ -1,7 +1,7 @@
 import json
 import logging
 from collections import defaultdict
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 from urllib.parse import (
@@ -21,6 +21,7 @@ from lxml import etree
 from onelogin.saml2.errors import OneLogin_Saml2_Error
 from onelogin.saml2.utils import OneLogin_Saml2_Utils
 from onelogin.saml2.xml_utils import OneLogin_Saml2_XML
+from sqlalchemy import select
 from werkzeug import Response as wkResponse
 from werkzeug.datastructures import MultiDict
 
@@ -440,12 +441,12 @@ class SAMLController:
         The libraries promoted are those of the integrations that the SAML
         response is valid for and that allow promotion. The promote parameters
         already in the URL are replaced, so only the integrations' settings decide
-        what is promoted.
+        what is promoted. The libraries are sent sorted by library name.
 
         Several integrations can match one response, when they share an IdP, and
-        each one has its own promote label. The web catalog shows only one label,
-        so it is sent only when the matching integrations all have the same one.
-        Otherwise no label is sent, and the web catalog uses its default label.
+        each one has its own promote label. Only one label can be sent, so it is
+        sent only when the matching integrations all have the same one. Otherwise
+        no label is sent.
 
         :param db: Database session
         :param url: Web catalog URL
@@ -460,7 +461,28 @@ class SAMLController:
                 labels.add(label)
 
         return with_promoted_libraries(
-            url, sorted(libraries), labels.pop() if len(labels) == 1 else None
+            url,
+            self._sorted_by_name(db, libraries),
+            labels.pop() if len(labels) == 1 else None,
+        )
+
+    @staticmethod
+    def _sorted_by_name(
+        db: sqlalchemy.orm.session.Session, short_names: Collection[str]
+    ) -> list[str]:
+        """Returns the libraries' short names, sorted by library name.
+
+        :param db: Database session
+        :param short_names: Short names of the libraries to sort
+        """
+        if not short_names:
+            return []
+        return list(
+            db.scalars(
+                select(Library.short_name)
+                .where(Library.short_name.in_(short_names))
+                .order_by(Library.name, Library.short_name)
+            )
         )
 
     def _redirect_to_web_catalog(self, destination: str) -> wkResponse:
@@ -542,8 +564,9 @@ class SAMLController:
         These are the patron auth integrations that allow promotion and that the
         SAML response in the current request is valid for. The response is
         matched to integrations by its issuer, then validated against each one,
-        so a forged response matches nothing. Both steps read the response from
-        the current request, so they always check the same response.
+        so a response the IdP did not sign matches nothing. Without strict mode,
+        only the signature is checked. Both steps read the response from the
+        current request, so they always check the same response.
 
         :param db: Database session
         """
@@ -566,8 +589,10 @@ class SAMLController:
                 integrations.append(providers)
 
         if integrations:
-            libraries = sorted(
-                {short_name for providers in integrations for short_name in providers}
+            libraries = list(
+                dict.fromkeys(
+                    short_name for providers in integrations for short_name in providers
+                )
             )
             self._logger.info(
                 f"Matched an unsolicited SAML response from {issuer!r} to "

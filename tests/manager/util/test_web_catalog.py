@@ -16,36 +16,36 @@ class TestWebCatalog:
             pytest.param(
                 "https://catalog.example.com",
                 ["lib-a", "lib-b"],
-                "https://catalog.example.com?promote=lib-a,lib-b",
+                "https://catalog.example.com?promote=lib-a,lib-b&promoteOrder=name",
                 id="libraries",
             ),
             pytest.param(
                 "https://catalog.example.com/?lang=fr&empty=&flag&sp=a%20b&bad=%zz#top",
                 ["lib-a"],
                 "https://catalog.example.com/"
-                "?lang=fr&empty=&flag&sp=a%20b&bad=%zz&promote=lib-a#top",
+                "?lang=fr&empty=&flag&sp=a%20b&bad=%zz&promote=lib-a&promoteOrder=name#top",
                 id="other-query-and-fragment-are-kept-exactly",
             ),
             pytest.param(
                 "https://catalog.example.com/?a=1&&b=2&",
                 ["lib-a"],
-                "https://catalog.example.com/?a=1&b=2&promote=lib-a",
+                "https://catalog.example.com/?a=1&b=2&promote=lib-a&promoteOrder=name",
                 id="empty-query-pairs-are-dropped",
             ),
             pytest.param(
                 "https://catalog.example.com/?promote=old&x=1&%70romote=older",
                 ["lib-a"],
-                "https://catalog.example.com/?x=1&promote=lib-a",
+                "https://catalog.example.com/?x=1&promote=lib-a&promoteOrder=name",
                 id="existing-promoted-parameters-are-replaced",
             ),
             pytest.param(
                 "https://catalog.example.com/?promoteLabel=Old&promoteOrder=listed",
                 ["lib-a"],
-                "https://catalog.example.com/?promoteOrder=listed&promote=lib-a",
-                id="existing-label-is-removed-and-other-promote-settings-are-kept",
+                "https://catalog.example.com/?promote=lib-a&promoteOrder=name",
+                id="existing-label-is-removed-and-order-is-replaced",
             ),
             pytest.param(
-                "https://catalog.example.com/?promote=old&promoteLabel=Old&x=1",
+                "https://catalog.example.com/?promote=old&promoteLabel=Old&promoteOrder=name&x=1",
                 [],
                 "https://catalog.example.com/?x=1",
                 id="no-libraries-removes-existing-promote-parameters",
@@ -53,7 +53,7 @@ class TestWebCatalog:
             pytest.param(
                 "https://catalog.example.com",
                 ["a&b", "c d"],
-                "https://catalog.example.com?promote=a%26b,c+d",
+                "https://catalog.example.com?promote=a%26b,c+d&promoteOrder=name",
                 id="short-names-are-encoded",
             ),
         ],
@@ -71,7 +71,7 @@ class TestWebCatalog:
                 ["lib-a"],
                 "Our schools & more",
                 "https://catalog.example.com/"
-                "?promote=lib-a&promoteLabel=Our+schools+%26+more",
+                "?promote=lib-a&promoteLabel=Our+schools+%26+more&promoteOrder=name",
                 id="label-replaces-existing-label",
             ),
             pytest.param(
@@ -85,7 +85,7 @@ class TestWebCatalog:
                 "https://catalog.example.com",
                 ["lib-a"],
                 "",
-                "https://catalog.example.com?promote=lib-a",
+                "https://catalog.example.com?promote=lib-a&promoteOrder=name",
                 id="empty-label-is-not-sent",
             ),
         ],

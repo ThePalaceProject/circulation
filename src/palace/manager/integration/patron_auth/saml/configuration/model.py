@@ -622,7 +622,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
         FormMetadata(
             label="Web Catalog: Promote Label",
             description=(
-                "The label the web catalog uses for the promoted libraries. Leave "
+                "The label sent to the web catalog for the promoted libraries. Leave "
                 "empty to use this integration's name. A label in the relay state "
                 "replaces this one when <b>Web Catalog: Relay State Promote "
                 "Label</b> accepts it."

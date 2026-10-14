@@ -437,9 +437,9 @@ unrecognized value here is ignored: it is logged as an error and the built-in de
 used instead.
 
 When a SAML identity provider sends an unsolicited login response (for example, from an app launcher tile), the
-patron is redirected to a web catalog (see `PALACE_WEB_CATALOG_DEFAULT_URL`). There, the catalog can promote the
-libraries that use the patron's SAML integration, to make them easier to find. Each integration decides whether to
-allow this, and what label the catalog uses for those libraries, with its "Web Catalog" settings in the
+patron is redirected to a web catalog (see `PALACE_WEB_CATALOG_DEFAULT_URL`). The redirect can ask the catalog to
+promote the libraries that use the patron's SAML integration, to make them easier to find. Each integration decides
+whether to allow this, and what label is sent for those libraries, with its "Web Catalog" settings in the
 Administrative Interface. The following variables override the built-in site-wide defaults for an integration
 that leaves those settings unset. An integration that does set them overrides these site-wide defaults.
 
