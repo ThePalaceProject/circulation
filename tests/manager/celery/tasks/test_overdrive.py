@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 from unittest.mock import MagicMock, Mock, call, patch
 from uuid import uuid4
 
@@ -9,7 +10,7 @@ import pytest
 from celery.result import AsyncResult
 from sqlalchemy.orm import Session
 
-from palace.util.datetime_helpers import datetime_utc
+from palace.util.datetime_helpers import datetime_utc, utc_now
 from palace.util.log import LogLevel
 
 from palace.manager.celery.importer import import_workflow_lock, reap_workflow_lock
@@ -1655,6 +1656,123 @@ class TestBackfillCollection:
             overdrive.backfill_collection.delay(collection.id, batch_size=10).wait()
 
         mock_replace.assert_not_called()
+
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
+    def test_backfill_max_titles_caps_the_whole_run(
+        self,
+        mock_api_class: MagicMock,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        redis_fixture: RedisFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """``max_titles`` caps titles, not batches, and stops rather than re-queuing.
+
+        It has to bound the query as well as the loop: every pool the query returns
+        costs one blocking Overdrive request, so fetching a full batch and then
+        discarding the surplus would pay for titles it never meant to process.
+        """
+        collection = overdrive_api_fixture.collection
+        caplog.set_level(LogLevel.info)
+        for _ in range(5):
+            db.licensepool(db.edition(), collection=collection)
+        db.session.flush()
+
+        with patch.object(overdrive.backfill_collection, "replace") as mock_replace:
+            overdrive.backfill_collection.delay(
+                collection.id, batch_size=10, max_titles=2
+            ).wait()
+
+        coverage = mock_api_class.return_value._ensure_bibliographic_coverage
+        assert coverage.call_count == 2
+        mock_replace.assert_not_called()
+        assert "reached the 2-title cap" in caplog.text
+
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
+    def test_backfill_max_titles_counts_down_across_batches(
+        self,
+        mock_api_class: MagicMock,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        redis_fixture: RedisFixture,
+    ):
+        """A cap larger than the batch hands the remainder to the next batch."""
+        collection = overdrive_api_fixture.collection
+        for _ in range(5):
+            db.licensepool(db.edition(), collection=collection)
+        db.session.flush()
+
+        with patch.object(overdrive.backfill_collection, "replace") as mock_replace:
+            mock_replace.side_effect = Exception("replaced")
+            with pytest.raises(Exception, match="replaced"):
+                overdrive.backfill_collection.delay(
+                    collection.id, batch_size=2, max_titles=5
+                ).wait()
+
+        assert mock_replace.call_args[0][0].kwargs["max_titles"] == 3
+
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
+    def test_backfill_imported_since_bounds_the_run(
+        self,
+        mock_api_class: MagicMock,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        redis_fixture: RedisFixture,
+    ):
+        """Only titles written at or after the bound are repaired.
+
+        The damage came from a known release, so bounding by when we last wrote a
+        record isolates the titles that release touched.
+        """
+        collection = overdrive_api_fixture.collection
+        cutoff = utc_now() - datetime.timedelta(days=7)
+
+        old_edition = db.edition()
+        old_edition.updated_at = cutoff - datetime.timedelta(days=1)
+        old_pool = db.licensepool(
+            old_edition, collection=collection, set_edition_as_presentation=True
+        )
+        recent_edition = db.edition()
+        recent_edition.updated_at = cutoff + datetime.timedelta(days=1)
+        recent_pool = db.licensepool(
+            recent_edition, collection=collection, set_edition_as_presentation=True
+        )
+        db.session.flush()
+
+        overdrive.backfill_collection.delay(collection.id, imported_since=cutoff).wait()
+
+        coverage = mock_api_class.return_value._ensure_bibliographic_coverage
+        repaired = {call.args[0].id for call in coverage.call_args_list}
+        assert repaired == {recent_pool.id}
+
+    def test_count_backfill_candidates_matches_what_the_run_processes(
+        self,
+        db: DatabaseTransactionFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+    ):
+        """The dry-run count and the real query must not drift apart.
+
+        They share :func:`backfill_query`, and this is what holds them to it.
+        """
+        collection = overdrive_api_fixture.collection
+        self._healthy_pool(db, collection)
+        damaged = [
+            db.licensepool(db.edition(), collection=collection) for _ in range(3)
+        ]
+        db.session.flush()
+
+        assert overdrive.count_backfill_candidates(db.session, collection.id) == len(
+            damaged
+        )
+
+        # And it honours the same date bound.
+        cutoff = utc_now() + datetime.timedelta(days=1)
+        assert (
+            overdrive.count_backfill_candidates(db.session, collection.id, cutoff) == 0
+        )
 
     def test_backfill_all_collections_queues_each_collection(
         self,

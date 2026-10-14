@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import argparse
 import csv
+import datetime
 import logging
 from typing import Any
 
 from sqlalchemy.orm import Session
 
+from palace.util.datetime_helpers import strptime_utc
 from palace.util.exceptions import PalaceValueError
 
 from palace.manager.celery.tasks import overdrive
@@ -288,20 +290,88 @@ class BackfillCollection(Script):
                 "--all-collections."
             ),
         )
+        parser.add_argument(
+            "--max-titles",
+            type=int,
+            default=None,
+            help=(
+                "Stop after this many titles. Caps the whole run, not each batch. "
+                "With --all-collections it caps each collection separately. Use it "
+                "to measure the real per-title cost on a sample before committing a "
+                "whole collection."
+            ),
+        )
+        parser.add_argument(
+            "--import-since",
+            type=str,
+            default=None,
+            metavar="YYYY-MM-DD",
+            help=(
+                "Only repair titles imported at or after this date -- that is, "
+                "titles whose record we last wrote then. The damage came from a "
+                "known release, so dating from that release isolates what it "
+                "touched. Titles with no presentation edition are excluded when "
+                "this is given, because they have no such date."
+            ),
+        )
+        parser.add_argument(
+            "--dry-run",
+            action="store_true",
+            help=(
+                "Report how many titles would be processed and exit. Queues nothing "
+                "and makes no Overdrive requests. Each title in a real run costs one "
+                "blocking Overdrive request, so this is the cheap way to size a run "
+                "first."
+            ),
+        )
         return parser
 
     def do_run(self, cmd_args: list[str] | None = None) -> None:
         parsed = self.parse_command_line(self._db, cmd_args=cmd_args)
 
+        imported_since = (
+            strptime_utc(parsed.import_since, "%Y-%m-%d")
+            if parsed.import_since
+            else None
+        )
+        if parsed.max_titles is not None and parsed.max_titles < 1:
+            raise PalaceValueError("--max-titles must be at least 1.")
+
+        collections = (
+            self._overdrive_collections()
+            if parsed.all_collections
+            else [self._overdrive_collection(parsed.collection_name)]
+        )
+
+        if parsed.dry_run:
+            self._report_dry_run(collections, imported_since, parsed.max_titles)
+            return
+
         if parsed.all_collections:
-            overdrive.backfill_all_collections.delay()
+            overdrive.backfill_all_collections.delay(
+                max_titles=parsed.max_titles,
+                imported_since=imported_since,
+            )
             self.log.info(
                 'The "backfill_all_collections" task has been queued for execution. '
                 "See the celery logs for details."
             )
             return
 
-        collection_name = parsed.collection_name
+        collection = collections[0]
+        overdrive.backfill_collection.delay(
+            collection_id=collection.id,
+            batch_size=parsed.batch_size,
+            max_titles=parsed.max_titles,
+            imported_since=imported_since,
+        )
+        self.log.info(
+            f'The "backfill_collection" task has been queued for collection '
+            f"'{collection.name}'. See the celery logs for details."
+        )
+
+    def _overdrive_collection(self, collection_name: str) -> Collection:
+        """Look up one Overdrive collection by name, or raise."""
         collection = Collection.by_name(self._db, collection_name)
         if not collection:
             raise PalaceValueError(f'No collection found named "{collection_name}".')
@@ -311,12 +381,46 @@ class BackfillCollection(Script):
                 f'Collection "{collection_name}" is not an Overdrive collection '
                 f'(protocol: "{collection.protocol}").'
             )
+        return collection
 
-        overdrive.backfill_collection.delay(
-            collection_id=collection.id,
-            batch_size=parsed.batch_size,
+    def _overdrive_collections(self) -> list[Collection]:
+        """Every Overdrive collection, parent and Advantage alike."""
+        registry = self.services.integration_registry().license_providers()
+        return list(
+            self._db.scalars(
+                Collection.select_by_protocol(OverdriveAPI, registry=registry)
+            ).all()
         )
+
+    def _report_dry_run(
+        self,
+        collections: list[Collection],
+        imported_since: datetime.datetime | None,
+        max_titles: int | None,
+    ) -> None:
+        """Report what a real run would process, without queuing or fetching anything.
+
+        Counts through the same query the task uses, so the estimate cannot drift
+        from the run it is estimating.
+        """
+        total = 0
+        for collection in collections:
+            candidates = overdrive.count_backfill_candidates(
+                self._db, collection.id, imported_since
+            )
+            # max_titles caps each collection separately, matching how
+            # backfill_all_collections forwards it.
+            to_process = (
+                candidates if max_titles is None else min(candidates, max_titles)
+            )
+            total += to_process
+            self.log.info(
+                f"[dry run] '{collection.name}' (id={collection.id}): "
+                f"{candidates} damaged title(s), {to_process} would be processed."
+            )
+
         self.log.info(
-            f'The "backfill_collection" task has been queued for collection '
-            f"'{collection_name}'. See the celery logs for details."
+            f"[dry run] {total} title(s) would be processed across "
+            f"{len(collections)} collection(s). Each costs one blocking Overdrive "
+            f"request. Nothing has been queued."
         )
