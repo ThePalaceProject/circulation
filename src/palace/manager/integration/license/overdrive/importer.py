@@ -245,6 +245,7 @@ class OverdriveImporter(LoggerMixin):
         # edition's hash is still stamped, so no later import retries it. One object
         # has one timestamp and cannot race itself. OPDS, ODL and Boundless have always
         # worked this way; see ``opds/importer.py`` and ``boundless/importer.py``.
+        formats_from_metadata = False
         if bibliographic is not None and bibliographic.circulation is not None:
             if circulation is None:
                 # No availability document, so the formats-only snapshot the converter
@@ -255,6 +256,7 @@ class OverdriveImporter(LoggerMixin):
                 # what we want; it also clears the memoised hash.
                 circulation.formats = bibliographic.circulation.formats
                 bibliographic.circulation = circulation
+            formats_from_metadata = True
 
         # Dispatch exactly one task. ``BibliographicData.apply`` applies the circulation
         # data hanging off it, so queuing both would make two writers for one pool.
@@ -269,10 +271,29 @@ class OverdriveImporter(LoggerMixin):
             self._db, self._collection
         ):
             # The bibliographic data is unchanged but the circulation data is not --
-            # an availability flip, or a format that has only just appeared. Apply it
-            # on its own.
+            # an availability flip, or a change to the format list. Apply it on its own.
+            #
+            # Whether this apply may *remove* formats depends on where its format list
+            # came from, and getting it wrong is damaging in both directions:
+            #
+            # * Formats read from the metadata record are the full, authoritative list,
+            #   so a format Overdrive has dropped must be removed. Without the policy,
+            #   ``replace.formats`` defaults to False, the stale delivery mechanism
+            #   survives, and the apply still records the new hash -- so no later import
+            #   retries the removal and patrons keep being offered a format Overdrive no
+            #   longer has.
+            # * An availability-only snapshot has no formats at all. The Advantage path
+            #   skips the metadata lookup for any title the parent collection already
+            #   imported, so passing the policy there would treat an empty list as
+            #   authoritative and delete every delivery mechanism -- and because
+            #   delivery mechanisms are keyed on data source and identifier rather than
+            #   on collection, that would take the parent's titles with it.
             changed = True
-            apply_circulation(circulation, collection_id=self._collection.id)
+            apply_circulation(
+                circulation,
+                collection_id=self._collection.id,
+                replace=policy if formats_from_metadata else None,
+            )
 
         return identifier, changed
 
