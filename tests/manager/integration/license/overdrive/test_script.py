@@ -513,6 +513,7 @@ class TestBackfillCollection:
             batch_size=7,
             max_titles=None,
             imported_since=None,
+            include_suspected_magazines=False,
         )
 
     def test_arg_parser_new_options_default_to_off(self):
@@ -521,6 +522,7 @@ class TestBackfillCollection:
         assert args.max_titles is None
         assert args.import_since is None
         assert args.dry_run is False
+        assert args.include_suspected_magazines is False
 
     @patch(
         "palace.manager.integration.license.overdrive.script.overdrive.backfill_collection"
@@ -549,6 +551,7 @@ class TestBackfillCollection:
             batch_size=overdrive.BACKFILL_BATCH_SIZE,
             max_titles=25,
             imported_since=datetime_utc(2026, 8, 1),
+            include_suspected_magazines=False,
         )
 
     def test_do_run_rejects_a_useless_cap(
@@ -571,6 +574,89 @@ class TestBackfillCollection:
             script.do_run(
                 ["--collection-name", collection.name, "--batch-size", batch_size]
             )
+
+    def _magazine_and_real_book(
+        self, db: DatabaseTransactionFixture, collection: Any
+    ) -> None:
+        """One suspected magazine and one ordinary damaged title, both unopenable."""
+        for series in ("Monthly Thing", None):
+            edition = db.edition(title="Monthly Thing", authors=["Author, An"])
+            edition.series = series
+            work = db.work(presentation_edition=edition)
+            work.presentation_ready = True
+            pool = db.licensepool(
+                edition,
+                collection=collection,
+                with_open_access_download=True,
+                set_edition_as_presentation=True,
+                work=work,
+            )
+            for mechanism in list(pool.delivery_mechanisms):
+                mechanism.delete()
+        db.session.flush()
+
+    @patch(
+        "palace.manager.integration.license.overdrive.script.overdrive.backfill_collection"
+    )
+    def test_suspected_magazines_are_skipped_by_default(
+        self,
+        mock_task: MagicMock,
+        script: BackfillCollection,
+        db: DatabaseTransactionFixture,
+    ) -> None:
+        """A title whose series is its own title is left alone unless asked for.
+
+        We cannot make a magazine openable, so repairing one spends a blocking
+        Overdrive request and rewrites both of its hashes to no effect.
+        """
+        collection = db.collection(protocol=OverdriveAPI)
+        self._magazine_and_real_book(db, collection)
+
+        script.do_run(["--collection-name", collection.name])
+        assert mock_task.delay.call_args.kwargs["include_suspected_magazines"] is False
+
+        script.do_run(
+            ["--collection-name", collection.name, "--include-suspected-magazines"]
+        )
+        assert mock_task.delay.call_args.kwargs["include_suspected_magazines"] is True
+
+    @patch(
+        "palace.manager.integration.license.overdrive.script.overdrive.backfill_collection"
+    )
+    def test_dry_run_always_reports_the_magazine_count(
+        self,
+        mock_task: MagicMock,
+        script: BackfillCollection,
+        db: DatabaseTransactionFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """The count is reported either way, because it decides whether to run at all.
+
+        A collection that is mostly magazines would spend nearly every request, and
+        nearly every rewritten hash, on titles it cannot make openable.
+        """
+        caplog.set_level(LogLevel.info)
+        collection = db.collection(protocol=OverdriveAPI)
+        self._magazine_and_real_book(db, collection)
+
+        script.do_run(["--collection-name", collection.name, "--dry-run"])
+        assert "2 damaged title(s), of which 1 suspected magazine(s)" in caplog.text
+        assert "skipped by default" in caplog.text
+        assert "1 would be processed" in caplog.text
+
+        caplog.clear()
+        script.do_run(
+            [
+                "--collection-name",
+                collection.name,
+                "--dry-run",
+                "--include-suspected-magazines",
+            ]
+        )
+        assert "2 damaged title(s), of which 1 suspected magazine(s)" in caplog.text
+        assert "included" in caplog.text
+        assert "2 would be processed" in caplog.text
+        mock_task.delay.assert_not_called()
 
     @patch(
         "palace.manager.integration.license.overdrive.script.overdrive.backfill_collection"
@@ -669,7 +755,8 @@ class TestBackfillCollection:
         )
 
         mock_task.delay.assert_not_called()
-        assert "5 damaged title(s), 2 would be processed" in caplog.text
+        assert "5 damaged title(s)" in caplog.text
+        assert "2 would be processed" in caplog.text
 
     @patch(
         "palace.manager.integration.license.overdrive.script.overdrive.backfill_all_collections"
@@ -681,7 +768,11 @@ class TestBackfillCollection:
         db: DatabaseTransactionFixture,
     ):
         script.do_run(["--all-collections"])
-        mock_task.delay.assert_called_once_with(max_titles=None, imported_since=None)
+        mock_task.delay.assert_called_once_with(
+            max_titles=None,
+            imported_since=None,
+            include_suspected_magazines=False,
+        )
 
     def test_do_run_rejects_unknown_collection(
         self, script: BackfillCollection, db: DatabaseTransactionFixture

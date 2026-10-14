@@ -662,6 +662,36 @@ def _backfill_clauses() -> BackfillClauses:
     )
 
 
+def looks_like_a_magazine() -> Any:
+    """Identify titles that are almost certainly magazine issues.
+
+    Overdrive serves magazines under a format id we do not map, so converting one
+    produces no formats and the title ends up with no delivery mechanism. Re-fetching
+    its metadata cannot change that, so a repair pass over magazines spends one
+    blocking Overdrive request per title to leave it exactly as it was -- and rewrites
+    its hashes for nothing.
+
+    We have no magazine support and no periodical records: every Overdrive edition is
+    filed as a book, an audiobook or a video. So the only signal available is the
+    shape of the record. A magazine issue carries its own publication as its series,
+    and on the production copy measured that held for 8,233 of the 8,242 titles with
+    no delivery mechanism, against 20 of the 626 that had one.
+
+    It is a guess, not a fact, which is why it sits behind a flag rather than in the
+    default filter.
+
+    :return: A clause for a ``LicensePool`` query outer-joined to the presentation
+        ``Edition``. Null-safe: a pool with no presentation edition is not a magazine.
+    """
+    return func.coalesce(
+        and_(
+            Edition.series.is_not(None),
+            func.btrim(Edition.series) == func.btrim(Edition.title),
+        ),
+        False,
+    )
+
+
 def _needs_backfill() -> Any:
     """Any of the three symptoms is reason enough to refresh a pool.
 
@@ -676,6 +706,7 @@ def backfill_query(
     imported_since: datetime.datetime | None = None,
     *,
     clause: Any = None,
+    include_suspected_magazines: bool = False,
 ) -> Any:
     """Build the query selecting a collection's damaged pools.
 
@@ -690,6 +721,9 @@ def backfill_query(
     :param clause: Use this damage filter instead of all three symptoms ORed
         together. A dry run passes individual clauses here to report what each one
         selects on its own.
+    :param include_suspected_magazines: Keep titles whose series name is their own
+        title. They are left out by default, because we cannot make one openable. See
+        :func:`looks_like_a_magazine` for why identifying them is a guess.
     :return: A ``select()`` over ``LicensePool``, unordered and unlimited.
     """
     query = (
@@ -703,6 +737,8 @@ def backfill_query(
     )
     if imported_since is not None:
         query = query.where(Edition.updated_at >= imported_since)
+    if not include_suspected_magazines:
+        query = query.where(looks_like_a_magazine().is_(False))
     return query
 
 
@@ -712,6 +748,7 @@ def count_backfill_candidates(
     imported_since: datetime.datetime | None = None,
     *,
     clause: Any = None,
+    include_suspected_magazines: bool = False,
 ) -> int:
     """Count the titles a backfill would process, without contacting Overdrive.
 
@@ -722,7 +759,12 @@ def count_backfill_candidates(
     """
     count = session.scalar(
         select(func.count()).select_from(
-            backfill_query(collection_id, imported_since, clause=clause).subquery()
+            backfill_query(
+                collection_id,
+                imported_since,
+                clause=clause,
+                include_suspected_magazines=include_suspected_magazines,
+            ).subquery()
         )
     )
     return count or 0
@@ -744,6 +786,7 @@ def backfill_collection(
     batch_size: int = BACKFILL_BATCH_SIZE,
     max_titles: int | None = None,
     imported_since: datetime.datetime | None = None,
+    include_suspected_magazines: bool = False,
 ) -> None:
     """Re-fetch Overdrive metadata for the titles the old importer damaged.
 
@@ -771,6 +814,10 @@ def backfill_collection(
         bounding by when *we* last wrote a record isolates what that release touched.
         See :func:`backfill_query` for how a pool with no presentation edition is
         treated.
+    :param include_suspected_magazines: Repair titles whose series name is their own
+        title too. They are skipped by default: we cannot make a magazine openable, so
+        repairing one spends a blocking request and rewrites both of its hashes to
+        leave it exactly as damaged as it was. See :func:`looks_like_a_magazine`.
     """
     with workflow_lock_guard(
         task,
@@ -790,7 +837,11 @@ def backfill_collection(
             limit = batch_size if max_titles is None else min(batch_size, max_titles)
             pools = (
                 session.execute(
-                    backfill_query(collection_id, imported_since)
+                    backfill_query(
+                        collection_id,
+                        imported_since,
+                        include_suspected_magazines=include_suspected_magazines,
+                    )
                     .where(LicensePool.id > offset)
                     .order_by(LicensePool.id)
                     .limit(limit)
@@ -845,6 +896,7 @@ def backfill_all_collections(
     *,
     max_titles: int | None = None,
     imported_since: datetime.datetime | None = None,
+    include_suspected_magazines: bool = False,
 ) -> None:
     """Queue a backfill for every Overdrive collection.
 
@@ -859,6 +911,8 @@ def backfill_all_collections(
     :param max_titles: Passed to each collection's task, so it caps **per collection**
         rather than across the whole fan-out.
     :param imported_since: Passed through unchanged; see :func:`backfill_collection`.
+    :param include_suspected_magazines: Passed through unchanged; see
+        :func:`backfill_collection`.
     """
     with task.session() as session:
         registry = task.services.integration_registry().license_providers()
@@ -896,6 +950,7 @@ def backfill_all_collections(
                     collection_id,
                     max_titles=max_titles,
                     imported_since=imported_since,
+                    include_suspected_magazines=include_suspected_magazines,
                 )
                 for collection_id in sequence
             )
