@@ -6,6 +6,7 @@ import datetime
 import logging
 from typing import Any
 
+from sqlalchemy import and_, not_, or_
 from sqlalchemy.orm import Session
 
 from palace.util.datetime_helpers import strptime_utc
@@ -336,6 +337,11 @@ class BackfillCollection(Script):
         )
         if parsed.max_titles is not None and parsed.max_titles < 1:
             raise PalaceValueError("--max-titles must be at least 1.")
+        # A zero batch size would select nothing, log that the backfill is complete
+        # and repair none of the titles a dry run just reported. A negative one is
+        # not a valid SQL limit at all.
+        if parsed.batch_size < 1:
+            raise PalaceValueError("--batch-size must be at least 1.")
 
         collections = (
             self._overdrive_collections()
@@ -403,6 +409,7 @@ class BackfillCollection(Script):
         Counts through the same query the task uses, so the estimate cannot drift
         from the run it is estimating.
         """
+        clauses = overdrive._backfill_clauses()
         total = 0
         for collection in collections:
             candidates = overdrive.count_backfill_candidates(
@@ -414,9 +421,27 @@ class BackfillCollection(Script):
                 candidates if max_titles is None else min(candidates, max_titles)
             )
             total += to_process
+
+            # Report the symptoms apart as well as together. "Unopenable" is
+            # expected to cover nearly everything; the other two are worth keeping
+            # only if they find titles it misses, and this is how you find out.
+            unopenable = overdrive.count_backfill_candidates(
+                self._db, collection.id, imported_since, clause=clauses.unopenable
+            )
+            only_others = overdrive.count_backfill_candidates(
+                self._db,
+                collection.id,
+                imported_since,
+                clause=and_(
+                    or_(clauses.unsearchable, clauses.incomplete),
+                    not_(clauses.unopenable),
+                ),
+            )
             self.log.info(
                 f"[dry run] '{collection.name}' (id={collection.id}): "
-                f"{candidates} damaged title(s), {to_process} would be processed."
+                f"{candidates} damaged title(s), {to_process} would be processed "
+                f"({unopenable} unopenable; {only_others} found only by the "
+                f"other two symptoms)."
             )
 
         self.log.info(

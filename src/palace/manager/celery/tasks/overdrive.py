@@ -1,5 +1,6 @@
 import datetime
-from typing import Any, Literal, TypedDict, TypeGuard
+from collections import defaultdict
+from typing import Any, Literal, NamedTuple, TypedDict, TypeGuard
 from uuid import uuid4
 
 from celery import chain, chord, group, shared_task
@@ -579,7 +580,25 @@ def reap_collection(
 BACKFILL_BATCH_SIZE: int = 50
 
 
-def _needs_backfill() -> Any:
+class BackfillClauses(NamedTuple):
+    """The three damage symptoms, kept separate so they can be counted apart.
+
+    A dry run reports how many pools each one selects, which is the only way to
+    find out whether they are each earning their place or whether one of them
+    already covers the others.
+    """
+
+    unopenable: Any
+    """No available delivery mechanism: nothing a patron could open."""
+
+    unsearchable: Any
+    """No work, or one that never became presentation-ready: cannot appear in search."""
+
+    incomplete: Any
+    """A presentation edition missing a publisher or any contributions."""
+
+
+def _backfill_clauses() -> BackfillClauses:
     """Build the filter identifying pools left damaged by the old Overdrive importer.
 
     Until it was fixed, the importer converted the product-list summary rather than
@@ -594,8 +613,9 @@ def _needs_backfill() -> Any:
     refreshing. They are combined with OR rather than queried separately so that a
     pool showing more than one symptom is still visited, and paid for, exactly once.
 
-    :return: A SQLAlchemy clause suitable for a ``LicensePool`` query that has been
-        outer-joined to ``Work`` and to the presentation ``Edition``.
+    :return: The three clauses, named. Each is suitable for a ``LicensePool`` query
+        that has been outer-joined to ``Work`` and to the presentation ``Edition``.
+        :func:`_needs_backfill` ORs them together; the dry run counts them apart.
     """
     # (a) Nothing a patron could actually open.
     no_delivery_mechanism = ~exists().where(
@@ -635,15 +655,27 @@ def _needs_backfill() -> Any:
         ~exists().where(Contribution.edition_id == Edition.id),
     )
 
-    return or_(
-        no_delivery_mechanism,
-        no_presentation_ready_work,
-        degraded_bibliographic_data,
+    return BackfillClauses(
+        unopenable=no_delivery_mechanism,
+        unsearchable=no_presentation_ready_work,
+        incomplete=degraded_bibliographic_data,
     )
 
 
+def _needs_backfill() -> Any:
+    """Any of the three symptoms is reason enough to refresh a pool.
+
+    ORed rather than queried separately so a pool showing more than one symptom is
+    visited, and paid for, exactly once.
+    """
+    return or_(*_backfill_clauses())
+
+
 def backfill_query(
-    collection_id: int, imported_since: datetime.datetime | None = None
+    collection_id: int,
+    imported_since: datetime.datetime | None = None,
+    *,
+    clause: Any = None,
 ) -> Any:
     """Build the query selecting a collection's damaged pools.
 
@@ -655,6 +687,9 @@ def backfill_query(
         written at or after this time -- that is, titles imported by the damaged
         code. A pool with no presentation edition has no such time and is therefore
         excluded when this is given.
+    :param clause: Use this damage filter instead of all three symptoms ORed
+        together. A dry run passes individual clauses here to report what each one
+        selects on its own.
     :return: A ``select()`` over ``LicensePool``, unordered and unlimited.
     """
     query = (
@@ -663,7 +698,7 @@ def backfill_query(
         .outerjoin(Edition, LicensePool.presentation_edition_id == Edition.id)
         .where(
             LicensePool.collection_id == collection_id,
-            _needs_backfill(),
+            _needs_backfill() if clause is None else clause,
         )
     )
     if imported_since is not None:
@@ -675,6 +710,8 @@ def count_backfill_candidates(
     session: Session,
     collection_id: int,
     imported_since: datetime.datetime | None = None,
+    *,
+    clause: Any = None,
 ) -> int:
     """Count the titles a backfill would process, without contacting Overdrive.
 
@@ -685,7 +722,7 @@ def count_backfill_candidates(
     """
     count = session.scalar(
         select(func.count()).select_from(
-            backfill_query(collection_id, imported_since).subquery()
+            backfill_query(collection_id, imported_since, clause=clause).subquery()
         )
     )
     return count or 0
@@ -773,7 +810,7 @@ def backfill_collection(
             for pool in pools:
                 # force=True: these records are wrong in ways the stored fingerprint
                 # cannot see, so an unforced apply could decide there is nothing to do.
-                api._ensure_bibliographic_coverage(pool, force=True)
+                api.ensure_bibliographic_coverage(pool, force=True)
 
             new_offset = pools[-1].id
             processed_count = len(pools)
@@ -809,10 +846,11 @@ def backfill_all_collections(
     max_titles: int | None = None,
     imported_since: datetime.datetime | None = None,
 ) -> None:
-    """Queue a backfill task for every Overdrive collection.
+    """Queue a backfill for every Overdrive collection.
 
     Includes both parent collections and Advantage (child) collections, since a
-    damaged title can sit in either.
+    damaged title can sit in either. A parent and its children run in sequence,
+    not at the same time; see the comment below for why.
 
     This is deliberately not on a schedule. A backfill is a one-off repair whose cost
     scales with the number of damaged titles, so it is kicked off by hand once the
@@ -828,9 +866,42 @@ def backfill_all_collections(
             OverdriveAPI, registry=registry
         )
         collections = session.scalars(collection_query).all()
-    for collection in collections:
-        backfill_collection.delay(
-            collection.id, max_titles=max_titles, imported_since=imported_since
-        )
 
-    task.log.info(f"Queued {len(collections)} Overdrive collection(s) for backfill.")
+        # Run a parent and its Advantage children one after another rather than all
+        # at once. A title owned by both shares one Edition and one set of delivery
+        # mechanisms -- those are keyed on data source and identifier, not on
+        # collection -- so running them together means two workers paying for the
+        # same metadata request and writing the same rows. Each batch holds its
+        # transaction open across fifty requests, so one worker ends up blocked on
+        # the other's row locks, and two shared titles reached in opposite id order
+        # can deadlock outright. Sequencing also does less work: once the parent has
+        # repaired the shared rows, the child's query no longer selects them.
+        children: dict[int, list[int]] = defaultdict(list)
+        roots = []
+        for collection in collections:
+            if collection.parent_id is None:
+                roots.append(collection.id)
+            else:
+                children[collection.parent_id].append(collection.id)
+
+        sequences = [[root, *children.pop(root, [])] for root in roots]
+        # A child whose parent is not itself an Overdrive collection would other-
+        # wise never be queued.
+        sequences.extend([orphan] for ids in children.values() for orphan in ids)
+
+    for sequence in sequences:
+        chain(
+            *(
+                backfill_collection.si(
+                    collection_id,
+                    max_titles=max_titles,
+                    imported_since=imported_since,
+                )
+                for collection_id in sequence
+            )
+        ).delay()
+
+    task.log.info(
+        f"Queued {len(collections)} Overdrive collection(s) for backfill "
+        f"in {len(sequences)} sequence(s)."
+    )

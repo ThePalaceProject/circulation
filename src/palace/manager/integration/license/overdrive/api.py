@@ -1258,7 +1258,7 @@ class OverdriveAPI(
             # Either this is the first time we've seen this book or it doesn't
             # have an associated work. Make sure its identifier has bibliographic
             # coverage and a presentation-ready work.
-            self._ensure_bibliographic_coverage(license_pool)
+            self.ensure_bibliographic_coverage(license_pool)
 
         return self.update_licensepool_with_book_info(
             availability, resolved_book_id, license_pool, is_new
@@ -1279,7 +1279,7 @@ class OverdriveAPI(
             licensepool.identifier.identifier,
         )
 
-    def _ensure_bibliographic_coverage(
+    def ensure_bibliographic_coverage(
         self, license_pool: LicensePool, *, force: bool = False
     ) -> None:
         """Fetch Overdrive bibliographic metadata, apply it to the Edition, and
@@ -1364,7 +1364,7 @@ class OverdriveAPI(
 
         Then find or create the Edition that holds Overdrive's metadata for
         the pool. Bibliographic data is applied by the caller, via
-        :meth:`_ensure_bibliographic_coverage`.
+        :meth:`ensure_bibliographic_coverage`.
 
         :param availability: The parsed Overdrive availability document.
         :param book_id: The Overdrive product ID for this book.
