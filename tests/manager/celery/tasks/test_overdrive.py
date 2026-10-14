@@ -1820,6 +1820,40 @@ class TestBackfillCollection:
         assert any(lpdm.available for lpdm in pool.delivery_mechanisms)
         assert overdrive.count_backfill_candidates(db.session, collection.id) == 0
 
+    def test_counts_distinguish_shared_titles_from_pools(
+        self,
+        db: DatabaseTransactionFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+    ) -> None:
+        """A title in two collections is two pools but only one repair.
+
+        Every damage symptom is keyed on the title, not the collection: delivery
+        mechanisms belong to a book and a distributor, and pools sharing an identifier
+        share a work and an edition. So repairing the title through one collection
+        stops the other from selecting it, and summing per-collection counts
+        overstates what a run costs.
+        """
+        parent = overdrive_api_fixture.collection
+        child = db.collection(protocol=OverdriveAPI)
+        child.parent = parent
+
+        shared = db.identifier(identifier_type=Identifier.OVERDRIVE_ID)
+        for collection in (parent, child):
+            LicensePool.for_foreign_id(
+                db.session,
+                DataSource.OVERDRIVE,
+                Identifier.OVERDRIVE_ID,
+                shared.identifier,
+                collection=collection,
+            )
+        db.session.flush()
+
+        collections = [parent.id, child.id]
+        # Two damaged pools...
+        assert overdrive.count_backfill_candidates(db.session, collections) == 2
+        # ...but one title, and so one Overdrive request.
+        assert overdrive.count_backfill_titles(db.session, collections) == 1
+
     @patch("palace.manager.celery.tasks.overdrive.chain")
     def test_backfill_all_collections_runs_children_after_their_parent(
         self,
