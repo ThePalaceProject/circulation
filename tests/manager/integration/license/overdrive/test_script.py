@@ -7,8 +7,9 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from palace.util.datetime_helpers import utc_now
+from palace.util.datetime_helpers import datetime_utc, utc_now
 from palace.util.exceptions import PalaceValueError
+from palace.util.log import LogLevel
 
 from palace.manager.celery.tasks import overdrive
 from palace.manager.integration.license.overdrive.advantage import (
@@ -507,8 +508,105 @@ class TestBackfillCollection:
         script.do_run(["--collection-name", collection.name, "--batch-size", "7"])
 
         mock_task.delay.assert_called_once_with(
-            collection_id=collection.id, batch_size=7
+            collection_id=collection.id,
+            batch_size=7,
+            max_titles=None,
+            imported_since=None,
         )
+
+    def test_arg_parser_new_options_default_to_off(self):
+        parser = BackfillCollection.arg_parser(MagicMock())
+        args = parser.parse_args(["--collection-name", "My Collection"])
+        assert args.max_titles is None
+        assert args.import_since is None
+        assert args.dry_run is False
+
+    @patch(
+        "palace.manager.integration.license.overdrive.script.overdrive.backfill_collection"
+    )
+    def test_do_run_passes_max_titles_and_import_since(
+        self,
+        mock_task: MagicMock,
+        script: BackfillCollection,
+        db: DatabaseTransactionFixture,
+    ):
+        collection = db.collection(protocol=OverdriveAPI)
+
+        script.do_run(
+            [
+                "--collection-name",
+                collection.name,
+                "--max-titles",
+                "25",
+                "--import-since",
+                "2026-08-01",
+            ]
+        )
+
+        mock_task.delay.assert_called_once_with(
+            collection_id=collection.id,
+            batch_size=overdrive.BACKFILL_BATCH_SIZE,
+            max_titles=25,
+            imported_since=datetime_utc(2026, 8, 1),
+        )
+
+    def test_do_run_rejects_a_useless_cap(
+        self, script: BackfillCollection, db: DatabaseTransactionFixture
+    ):
+        collection = db.collection(protocol=OverdriveAPI)
+        with pytest.raises(PalaceValueError, match="at least 1"):
+            script.do_run(["--collection-name", collection.name, "--max-titles", "0"])
+
+    @patch(
+        "palace.manager.integration.license.overdrive.script.overdrive.backfill_collection"
+    )
+    def test_dry_run_reports_without_queuing_anything(
+        self,
+        mock_task: MagicMock,
+        script: BackfillCollection,
+        db: DatabaseTransactionFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """A dry run is the cheap way to size a run: it counts and queues nothing.
+
+        Each title in a real run costs one blocking Overdrive request, so knowing the
+        number beforehand is the difference between a measured rollout and a guess.
+        """
+        caplog.set_level(LogLevel.info)
+        collection = db.collection(protocol=OverdriveAPI)
+        for _ in range(3):
+            db.licensepool(db.edition(), collection=collection)
+        db.session.flush()
+
+        script.do_run(["--collection-name", collection.name, "--dry-run"])
+
+        mock_task.delay.assert_not_called()
+        assert "3 damaged title(s)" in caplog.text
+        assert "Nothing has been queued" in caplog.text
+
+    @patch(
+        "palace.manager.integration.license.overdrive.script.overdrive.backfill_collection"
+    )
+    def test_dry_run_honours_the_cap(
+        self,
+        mock_task: MagicMock,
+        script: BackfillCollection,
+        db: DatabaseTransactionFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """The reported number is what would actually be processed, cap included."""
+        caplog.set_level(LogLevel.info)
+        collection = db.collection(protocol=OverdriveAPI)
+        for _ in range(5):
+            db.licensepool(db.edition(), collection=collection)
+        db.session.flush()
+
+        script.do_run(
+            ["--collection-name", collection.name, "--dry-run", "--max-titles", "2"]
+        )
+
+        mock_task.delay.assert_not_called()
+        assert "5 damaged title(s), 2 would be processed" in caplog.text
 
     @patch(
         "palace.manager.integration.license.overdrive.script.overdrive.backfill_all_collections"
@@ -520,7 +618,7 @@ class TestBackfillCollection:
         db: DatabaseTransactionFixture,
     ):
         script.do_run(["--all-collections"])
-        mock_task.delay.assert_called_once_with()
+        mock_task.delay.assert_called_once_with(max_titles=None, imported_since=None)
 
     def test_do_run_rejects_unknown_collection(
         self, script: BackfillCollection, db: DatabaseTransactionFixture

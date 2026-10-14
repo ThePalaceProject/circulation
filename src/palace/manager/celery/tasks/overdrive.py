@@ -3,7 +3,8 @@ from typing import Any, Literal, TypedDict, TypeGuard
 from uuid import uuid4
 
 from celery import chain, chord, group, shared_task
-from sqlalchemy import and_, exists, or_, select
+from sqlalchemy import and_, exists, func, or_, select
+from sqlalchemy.orm import Session
 
 from palace.util.datetime_helpers import utc_now
 
@@ -641,6 +642,55 @@ def _needs_backfill() -> Any:
     )
 
 
+def backfill_query(
+    collection_id: int, imported_since: datetime.datetime | None = None
+) -> Any:
+    """Build the query selecting a collection's damaged pools.
+
+    Shared by :func:`backfill_collection` and :func:`count_backfill_candidates` so a
+    dry run can never report a different set than the run it is estimating.
+
+    :param collection_id: The Overdrive collection to search.
+    :param imported_since: Restrict to titles whose presentation edition was last
+        written at or after this time -- that is, titles imported by the damaged
+        code. A pool with no presentation edition has no such time and is therefore
+        excluded when this is given.
+    :return: A ``select()`` over ``LicensePool``, unordered and unlimited.
+    """
+    query = (
+        select(LicensePool)
+        .outerjoin(Work, LicensePool.work_id == Work.id)
+        .outerjoin(Edition, LicensePool.presentation_edition_id == Edition.id)
+        .where(
+            LicensePool.collection_id == collection_id,
+            _needs_backfill(),
+        )
+    )
+    if imported_since is not None:
+        query = query.where(Edition.updated_at >= imported_since)
+    return query
+
+
+def count_backfill_candidates(
+    session: Session,
+    collection_id: int,
+    imported_since: datetime.datetime | None = None,
+) -> int:
+    """Count the titles a backfill would process, without contacting Overdrive.
+
+    :param session: An active database session.
+    :param collection_id: The Overdrive collection to search.
+    :param imported_since: See :func:`backfill_query`.
+    :return: The number of damaged titles in the collection.
+    """
+    count = session.scalar(
+        select(func.count()).select_from(
+            backfill_query(collection_id, imported_since).subquery()
+        )
+    )
+    return count or 0
+
+
 @shared_task(
     queue=QueueNames.default,
     bind=True,
@@ -655,6 +705,8 @@ def backfill_collection(
     *,
     offset: int = 0,
     batch_size: int = BACKFILL_BATCH_SIZE,
+    max_titles: int | None = None,
+    imported_since: datetime.datetime | None = None,
 ) -> None:
     """Re-fetch Overdrive metadata for the titles the old importer damaged.
 
@@ -674,6 +726,14 @@ def backfill_collection(
     :param collection_id: The ID of the Overdrive collection to back-fill.
     :param offset: The last LicensePool.id processed; used to resume across batches.
     :param batch_size: Number of pools to process per batch.
+    :param max_titles: Stop after this many titles. Counts down across batches, so it
+        caps the whole run rather than each batch. Useful for measuring the real
+        per-title cost on a sample before committing a whole collection.
+    :param imported_since: Only repair titles whose presentation edition was last
+        written at or after this time. The damage was done by a known release, so
+        bounding by when *we* last wrote a record isolates what that release touched.
+        See :func:`backfill_query` for how a pool with no presentation edition is
+        treated.
     """
     with workflow_lock_guard(
         task,
@@ -688,20 +748,15 @@ def backfill_collection(
             collection = load_from_id(session, Collection, collection_id)
             collection_name = collection.name
 
+            # A capped run must not fetch more than it is allowed to process; each
+            # pool returned costs one blocking Overdrive request.
+            limit = batch_size if max_titles is None else min(batch_size, max_titles)
             pools = (
                 session.execute(
-                    select(LicensePool)
-                    .outerjoin(Work, LicensePool.work_id == Work.id)
-                    .outerjoin(
-                        Edition, LicensePool.presentation_edition_id == Edition.id
-                    )
-                    .where(
-                        LicensePool.collection_id == collection_id,
-                        LicensePool.id > offset,
-                        _needs_backfill(),
-                    )
+                    backfill_query(collection_id, imported_since)
+                    .where(LicensePool.id > offset)
                     .order_by(LicensePool.id)
-                    .limit(batch_size)
+                    .limit(limit)
                 )
                 .unique()
                 .scalars()
@@ -728,17 +783,32 @@ def backfill_collection(
             f"'{collection_name}' (offset: {offset} -> {new_offset})."
         )
 
-        if processed_count == batch_size:
+        remaining = None if max_titles is None else max_titles - processed_count
+        if remaining is not None and remaining <= 0:
+            task.log.info(
+                f"Overdrive backfill stopping for collection '{collection_name}': "
+                f"reached the {max_titles}-title cap."
+            )
+            return
+
+        # A short batch means the query is exhausted, so there is nothing left to do.
+        if processed_count == limit:
             raise task.replace(
                 signature_with(
                     task,
                     offset=new_offset,
+                    max_titles=remaining,
                 )
             )
 
 
 @shared_task(queue=QueueNames.default, bind=True)
-def backfill_all_collections(task: Task) -> None:
+def backfill_all_collections(
+    task: Task,
+    *,
+    max_titles: int | None = None,
+    imported_since: datetime.datetime | None = None,
+) -> None:
     """Queue a backfill task for every Overdrive collection.
 
     Includes both parent collections and Advantage (child) collections, since a
@@ -747,6 +817,10 @@ def backfill_all_collections(task: Task) -> None:
     This is deliberately not on a schedule. A backfill is a one-off repair whose cost
     scales with the number of damaged titles, so it is kicked off by hand once the
     queues can absorb it.
+
+    :param max_titles: Passed to each collection's task, so it caps **per collection**
+        rather than across the whole fan-out.
+    :param imported_since: Passed through unchanged; see :func:`backfill_collection`.
     """
     with task.session() as session:
         registry = task.services.integration_registry().license_providers()
@@ -755,6 +829,8 @@ def backfill_all_collections(task: Task) -> None:
         )
         collections = session.scalars(collection_query).all()
     for collection in collections:
-        backfill_collection.delay(collection.id)
+        backfill_collection.delay(
+            collection.id, max_titles=max_titles, imported_since=imported_since
+        )
 
     task.log.info(f"Queued {len(collections)} Overdrive collection(s) for backfill.")
