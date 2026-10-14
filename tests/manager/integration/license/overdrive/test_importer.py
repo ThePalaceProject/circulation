@@ -9,6 +9,7 @@ from typing import Any
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+from sqlalchemy.orm import Session
 
 from palace.util.datetime_helpers import datetime_utc
 from palace.util.exceptions import PalaceValueError
@@ -22,14 +23,20 @@ from palace.manager.integration.license.overdrive.importer import (
     FeedImportResult,
     OverdriveImporter,
 )
-from palace.manager.integration.license.overdrive.model import MetadataResponse
+from palace.manager.integration.license.overdrive.model import (
+    Checkout,
+    MetadataResponse,
+)
 from palace.manager.integration.license.overdrive.representation import (
     OverdriveRepresentationExtractor,
 )
 from palace.manager.integration.license.overdrive.requests import BookInfoEndpoint
 from palace.manager.service.redis.models.set import IdentifierSet
 from palace.manager.sqlalchemy.model.coverage import Timestamp
+from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
+from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism, LicensePool
+from palace.manager.sqlalchemy.model.resource import Representation
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import OverdriveFilesFixture
 from tests.fixtures.overdrive import OverdriveAPIFixture
@@ -503,6 +510,102 @@ class TestOverdriveImporter:
 
         replace = apply_circulation.call_args.kwargs.get("replace")
         assert bool(replace and replace.formats) is may_remove_formats
+
+    def test_process_book_apply_leaves_loan_created_formats_alone(
+        self,
+        db: DatabaseTransactionFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
+        services_fixture: ServicesFixture,
+    ) -> None:
+        """An import apply with removal authority leaves the loan path's formats alone.
+
+        Overdrive is the only distributor that writes delivery mechanisms outside the
+        import. Its metadata record never says which ebook format a title is really
+        in, so the import guesses -- Adobe EPUB available, open EPUB not -- and the
+        checkout document corrects the guess once there is a loan. The correction
+        used here is the exact inverse of the guess.
+
+        Now that the circulation branch may delete a format, those corrections are
+        worth pinning. They survive for two reasons:
+
+        * the loan path only creates mechanisms drawn from
+          ``internal_format_to_delivery_mechanism``, every one of which is already in
+          the default ``ebook-overdrive`` list, so none is ever absent from the
+          incoming formats and none is selected for deletion;
+        * ``FormatData.update_available`` defaults to False on the import path, so
+          re-applying the defaults does not flip an availability back.
+        """
+        collection = overdrive_api_fixture.collection
+        registry = services_fixture.services.integration_registry.license_providers()
+        importer = OverdriveImporter(
+            db=db.session,
+            collection=collection,
+            registry=registry,
+            api=overdrive_api_fixture.api,
+        )
+        book = self._book_with_both_documents(overdrive_files_fixture)
+        pool, _ = LicensePool.for_foreign_id(
+            db.session,
+            DataSource.OVERDRIVE,
+            Identifier.OVERDRIVE_ID,
+            book["id"],
+            collection=collection,
+        )
+
+        # A patron borrows the book, and the checkout document tells us which
+        # formats the loan is really available in.
+        checkout = Checkout.model_validate_json(
+            overdrive_files_fixture.sample_data(
+                "checkout_response_no_format_locked_in_no_drm.json"
+            )
+        )
+        assert collection.id is not None
+        loan_info = OverdriveAPI.process_checkout_data(checkout, collection.id)
+        assert loan_info is not None
+        loan_info.create_or_update(db.patron(), license_pool=pool)
+
+        epub_adobe = (Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM)
+        epub_no_drm = (Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.NO_DRM)
+        after_loan = self._format_availability(db.session, pool)
+        # The loan inverted the import's guess about both EPUB mechanisms.
+        assert after_loan[epub_adobe] is False
+        assert after_loan[epub_no_drm] is True
+
+        # Import the title again. Its other details are unchanged, so the
+        # circulation branch runs, and it carries the policy because its formats
+        # came from the metadata record.
+        apply_circulation = Mock()
+        with patch.object(BibliographicData, "needs_apply", return_value=False):
+            importer._process_book(
+                book=book,
+                fetch_metadata=True,
+                policy=IMPORT_POLICY,
+                apply_bibliographic=Mock(),
+                apply_circulation=apply_circulation,
+            )
+        circulation = apply_circulation.call_args.args[0]
+        replace = apply_circulation.call_args.kwargs.get("replace")
+        assert replace is not None and replace.formats
+        circulation.apply(db.session, collection, replace)
+
+        # Nothing was deleted, and no availability was flipped back.
+        assert self._format_availability(db.session, pool) == after_loan
+
+    @staticmethod
+    def _format_availability(
+        session: Session, pool: LicensePool
+    ) -> dict[tuple[str | None, str | None], bool]:
+        """A pool's delivery mechanisms, keyed by content type and DRM scheme."""
+        session.flush()
+        session.expire(pool)
+        return {
+            (
+                lpdm.delivery_mechanism.content_type,
+                lpdm.delivery_mechanism.drm_scheme,
+            ): lpdm.available
+            for lpdm in pool.delivery_mechanisms
+        }
 
     @pytest.mark.parametrize("fetch_metadata", [True, False])
     def test_process_book_metadata_error_document_is_skipped(
