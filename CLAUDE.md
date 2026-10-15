@@ -167,6 +167,48 @@ release 1, before dropping it in release 2:
 Both the read-side (`deferred`) and write-side (`server_default`) changes are backwards-compatible, so they
 belong together in **release 1**; the drop is **release 2**.
 
+**Dropping a whole table: the split cuts at the relationship, not the model.** Two things make a table
+harder to stop using than the column rules above suggest:
+
+- **A `relationship()` is a read.** SQLAlchemy loads a relationship whenever its parent is deleted — to
+  cascade the delete (`mapper.cascade_iterator`), or to null the child's foreign key
+  (`dependency.presort_deletes`). So leaving `Parent.children` mapped does **not** stop using the child
+  table, even when no application code ever touches the attribute: every `session.delete(parent)` still
+  SELECTs from it. Release 1 has to delete the `relationship()` definitions themselves, and the matching
+  `back_populates` on the other side — retiring the code that *used* them is not enough.
+- **A fresh schema is built from the models, not by replaying migrations.**
+  `InstanceInitializationScript.initialize_database_schema` calls `SessionManager.initialize_schema`
+  (`metadata.create_all`) and then stamps alembic head. Deleting the model class therefore drops the table
+  out of every newly initialized database immediately, whatever the migrations say — and the
+  backwards-compatibility gate builds its "current" schema exactly this way.
+
+Together these put the release boundary between the relationship and the model:
+
+1. **Release 1:** remove the relationships and their `back_populates`, and delete the tests that exercise the
+   model. **Keep the model class**, so the table still exists in fresh schemas.
+2. **Release 2:** remove the model class and drop the table in a migration.
+
+Splitting at the model instead — release 1 deletes the class, release 2 drops the table — fails, because
+release 1 already removes the table from new installs while N-1 still maps the relationships.
+
+Two details that are easy to miss in release 1:
+
+- **Deleting the relationship can break parent deletes.** It was the relationship that cascaded (or nulled
+  the child FK) by hand; once it is gone only the database's own rules apply. A child foreign key declared
+  without an `ON DELETE` clause will reject the parent delete while any row survives. Fix it either by
+  giving the foreign key an `ON DELETE` clause, or by emptying the table in the release-1 migration — and if
+  you empty it, use a plain `DELETE`, not `TRUNCATE`. The table is not quiet yet at that point: the
+  migration runs while N-1 is still serving, and N-1 still maps the relationship, so it still SELECTs the
+  child table on every parent delete. `TRUNCATE` takes an `ACCESS EXCLUSIVE` lock, which conflicts with
+  those reads, and a `TRUNCATE` left waiting queues every later query on the table behind it — an online
+  migration turned into a stall. A `DELETE` takes only `ROW EXCLUSIVE`, never blocks them, and its extra
+  WAL and dead rows don't matter on a table that is dropped next release anyway. If the table really is too
+  large for one `DELETE`, a `TRUNCATE` guarded by a short `lock_timeout`
+  (`op.execute("SET lock_timeout = '2s'")` first) at least fails the migration fast instead of stalling
+  traffic. A FK that already declares `ON DELETE CASCADE` needs none of this.
+- **Delete the model's tests in release 1 too.** The gate runs N-1's *test suite* against the new schema, so
+  tests that build rows in the doomed table fail in release 2 even though no application code would.
+
 The same constraint applies in reverse when adding required schema: a new non-nullable column must first be
 added as nullable, or with a **server default** so the database fills it in for rows written by N-1 code (which
 does not yet know about the column). Never write a single migration that both adds a not-yet-used column as
