@@ -942,8 +942,8 @@ def backfill_all_collections(
     """Queue a backfill for every Overdrive collection.
 
     Includes both parent collections and Advantage (child) collections, since a
-    damaged title can sit in either. A parent and its children run in sequence,
-    not at the same time; see the comment below for why.
+    damaged title can sit in either. Every collection runs one after another, never
+    two at once; see the comment below for why.
 
     This is deliberately not on a schedule. A backfill is a one-off repair whose cost
     scales with the number of damaged titles, so it is kicked off by hand once the
@@ -962,15 +962,23 @@ def backfill_all_collections(
         )
         collections = session.scalars(collection_query).all()
 
-        # Run a parent and its Advantage children one after another rather than all
-        # at once. A title owned by both shares one Edition and one set of delivery
-        # mechanisms -- those are keyed on data source and identifier, not on
-        # collection -- so running them together means two workers paying for the
-        # same metadata request and writing the same rows. Each batch holds its
-        # transaction open across fifty requests, so one worker ends up blocked on
-        # the other's row locks, and two shared titles reached in opposite id order
-        # can deadlock outright. Sequencing also does less work: once the parent has
-        # repaired the shared rows, the child's query no longer selects them.
+        # Run the collections one after another rather than all at once. Any two of
+        # them can hold the same title -- a parent and its Advantage children do, and
+        # so do two libraries' separate collections on the same manager -- and a
+        # shared title brings one Edition and one set of delivery mechanisms with it,
+        # because those are keyed on data source and identifier rather than on
+        # collection. Two collections running together therefore means two workers
+        # paying for the same metadata request and writing the same rows. Each batch
+        # holds its transaction open across fifty requests, so one worker ends up
+        # blocked on the other's row locks, and two shared titles reached in opposite
+        # id order can deadlock outright -- which raises an error the task does not
+        # retry, stopping the rest of that run. Running in sequence also does less
+        # work: once one collection has repaired the shared rows, the next one's
+        # query no longer selects them.
+        #
+        # A parent still goes immediately before its own children, since that is
+        # where the sharing is densest and so where skipping repaired titles saves
+        # the most.
         children: dict[int, list[int]] = defaultdict(list)
         roots = []
         for collection in collections:
@@ -979,12 +987,12 @@ def backfill_all_collections(
             else:
                 children[collection.parent_id].append(collection.id)
 
-        sequences = [[root, *children.pop(root, [])] for root in roots]
+        ordered = [id for root in roots for id in (root, *children.pop(root, []))]
         # A child whose parent is not itself an Overdrive collection would other-
         # wise never be queued.
-        sequences.extend([orphan] for ids in children.values() for orphan in ids)
+        ordered.extend(orphan for ids in children.values() for orphan in ids)
 
-    for sequence in sequences:
+    if ordered:
         chain(
             *(
                 backfill_collection.si(
@@ -993,11 +1001,11 @@ def backfill_all_collections(
                     imported_since=imported_since,
                     include_suspected_magazines=include_suspected_magazines,
                 )
-                for collection_id in sequence
+                for collection_id in ordered
             )
         ).delay()
 
     task.log.info(
-        f"Queued {len(collections)} Overdrive collection(s) for backfill "
-        f"in {len(sequences)} sequence(s)."
+        f"Queued {len(ordered)} Overdrive collection(s) for backfill, "
+        f"to run one after another."
     )

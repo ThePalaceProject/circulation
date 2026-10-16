@@ -1896,3 +1896,30 @@ class TestBackfillCollection:
         queued = {c.args[0] for c in mock_signature.call_args_list}
         assert collection.id in queued
         assert "Queued" in caplog.text
+
+    @patch("palace.manager.celery.tasks.overdrive.chain")
+    def test_backfill_all_collections_queues_one_chain_for_every_collection(
+        self,
+        mock_chain: MagicMock,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+    ) -> None:
+        """Unrelated collections must not run at the same time either.
+
+        Two libraries' separate collections on one manager can hold the same title,
+        and a shared title brings one edition and one set of delivery mechanisms with
+        it. So everything goes in a single chain, not one chain per family.
+        """
+        first = overdrive_api_fixture.collection
+        second = db.collection(protocol=OverdriveAPI)
+        child = db.collection(protocol=OverdriveAPI)
+        child.parent = first
+        db.session.flush()
+
+        overdrive.backfill_all_collections.delay().wait()
+
+        assert mock_chain.call_count == 1
+        queued = [signature.args[0] for signature in mock_chain.call_args.args]
+        assert set(queued) == {first.id, child.id, second.id}
+        assert queued.index(child.id) == queued.index(first.id) + 1
