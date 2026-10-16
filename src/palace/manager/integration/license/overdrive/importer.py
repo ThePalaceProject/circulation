@@ -42,6 +42,19 @@ class FeedImportResult:
 class OverdriveImporter(LoggerMixin):
     DEFAULT_PAGE_SIZE = 100
 
+    #: The policy every import applies under. ``formats=True`` is the part that
+    #: matters most: Overdrive's metadata record carries the full format list, so an
+    #: apply built from it has to be allowed to remove a format Overdrive dropped.
+    #: Tests assert against this rather than against a copy, so a change here cannot
+    #: leave them passing on a policy production no longer uses.
+    REPLACEMENT_POLICY = ReplacementPolicy(
+        identifiers=False,
+        subjects=True,
+        contributions=True,
+        formats=True,
+        links=True,
+    )
+
     def __init__(
         self,
         db: Session,
@@ -341,13 +354,7 @@ class OverdriveImporter(LoggerMixin):
            - Logs progress information
         """
         identifiers = []
-        policy = ReplacementPolicy(
-            identifiers=False,
-            subjects=True,
-            contributions=True,
-            formats=True,
-            links=True,
-        )
+        policy = self.REPLACEMENT_POLICY
 
         self.log.info(
             f"Starting process of queuing items in collection {self._collection.name} (id={self._collection.id} "
