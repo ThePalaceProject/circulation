@@ -286,7 +286,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
     non_federated_identity_provider_xml_metadata: Annotated[
         str | None,
         FormMetadata(
-            label="Identity Provider's XML metadata",
+            label="IdP: XML Metadata",
             description=(
                 "SAML metadata of Identity Providers in an XML format. "
                 "MAY contain multiple IDPSSODescriptor tags but each of them MUST contain "
@@ -300,7 +300,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
     federated_identity_provider_entity_ids: Annotated[
         list[str] | None,
         FormMetadata(
-            label="List of Federated IdPs",
+            label="IdP: Federated IdPs",
             description=(
                 "List of federated (for example, from InCommon Federation) IdPs supported by this authentication provider. "
                 "Try to type the name of the IdP to find it in the list."
@@ -313,7 +313,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
     service_provider_acs_selection_policy: Annotated[
         SAMLACSSelectionPolicy | None,
         FormMetadata(
-            label="Assertion Consumer Service Endpoint Selection",
+            label="IdP: Expected SP ACS Endpoint",
             description=(
                 "(Optional) How we choose which Assertion Consumer Service (ACS) endpoint "
                 "(if any) to name in authentication requests when the Service Provider "
@@ -376,7 +376,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
     patron_id_regular_expression: Annotated[
         Pattern | None,
         FormMetadata(
-            label="Patron ID: Regular expression",
+            label="Patron ID: Regular Expression",
             description=(
                 "Regular expression used to extract a unique patron ID from the attributes "
                 "specified in <b>Patron ID: SAML Attributes</b> and/or NameID "
@@ -397,12 +397,13 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
     filter_expression: Annotated[
         str | None,
         FormMetadata(
-            label="Filter Expression",
+            label="Authorization Filter: Expression",
             description=(
                 "A Python expression that may restrict a patron's access based on their"
                 " SAML Subject and other settings."
                 " When present, it must evaluate to True in order for the patron to gain access."
-                " If a per-library Filter Expression is also configured, both must evaluate to True."
+                " If a per-library <b>Authorization Filter: Expression</b> is also configured,"
+                " both must evaluate to True."
                 " The current UTC date is available as 'today_utc' (year, month, day)."
                 "<br>"
                 "<br>"
@@ -432,7 +433,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
     extra_data: Annotated[
         dict[str, Any] | list[Any] | int | float | bool | str | None,
         FormMetadata(
-            label="Extra Data",
+            label="Authorization Filter: Extra Data",
             description=(
                 "Extra data available to patron filter expressions via the"
                 " 'integration.extra_data' context variable."
@@ -497,11 +498,11 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
     requested_authn_context_classes: Annotated[
         list[SAMLAuthnContextClass],
         FormMetadata(
-            label="Requested Authentication Methods",
+            label="Authentication: Requested Methods",
             description=(
                 "Authentication methods (SAML authentication context classes) that the "
                 "Identity Provider will be asked to use, compared according to "
-                "<b>Requested Authentication Method Comparison</b>. "
+                "<b>Authentication: Requested Method Comparison</b>. "
                 "If none are selected, no requirement is sent and the Identity Provider "
                 "chooses how to authenticate the patron. Selecting none is the most "
                 "compatible choice for IdPs that offer passwordless methods such as "
@@ -552,10 +553,10 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
     requested_authn_context_comparison: Annotated[
         SAMLAuthnContextComparison,
         FormMetadata(
-            label="Requested Authentication Method Comparison",
+            label="Authentication: Requested Method Comparison",
             description=(
                 "How the Identity Provider should compare the authentication method it "
-                "uses against the <b>Requested Authentication Methods</b> list. The "
+                "uses against the <b>Authentication: Requested Methods</b> list. The "
                 "comparison applies to the list as a whole. It has no effect when no "
                 "methods are selected."
                 '<details style="margin-top: 0.5em;">'
@@ -589,7 +590,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
     session_lifetime: Annotated[
         PositiveInt | None,
         FormMetadata(
-            label="Session Lifetime",
+            label="Authentication: Session Lifetime",
             description=(
                 "This configuration setting determines how long "
                 "a session created by the SAML authentication provider will live in days. "
@@ -607,7 +608,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
     service_provider_xml_metadata: Annotated[
         str | None,
         FormMetadata(
-            label="Service Provider's XML Metadata",
+            label="SP: XML Metadata",
             description=(
                 "SAML metadata of the Circulation Manager's Service Provider in an XML format. "
                 "MUST contain exactly one SPSSODescriptor tag with at least one "
@@ -622,7 +623,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
     service_provider_private_key: Annotated[
         str | None,
         FormMetadata(
-            label="Service Provider's Private Key",
+            label="SP: Private Key",
             description="Private key used for encrypting SAML requests. "
             "Leave empty to use environment configuration (PALACE_SAML_SP_PRIVATE_KEY or PALACE_SAML_SP_PRIVATE_KEY_FILE).",
             type=FormFieldType.TEXTAREA,
@@ -632,7 +633,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
     service_provider_strict_mode: Annotated[
         int,
         FormMetadata(
-            label="Service Provider's Strict Mode",
+            label="SP: Strict Mode",
             description=(
                 "If strict is 1, then the Python Toolkit will reject unsigned or unencrypted messages "
                 "if it expects them to be signed or encrypted. Also, it will reject the messages "
@@ -645,7 +646,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
     service_provider_debug_mode: Annotated[
         int,
         FormMetadata(
-            label="Service Provider's Debug Mode",
+            label="SP: Debug Mode",
             description="Enable debug mode (outputs errors).",
         ),
         Ge(0),
@@ -804,7 +805,7 @@ class SAMLWebSSOAuthLibrarySettings(AuthProviderLibrarySettings):
     filter_expression: Annotated[
         str | None,
         FormMetadata(
-            label="Filter Expression",
+            label="Authorization Filter: Expression",
             description=(
                 "A Python expression that may restrict a patron's access to this library"
                 " based on their SAML Subject and other settings."
@@ -812,7 +813,8 @@ class SAMLWebSSOAuthLibrarySettings(AuthProviderLibrarySettings):
                 " access to this library."
                 "<br>"
                 "<br>"
-                "Refer to the integration-level Filter Expression setting for expression"
+                "Refer to the integration-level <b>Authorization Filter: Expression</b> setting"
+                " for expression"
                 " syntax and examples."
             ),
             type=FormFieldType.TEXTAREA,
