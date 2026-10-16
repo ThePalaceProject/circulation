@@ -100,6 +100,39 @@ def reap_workflow_lock(
     )
 
 
+def backfill_workflow_key(collection_id: int) -> list[str]:
+    """
+    Generate a Redis key for the backfill workflow-level lock for the given collection.
+    """
+    return [
+        "BackfillCollectionWorkflow",
+        Collection.redis_key_from_id(collection_id),
+    ]
+
+
+def backfill_workflow_lock(
+    client: Redis, collection_id: int, random_value: str
+) -> RedisLock:
+    """
+    Create a workflow-level lock spanning all batches of a single backfill run.
+
+    Held across task.replace() calls so at most one backfill runs per collection at a
+    time.
+
+    The timeout does not have to cover the whole run. Every batch re-acquires the lock
+    under the same task id, and re-acquiring with the same value resets the expiry (see
+    ``RedisLock.acquire``), so a long backfill cannot outrun its own lock. What the
+    timeout has to cover is one batch plus however long the replaced task waits in the
+    queue, which is the same shape the reaper has -- hence the same two hours.
+    """
+    return RedisLock(
+        client,
+        backfill_workflow_key(collection_id),
+        random_value=random_value,
+        lock_timeout=timedelta(hours=2),
+    )
+
+
 @contextmanager
 def workflow_lock_guard(
     task: Task,

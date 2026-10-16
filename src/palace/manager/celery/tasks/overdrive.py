@@ -1,13 +1,17 @@
 import datetime
-from typing import Any, Literal, TypedDict, TypeGuard
+from collections import defaultdict
+from collections.abc import Sequence
+from typing import Any, Literal, NamedTuple, TypedDict, TypeGuard
 from uuid import uuid4
 
 from celery import chain, chord, group, shared_task
-from sqlalchemy import select
+from sqlalchemy import and_, exists, func, or_, select
+from sqlalchemy.orm import Session
 
 from palace.util.datetime_helpers import utc_now
 
 from palace.manager.celery.importer import (
+    backfill_workflow_lock,
     import_all as create_import_tasks,
     import_key,
     import_workflow_lock,
@@ -23,8 +27,14 @@ from palace.manager.integration.license.overdrive.requests import BookInfoEndpoi
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.service.redis.models.set import IdentifierSet
 from palace.manager.sqlalchemy.model.collection import Collection
+from palace.manager.sqlalchemy.model.contributor import Contribution
+from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.sqlalchemy.model.licensing import LicensePool
+from palace.manager.sqlalchemy.model.licensing import (
+    LicensePool,
+    LicensePoolDeliveryMechanism,
+)
+from palace.manager.sqlalchemy.model.work import Work
 from palace.manager.util.http.exception import (
     BadResponseException,
     RemoteIntegrationException,
@@ -563,3 +573,439 @@ def reap_collection(
                     offset=new_offset,
                 )
             )
+
+
+# How many titles a single backfill batch processes before the task re-queues
+# itself. Each title costs one blocking Overdrive metadata request, so batches are
+# kept small to keep any one task short.
+BACKFILL_BATCH_SIZE: int = 50
+
+
+class BackfillClauses(NamedTuple):
+    """The three damage symptoms, kept separate so they can be counted apart.
+
+    A dry run reports how many pools each one selects, which is the only way to
+    find out whether they are each earning their place or whether one of them
+    already covers the others.
+    """
+
+    unopenable: Any
+    """No available delivery mechanism: nothing a patron could open."""
+
+    unsearchable: Any
+    """No work, or one that never became presentation-ready: cannot appear in search."""
+
+    incomplete: Any
+    """A presentation edition missing a publisher or any contributions."""
+
+
+def _backfill_clauses() -> BackfillClauses:
+    """Build the filter identifying pools left damaged by the old Overdrive importer.
+
+    Until it was fixed, the importer converted the product-list summary rather than
+    the fetched metadata record. The summary carries no ``creators``, ``publisher``,
+    ``publishDate`` or ``languages``, and its ``formats`` entries carry only an id and
+    a name, so the resulting records lost their author, publisher, publication date,
+    subjects and per-format identifiers. Separately, a title's formats could not
+    trigger a re-apply, so a book that gained a usable format after it was first
+    imported never picked it up.
+
+    Three symptoms follow from that, and a pool showing any of them is worth
+    refreshing. They are combined with OR rather than queried separately so that a
+    pool showing more than one symptom is still visited, and paid for, exactly once.
+
+    :return: The three clauses, named. Each is suitable for a ``LicensePool`` query
+        that has been outer-joined to ``Work`` and to the presentation ``Edition``.
+        :func:`_needs_backfill` ORs them together; the dry run counts them apart.
+    """
+    # (a) Nothing a patron could actually open.
+    no_delivery_mechanism = ~exists().where(
+        and_(
+            LicensePoolDeliveryMechanism.data_source_id == LicensePool.data_source_id,
+            LicensePoolDeliveryMechanism.identifier_id == LicensePool.identifier_id,
+            LicensePoolDeliveryMechanism.available == True,  # noqa: E712
+        )
+    )
+
+    # (b) No work at all, or one that never became presentation ready, so the title
+    #     cannot surface in the search index.
+    no_presentation_ready_work = or_(
+        LicensePool.work_id.is_(None),
+        Work.presentation_ready.is_(False),
+    )
+
+    # (c) A presentation edition missing fields the summary never carried.
+    #
+    #     Be precise about what this detects. A summary-derived apply never
+    #     *erases* a publisher or a contribution: _update_basic_fields skips None
+    #     and empty values, and update_contributions collects the existing
+    #     contributors only when the incoming data has contributors of its own, so
+    #     an empty incoming list deletes nothing. These columns being empty
+    #     therefore means no import ever supplied them -- not that a bad import
+    #     overwrote them.
+    #
+    #     The consequence is a blind spot: a title imported correctly before the
+    #     regression and then re-imported by the broken importer keeps its
+    #     publisher and contributors, so it does not match here. Clause (a) is
+    #     what catches that case. This clause is cheap belt-and-braces, not the
+    #     primary signal -- on the one production copy measured it selected no
+    #     pool that (a) had not already selected.
+    degraded_bibliographic_data = or_(
+        LicensePool.presentation_edition_id.is_(None),
+        Edition.publisher.is_(None),
+        ~exists().where(Contribution.edition_id == Edition.id),
+    )
+
+    return BackfillClauses(
+        unopenable=no_delivery_mechanism,
+        unsearchable=no_presentation_ready_work,
+        incomplete=degraded_bibliographic_data,
+    )
+
+
+def looks_like_a_magazine() -> Any:
+    """Identify titles that are almost certainly magazine issues.
+
+    Overdrive serves magazines under a format id we do not map, so converting one
+    produces no formats and the title ends up with no delivery mechanism. Re-fetching
+    its metadata cannot change that, so a repair pass over magazines spends one
+    blocking Overdrive request per title to leave it exactly as it was -- and rewrites
+    its hashes for nothing.
+
+    We have no magazine support and no periodical records: every Overdrive edition is
+    filed as a book, an audiobook or a video. So the only signal available is the
+    shape of the record. A magazine issue carries its own publication as its series,
+    and on the production copy measured that held for 8,233 of the 8,242 titles with
+    no delivery mechanism, against 20 of the 626 that had one.
+
+    It is a guess, not a fact, which is why it sits behind a flag rather than in the
+    default filter.
+
+    :return: A clause for a ``LicensePool`` query outer-joined to the presentation
+        ``Edition``. Null-safe: a pool with no presentation edition is not a magazine.
+    """
+    return func.coalesce(
+        and_(
+            Edition.series.is_not(None),
+            func.btrim(Edition.series) == func.btrim(Edition.title),
+        ),
+        False,
+    )
+
+
+def _needs_backfill() -> Any:
+    """Any of the three symptoms is reason enough to refresh a pool.
+
+    ORed rather than queried separately so a pool showing more than one symptom is
+    visited, and paid for, exactly once.
+    """
+    return or_(*_backfill_clauses())
+
+
+def backfill_query(
+    collections: int | Sequence[int],
+    imported_since: datetime.datetime | None = None,
+    *,
+    clause: Any = None,
+    include_suspected_magazines: bool = False,
+) -> Any:
+    """Build the query selecting a collection's damaged pools.
+
+    Shared by :func:`backfill_collection` and :func:`count_backfill_candidates` so a
+    dry run can never report a different set than the run it is estimating.
+
+    :param collections: The Overdrive collection to search, or several of them.
+    :param imported_since: Restrict to titles whose presentation edition was last
+        written at or after this time -- that is, titles imported by the damaged
+        code. A pool with no presentation edition has no such time and is therefore
+        excluded when this is given.
+    :param clause: Use this damage filter instead of all three symptoms ORed
+        together. A dry run passes individual clauses here to report what each one
+        selects on its own.
+    :param include_suspected_magazines: Keep titles whose series name is their own
+        title. They are left out by default, because we cannot make one openable. See
+        :func:`looks_like_a_magazine` for why identifying them is a guess.
+    :return: A ``select()`` over ``LicensePool``, unordered and unlimited.
+    """
+    query = (
+        select(LicensePool)
+        .outerjoin(Work, LicensePool.work_id == Work.id)
+        .outerjoin(Edition, LicensePool.presentation_edition_id == Edition.id)
+        .where(
+            (
+                LicensePool.collection_id == collections
+                if isinstance(collections, int)
+                else LicensePool.collection_id.in_(collections)
+            ),
+            _needs_backfill() if clause is None else clause,
+        )
+    )
+    if imported_since is not None:
+        query = query.where(Edition.updated_at >= imported_since)
+    if not include_suspected_magazines:
+        query = query.where(looks_like_a_magazine().is_(False))
+    return query
+
+
+def count_backfill_candidates(
+    session: Session,
+    collections: int | Sequence[int],
+    imported_since: datetime.datetime | None = None,
+    *,
+    clause: Any = None,
+    include_suspected_magazines: bool = False,
+) -> int:
+    """Count the titles a backfill would process, without contacting Overdrive.
+
+    :param session: An active database session.
+    :param collections: The Overdrive collection to search, or several of them.
+    :param imported_since: See :func:`backfill_query`.
+    :return: The number of damaged *pools*. A title held by more than one collection
+        is counted once per collection; see :func:`count_backfill_titles`.
+    """
+    count = session.scalar(
+        select(func.count()).select_from(
+            backfill_query(
+                collections,
+                imported_since,
+                clause=clause,
+                include_suspected_magazines=include_suspected_magazines,
+            ).subquery()
+        )
+    )
+    return count or 0
+
+
+def count_backfill_titles(
+    session: Session,
+    collections: int | Sequence[int],
+    imported_since: datetime.datetime | None = None,
+    *,
+    include_suspected_magazines: bool = False,
+) -> int:
+    """Count the distinct titles a backfill would fetch, not the pools it would select.
+
+    These differ whenever one title sits in more than one collection, which is normal:
+    a parent and its Advantage children share titles, and so do two libraries' separate
+    collections on the same manager. All three damage symptoms are keyed on the title
+    rather than the collection -- delivery mechanisms belong to a book and a
+    distributor, and pools sharing an identifier share a work and an edition -- so
+    repairing a title through one collection stops every other collection from
+    selecting it.
+
+    Summing the per-collection counts therefore overstates what a run costs. This is
+    the number of blocking Overdrive requests it will actually make.
+
+    :param session: An active database session.
+    :param collections: The Overdrive collection to search, or several of them.
+    :param imported_since: See :func:`backfill_query`.
+    :param include_suspected_magazines: See :func:`backfill_query`.
+    :return: The number of distinct damaged titles.
+    """
+    damaged = backfill_query(
+        collections,
+        imported_since,
+        include_suspected_magazines=include_suspected_magazines,
+    ).subquery()
+    count = session.scalar(select(func.count(func.distinct(damaged.c.identifier_id))))
+    return count or 0
+
+
+@shared_task(
+    queue=QueueNames.default,
+    bind=True,
+    max_retries=4,
+    autoretry_for=(BadResponseException, RequestTimedOut),
+    throws=(RemoteIntegrationException,),
+    retry_backoff=60,
+)
+def backfill_collection(
+    task: Task,
+    collection_id: int,
+    *,
+    offset: int = 0,
+    batch_size: int = BACKFILL_BATCH_SIZE,
+    max_titles: int | None = None,
+    imported_since: datetime.datetime | None = None,
+    include_suspected_magazines: bool = False,
+) -> None:
+    """Re-fetch Overdrive metadata for the titles the old importer damaged.
+
+    Walks the collection's damaged pools in batches of ``batch_size``, re-queuing
+    itself via ``task.replace()`` until none are left. Concurrency is governed by
+    :func:`~palace.manager.celery.importer.workflow_lock_guard`.
+
+    This is a repair pass, not an import: it is driven by what our own database looks
+    like rather than by what Overdrive reports as changed, because the affected titles
+    are wrong for reasons Overdrive knows nothing about and will never report as
+    modified. See :func:`_needs_backfill` for what counts as damaged.
+
+    .. warning::
+       Each title costs one blocking Overdrive metadata request, the same shape as the
+       reaper, which is known to monopolise the default queue. Pace runs accordingly.
+
+    :param collection_id: The ID of the Overdrive collection to back-fill.
+    :param offset: The last LicensePool.id processed; used to resume across batches.
+    :param batch_size: Number of pools to process per batch.
+    :param max_titles: Stop after this many titles. Counts down across batches, so it
+        caps the whole run rather than each batch. Useful for measuring the real
+        per-title cost on a sample before committing a whole collection.
+    :param imported_since: Only repair titles whose presentation edition was last
+        written at or after this time. The damage was done by a known release, so
+        bounding by when *we* last wrote a record isolates what that release touched.
+        See :func:`backfill_query` for how a pool with no presentation edition is
+        treated.
+    :param include_suspected_magazines: Repair titles whose series name is their own
+        title too. They are skipped by default: we cannot make a magazine openable, so
+        repairing one spends a blocking request and rewrites both of its hashes to
+        leave it exactly as damaged as it was. See :func:`looks_like_a_magazine`.
+    """
+    with workflow_lock_guard(
+        task,
+        collection_id,
+        label="Overdrive backfill",
+        lock_factory=backfill_workflow_lock,
+    ) as proceed:
+        if not proceed:
+            return
+
+        with task.transaction() as session:
+            collection = load_from_id(session, Collection, collection_id)
+            collection_name = collection.name
+
+            # A capped run must not fetch more than it is allowed to process; each
+            # pool returned costs one blocking Overdrive request.
+            limit = batch_size if max_titles is None else min(batch_size, max_titles)
+            pools = (
+                session.execute(
+                    backfill_query(
+                        collection_id,
+                        imported_since,
+                        include_suspected_magazines=include_suspected_magazines,
+                    )
+                    .where(LicensePool.id > offset)
+                    .order_by(LicensePool.id)
+                    .limit(limit)
+                )
+                .unique()
+                .scalars()
+                .all()
+            )
+
+            if not pools:
+                task.log.info(
+                    f"Overdrive backfill complete for collection '{collection_name}'."
+                )
+                return
+
+            api = OverdriveAPI(session, collection)
+            for pool in pools:
+                # force=True: these records are wrong in ways the stored fingerprint
+                # cannot see, so an unforced apply could decide there is nothing to do.
+                api.ensure_bibliographic_coverage(pool, force=True)
+
+            new_offset = pools[-1].id
+            processed_count = len(pools)
+
+        task.log.info(
+            f"Overdrive backfill: processed {processed_count} pools for collection "
+            f"'{collection_name}' (offset: {offset} -> {new_offset})."
+        )
+
+        remaining = None if max_titles is None else max_titles - processed_count
+        if remaining is not None and remaining <= 0:
+            task.log.info(
+                f"Overdrive backfill stopping for collection '{collection_name}': "
+                f"reached the {max_titles}-title cap."
+            )
+            return
+
+        # A short batch means the query is exhausted, so there is nothing left to do.
+        if processed_count == limit:
+            raise task.replace(
+                signature_with(
+                    task,
+                    offset=new_offset,
+                    max_titles=remaining,
+                )
+            )
+
+
+@shared_task(queue=QueueNames.default, bind=True)
+def backfill_all_collections(
+    task: Task,
+    *,
+    max_titles: int | None = None,
+    imported_since: datetime.datetime | None = None,
+    include_suspected_magazines: bool = False,
+) -> None:
+    """Queue a backfill for every Overdrive collection.
+
+    Includes both parent collections and Advantage (child) collections, since a
+    damaged title can sit in either. Every collection runs one after another, never
+    two at once; see the comment below for why.
+
+    This is deliberately not on a schedule. A backfill is a one-off repair whose cost
+    scales with the number of damaged titles, so it is kicked off by hand once the
+    queues can absorb it.
+
+    :param max_titles: Passed to each collection's task, so it caps **per collection**
+        rather than across the whole fan-out.
+    :param imported_since: Passed through unchanged; see :func:`backfill_collection`.
+    :param include_suspected_magazines: Passed through unchanged; see
+        :func:`backfill_collection`.
+    """
+    with task.session() as session:
+        registry = task.services.integration_registry().license_providers()
+        collection_query = Collection.select_by_protocol(
+            OverdriveAPI, registry=registry
+        )
+        collections = session.scalars(collection_query).all()
+
+        # Run the collections one after another rather than all at once. Any two of
+        # them can hold the same title -- a parent and its Advantage children do, and
+        # so do two libraries' separate collections on the same manager -- and a
+        # shared title brings one Edition and one set of delivery mechanisms with it,
+        # because those are keyed on data source and identifier rather than on
+        # collection. Two collections running together therefore means two workers
+        # paying for the same metadata request and writing the same rows. Each batch
+        # holds its transaction open across fifty requests, so one worker ends up
+        # blocked on the other's row locks, and two shared titles reached in opposite
+        # id order can deadlock outright -- which raises an error the task does not
+        # retry, stopping the rest of that run. Running in sequence also does less
+        # work: once one collection has repaired the shared rows, the next one's
+        # query no longer selects them.
+        #
+        # A parent still goes immediately before its own children, since that is
+        # where the sharing is densest and so where skipping repaired titles saves
+        # the most.
+        children: dict[int, list[int]] = defaultdict(list)
+        roots = []
+        for collection in collections:
+            if collection.parent_id is None:
+                roots.append(collection.id)
+            else:
+                children[collection.parent_id].append(collection.id)
+
+        ordered = [id for root in roots for id in (root, *children.pop(root, []))]
+        # A child whose parent is not itself an Overdrive collection would other-
+        # wise never be queued.
+        ordered.extend(orphan for ids in children.values() for orphan in ids)
+
+    if ordered:
+        chain(
+            *(
+                backfill_collection.si(
+                    collection_id,
+                    max_titles=max_titles,
+                    imported_since=imported_since,
+                    include_suspected_magazines=include_suspected_magazines,
+                )
+                for collection_id in ordered
+            )
+        ).delay()
+
+    task.log.info(
+        f"Queued {len(ordered)} Overdrive collection(s) for backfill, "
+        f"to run one after another."
+    )
