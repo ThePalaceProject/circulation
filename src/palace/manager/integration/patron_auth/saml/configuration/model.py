@@ -283,29 +283,31 @@ def _promotion_setting_description(
 class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
     """SAML Web SSO Authentication settings"""
 
-    service_provider_xml_metadata: Annotated[
+    non_federated_identity_provider_xml_metadata: Annotated[
         str | None,
         FormMetadata(
-            label="Service Provider's XML Metadata",
+            label="Identity Provider's XML metadata",
             description=(
-                "SAML metadata of the Circulation Manager's Service Provider in an XML format. "
-                "MUST contain exactly one SPSSODescriptor tag with at least one "
-                "AssertionConsumerService tag with Binding attribute set to "
-                "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST. "
-                "Leave empty to use environment configuration (PALACE_SAML_SP_METADATA or PALACE_SAML_SP_METADATA_FILE)."
+                "SAML metadata of Identity Providers in an XML format. "
+                "MAY contain multiple IDPSSODescriptor tags but each of them MUST contain "
+                "at least one SingleSignOnService tag with Binding attribute set to "
+                "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect."
             ),
             type=FormFieldType.TEXTAREA,
             use_monospace_font=True,
         ),
     ] = None
-    service_provider_private_key: Annotated[
-        str | None,
+    federated_identity_provider_entity_ids: Annotated[
+        list[str] | None,
         FormMetadata(
-            label="Service Provider's Private Key",
-            description="Private key used for encrypting SAML requests. "
-            "Leave empty to use environment configuration (PALACE_SAML_SP_PRIVATE_KEY or PALACE_SAML_SP_PRIVATE_KEY_FILE).",
-            type=FormFieldType.TEXTAREA,
-            use_monospace_font=True,
+            label="List of Federated IdPs",
+            description=(
+                "List of federated (for example, from InCommon Federation) IdPs supported by this authentication provider. "
+                "Try to type the name of the IdP to find it in the list."
+            ),
+            type=FormFieldType.MENU,
+            options=FederatedIdentityProviderOptions(),
+            patron_auth_filter_context=True,
         ),
     ] = None
     service_provider_acs_selection_policy: Annotated[
@@ -337,108 +339,20 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
             },
         ),
     ] = None
-    requested_authn_context_classes: Annotated[
-        list[SAMLAuthnContextClass],
-        FormMetadata(
-            label="Requested Authentication Methods",
-            description=(
-                "Authentication methods (SAML authentication context classes) that the "
-                "Identity Provider will be asked to use, compared according to "
-                "<b>Requested Authentication Method Comparison</b>. "
-                "If none are selected, no requirement is sent and the Identity Provider "
-                "chooses how to authenticate the patron. Selecting none is the most "
-                "compatible choice for IdPs that offer passwordless methods such as "
-                "passkeys. By default, "
-                f"'{AUTHN_CONTEXT_CLASS_LABELS[SAMLAuthnContextClass.PASSWORD_PROTECTED_TRANSPORT]}' "
-                "is requested."
-                '<details style="margin-top: 0.5em;">'
-                '<summary style="cursor: pointer; text-decoration: underline;">'
-                "More details about these authentication methods"
-                "</summary>"
-                "<ul>"
-                "<li><b>Password over a secure connection</b>: username and password "
-                "over an encrypted connection. This is the traditional login form and "
-                "the default.</li>"
-                "<li><b>Password</b>: username and password without requiring an "
-                "encrypted connection. Rarely appropriate on its own.</li>"
-                "<li><b>Mobile two-factor</b>: two-factor authentication tied to a "
-                "mobile device contract.</li>"
-                "<li><b>One-time password token</b>: a time-synchronized hardware or "
-                "software token.</li>"
-                "<li><b>TLS client certificate</b>: a certificate presented by the "
-                "patron's browser or device.</li>"
-                "<li><b>Smart card</b>: a physical smart card.</li>"
-                "<li><b>Kerberos</b>: a Kerberos ticket.</li>"
-                "<li><b>Multi-factor (REFEDS MFA)</b>: the REFEDS multi-factor "
-                "profile, the common way to request MFA from InCommon and other "
-                "federated IdPs. Use it with the 'Exact' comparison.</li>"
-                "<li><b>Single-factor (REFEDS SFA)</b>: the REFEDS single-factor "
-                "profile. Use it with the 'Exact' comparison.</li>"
-                "<li><b>Unspecified</b>: requests the literal 'unspecified' class, "
-                "which some IdPs assert when no particular method applies. It does "
-                "NOT mean 'any method'. To let the IdP decide, select nothing "
-                "instead.</li>"
-                "</ul>"
-                "Passkeys and other passwordless methods have no dedicated SAML "
-                "class. To support them, select nothing, or ask the IdP operator "
-                "which class they assert."
-                "</details>"
-            ),
-            type=FormFieldType.MENU,
-            options={
-                authn_context_class.value: label
-                for authn_context_class, label in AUTHN_CONTEXT_CLASS_LABELS.items()
-            },
-            format="narrow",
-        ),
-    ] = [SAMLAuthnContextClass.PASSWORD_PROTECTED_TRANSPORT]
-    requested_authn_context_comparison: Annotated[
-        SAMLAuthnContextComparison,
-        FormMetadata(
-            label="Requested Authentication Method Comparison",
-            description=(
-                "How the Identity Provider should compare the authentication method it "
-                "uses against the <b>Requested Authentication Methods</b> list. The "
-                "comparison applies to the list as a whole. It has no effect when no "
-                "methods are selected."
-                '<details style="margin-top: 0.5em;">'
-                '<summary style="cursor: pointer; text-decoration: underline;">'
-                "More details about the comparison values"
-                "</summary>"
-                "<ul>"
-                "<li><b>Exact</b>: the method used must exactly match one of the "
-                "requested methods.</li>"
-                "<li><b>Minimum</b>: the method used must be at least as strong as "
-                "one of the requested methods.</li>"
-                "<li><b>Better</b>: the method used must be stronger than every "
-                "requested method.</li>"
-                "<li><b>Maximum</b>: the method used must be as strong as possible "
-                "without being stronger than a requested method.</li>"
-                "</ul>"
-                "The SAML specification does not define which methods are stronger "
-                "than others. Each Identity Provider decides its own ordering, so "
-                "the non-Exact comparisons behave differently from IdP to IdP. The "
-                "REFEDS MFA and SFA profiles are designed to be requested with the "
-                "'Exact' comparison."
-                "</details>"
-            ),
-            type=FormFieldType.SELECT,
-            options={
-                comparison.value: label
-                for comparison, label in AUTHN_CONTEXT_COMPARISON_LABELS.items()
-            },
-        ),
-    ] = SAMLAuthnContextComparison.EXACT
-    federated_identity_provider_entity_ids: Annotated[
+    patron_id_attributes: Annotated[
         list[str] | None,
         FormMetadata(
-            label="List of Federated IdPs",
-            description=(
-                "List of federated (for example, from InCommon Federation) IdPs supported by this authentication provider. "
-                "Try to type the name of the IdP to find it in the list."
+            label=_("Patron ID: SAML Attributes"),
+            description=_(
+                "List of SAML attributes that MAY contain a unique patron ID. "
+                "The attributes will be scanned sequentially in the order you chose them, "
+                "and the first existing attribute will be used to extract a unique patron ID."
+                "<br>"
+                "NOTE: If a SAML attribute contains several values, only the first will be used."
             ),
             type=FormFieldType.MENU,
-            options=FederatedIdentityProviderOptions(),
+            options={attribute.name: attribute.name for attribute in SAMLAttributeType},
+            format="narrow",
             patron_auth_filter_context=True,
         ),
     ] = None
@@ -459,23 +373,6 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
             patron_auth_filter_context=True,
         ),
     ] = True
-    patron_id_attributes: Annotated[
-        list[str] | None,
-        FormMetadata(
-            label=_("Patron ID: SAML Attributes"),
-            description=_(
-                "List of SAML attributes that MAY contain a unique patron ID. "
-                "The attributes will be scanned sequentially in the order you chose them, "
-                "and the first existing attribute will be used to extract a unique patron ID."
-                "<br>"
-                "NOTE: If a SAML attribute contains several values, only the first will be used."
-            ),
-            type=FormFieldType.MENU,
-            options={attribute.name: attribute.name for attribute in SAMLAttributeType},
-            format="narrow",
-            patron_auth_filter_context=True,
-        ),
-    ] = None
     patron_id_regular_expression: Annotated[
         Pattern | None,
         FormMetadata(
@@ -495,38 +392,6 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
                 "or NameID if it matches the expression."
             ),
             use_monospace_font=True,
-        ),
-    ] = None
-    non_federated_identity_provider_xml_metadata: Annotated[
-        str | None,
-        FormMetadata(
-            label="Identity Provider's XML metadata",
-            description=(
-                "SAML metadata of Identity Providers in an XML format. "
-                "MAY contain multiple IDPSSODescriptor tags but each of them MUST contain "
-                "at least one SingleSignOnService tag with Binding attribute set to "
-                "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect."
-            ),
-            type=FormFieldType.TEXTAREA,
-            use_monospace_font=True,
-        ),
-    ] = None
-    session_lifetime: Annotated[
-        PositiveInt | None,
-        FormMetadata(
-            label="Session Lifetime",
-            description=(
-                "This configuration setting determines how long "
-                "a session created by the SAML authentication provider will live in days. "
-                "By default it's empty meaning that the lifetime of the Circulation Manager's session "
-                "is exactly the same as the lifetime of the IdP's session. "
-                "Setting this value to a specific number will override this behaviour."
-                "<br>"
-                "NOTE: This setting affects the session's lifetime only Circulation Manager's side. "
-                "Accessing content protected by SAML will still be governed by the IdP and patrons "
-                "will have to reauthenticate each time the IdP's session expires."
-            ),
-            patron_auth_filter_context=True,
         ),
     ] = None
     filter_expression: Annotated[
@@ -627,6 +492,141 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
                 "replaces this one when <b>Web Catalog: Relay State Promote "
                 "Label</b> accepts it."
             ),
+        ),
+    ] = None
+    requested_authn_context_classes: Annotated[
+        list[SAMLAuthnContextClass],
+        FormMetadata(
+            label="Requested Authentication Methods",
+            description=(
+                "Authentication methods (SAML authentication context classes) that the "
+                "Identity Provider will be asked to use, compared according to "
+                "<b>Requested Authentication Method Comparison</b>. "
+                "If none are selected, no requirement is sent and the Identity Provider "
+                "chooses how to authenticate the patron. Selecting none is the most "
+                "compatible choice for IdPs that offer passwordless methods such as "
+                "passkeys. By default, "
+                f"'{AUTHN_CONTEXT_CLASS_LABELS[SAMLAuthnContextClass.PASSWORD_PROTECTED_TRANSPORT]}' "
+                "is requested."
+                '<details style="margin-top: 0.5em;">'
+                '<summary style="cursor: pointer; text-decoration: underline;">'
+                "More details about these authentication methods"
+                "</summary>"
+                "<ul>"
+                "<li><b>Password over a secure connection</b>: username and password "
+                "over an encrypted connection. This is the traditional login form and "
+                "the default.</li>"
+                "<li><b>Password</b>: username and password without requiring an "
+                "encrypted connection. Rarely appropriate on its own.</li>"
+                "<li><b>Mobile two-factor</b>: two-factor authentication tied to a "
+                "mobile device contract.</li>"
+                "<li><b>One-time password token</b>: a time-synchronized hardware or "
+                "software token.</li>"
+                "<li><b>TLS client certificate</b>: a certificate presented by the "
+                "patron's browser or device.</li>"
+                "<li><b>Smart card</b>: a physical smart card.</li>"
+                "<li><b>Kerberos</b>: a Kerberos ticket.</li>"
+                "<li><b>Multi-factor (REFEDS MFA)</b>: the REFEDS multi-factor "
+                "profile, the common way to request MFA from InCommon and other "
+                "federated IdPs. Use it with the 'Exact' comparison.</li>"
+                "<li><b>Single-factor (REFEDS SFA)</b>: the REFEDS single-factor "
+                "profile. Use it with the 'Exact' comparison.</li>"
+                "<li><b>Unspecified</b>: requests the literal 'unspecified' class, "
+                "which some IdPs assert when no particular method applies. It does "
+                "NOT mean 'any method'. To let the IdP decide, select nothing "
+                "instead.</li>"
+                "</ul>"
+                "Passkeys and other passwordless methods have no dedicated SAML "
+                "class. To support them, select nothing, or ask the IdP operator "
+                "which class they assert."
+                "</details>"
+            ),
+            type=FormFieldType.MENU,
+            options={
+                authn_context_class.value: label
+                for authn_context_class, label in AUTHN_CONTEXT_CLASS_LABELS.items()
+            },
+            format="narrow",
+        ),
+    ] = [SAMLAuthnContextClass.PASSWORD_PROTECTED_TRANSPORT]
+    requested_authn_context_comparison: Annotated[
+        SAMLAuthnContextComparison,
+        FormMetadata(
+            label="Requested Authentication Method Comparison",
+            description=(
+                "How the Identity Provider should compare the authentication method it "
+                "uses against the <b>Requested Authentication Methods</b> list. The "
+                "comparison applies to the list as a whole. It has no effect when no "
+                "methods are selected."
+                '<details style="margin-top: 0.5em;">'
+                '<summary style="cursor: pointer; text-decoration: underline;">'
+                "More details about the comparison values"
+                "</summary>"
+                "<ul>"
+                "<li><b>Exact</b>: the method used must exactly match one of the "
+                "requested methods.</li>"
+                "<li><b>Minimum</b>: the method used must be at least as strong as "
+                "one of the requested methods.</li>"
+                "<li><b>Better</b>: the method used must be stronger than every "
+                "requested method.</li>"
+                "<li><b>Maximum</b>: the method used must be as strong as possible "
+                "without being stronger than a requested method.</li>"
+                "</ul>"
+                "The SAML specification does not define which methods are stronger "
+                "than others. Each Identity Provider decides its own ordering, so "
+                "the non-Exact comparisons behave differently from IdP to IdP. The "
+                "REFEDS MFA and SFA profiles are designed to be requested with the "
+                "'Exact' comparison."
+                "</details>"
+            ),
+            type=FormFieldType.SELECT,
+            options={
+                comparison.value: label
+                for comparison, label in AUTHN_CONTEXT_COMPARISON_LABELS.items()
+            },
+        ),
+    ] = SAMLAuthnContextComparison.EXACT
+    session_lifetime: Annotated[
+        PositiveInt | None,
+        FormMetadata(
+            label="Session Lifetime",
+            description=(
+                "This configuration setting determines how long "
+                "a session created by the SAML authentication provider will live in days. "
+                "By default it's empty meaning that the lifetime of the Circulation Manager's session "
+                "is exactly the same as the lifetime of the IdP's session. "
+                "Setting this value to a specific number will override this behaviour."
+                "<br>"
+                "NOTE: This setting affects the session's lifetime only Circulation Manager's side. "
+                "Accessing content protected by SAML will still be governed by the IdP and patrons "
+                "will have to reauthenticate each time the IdP's session expires."
+            ),
+            patron_auth_filter_context=True,
+        ),
+    ] = None
+    service_provider_xml_metadata: Annotated[
+        str | None,
+        FormMetadata(
+            label="Service Provider's XML Metadata",
+            description=(
+                "SAML metadata of the Circulation Manager's Service Provider in an XML format. "
+                "MUST contain exactly one SPSSODescriptor tag with at least one "
+                "AssertionConsumerService tag with Binding attribute set to "
+                "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST. "
+                "Leave empty to use environment configuration (PALACE_SAML_SP_METADATA or PALACE_SAML_SP_METADATA_FILE)."
+            ),
+            type=FormFieldType.TEXTAREA,
+            use_monospace_font=True,
+        ),
+    ] = None
+    service_provider_private_key: Annotated[
+        str | None,
+        FormMetadata(
+            label="Service Provider's Private Key",
+            description="Private key used for encrypting SAML requests. "
+            "Leave empty to use environment configuration (PALACE_SAML_SP_PRIVATE_KEY or PALACE_SAML_SP_PRIVATE_KEY_FILE).",
+            type=FormFieldType.TEXTAREA,
+            use_monospace_font=True,
         ),
     ] = None
     service_provider_strict_mode: Annotated[
