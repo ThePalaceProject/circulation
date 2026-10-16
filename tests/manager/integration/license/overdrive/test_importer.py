@@ -699,9 +699,14 @@ class TestOverdriveImporter:
         """Metadata describing a different title must not be applied.
 
         The identifier comes from the product list while the bibliographic data comes
-        from the separately fetched metadata record, so the two can disagree. Applying
-        the mismatched data would raise PalaceValueError inside the apply worker, so
-        the importer stops first.
+        from the separately fetched metadata record, so the two can disagree. Nothing
+        downstream would catch it: the apply task resolves the edition from the
+        record's own identifier, so its primary-identifier check compares the record
+        against itself and passes.
+
+        The importer therefore stops before the merge, which would otherwise graft
+        the wrong title's format list onto this title's availability snapshot and
+        apply it with authority to remove the formats it really has.
         """
         collection = overdrive_api_fixture.collection
         registry = services_fixture.services.integration_registry.license_providers()
@@ -731,18 +736,26 @@ class TestOverdriveImporter:
         )
 
         apply_bibliographic = Mock()
+        apply_circulation = Mock()
 
         with caplog.at_level(logging.WARNING):
             importer._process_book(
                 book=book,
                 fetch_metadata=True,
-                policy=ReplacementPolicy(),
+                policy=IMPORT_POLICY,
                 apply_bibliographic=apply_bibliographic,
-                apply_circulation=Mock(),
+                apply_circulation=apply_circulation,
             )
 
         apply_bibliographic.assert_not_called()
         assert "reports a different identifier" in caplog.text
+
+        # The availability document still applies on its own -- that part is about
+        # this title and is worth doing. But it must carry none of the other title's
+        # formats, and no authority to remove this one's.
+        apply_circulation.assert_called_once()
+        assert apply_circulation.call_args.args[0].formats == []
+        assert apply_circulation.call_args.kwargs.get("replace") is None
 
     def test_process_book_identifier_case_mismatch_is_tolerated(
         self,
