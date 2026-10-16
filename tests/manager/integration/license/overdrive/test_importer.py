@@ -43,14 +43,9 @@ from tests.fixtures.overdrive import OverdriveAPIFixture
 from tests.fixtures.redis import RedisFixture
 from tests.fixtures.services import ServicesFixture
 
-# The policy OverdriveImporter.import_collection builds for a real import.
-IMPORT_POLICY = ReplacementPolicy(
-    identifiers=False,
-    subjects=True,
-    contributions=True,
-    formats=True,
-    links=True,
-)
+# The policy a real import runs under. Referenced, not copied, so that a change to
+# it cannot leave these tests passing against a policy production no longer uses.
+IMPORT_POLICY = OverdriveImporter.REPLACEMENT_POLICY
 
 
 class TestOverdriveImporter:
