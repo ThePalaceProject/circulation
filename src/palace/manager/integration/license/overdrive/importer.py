@@ -165,9 +165,17 @@ class OverdriveImporter(LoggerMixin):
 
         if not self._bibliographic_matches_identifier(bibliographic, identifier):
             # The record we converted describes a different title than the one the
-            # product list pointed us at. Applying it would raise PalaceValueError
-            # deep inside the apply worker, where it is far harder to connect back
-            # to the collection being imported, so stop here instead.
+            # product list pointed us at. Nothing downstream catches this: the apply
+            # task is dispatched without an edition id, so it resolves the edition
+            # from the record's own identifier and the primary-identifier check there
+            # compares the record against itself and passes. The wrong title's
+            # bibliographic data would simply be written.
+            #
+            # This has to run before the merge below, which grafts the metadata
+            # record's format list onto the availability snapshot and then applies it
+            # with the policy, giving it authority to remove formats. So a mismatched
+            # record would also replace the delivery mechanisms of the title the
+            # product list named with those of an unrelated one.
             self.log.warning(
                 f"Overdrive metadata for {identifier} reports a different identifier "
                 f"({bibliographic.primary_identifier_data}). Skipping bibliographic "
