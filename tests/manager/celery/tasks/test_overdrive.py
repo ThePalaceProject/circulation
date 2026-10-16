@@ -1854,6 +1854,38 @@ class TestBackfillCollection:
         # ...but one title, and so one Overdrive request.
         assert overdrive.count_backfill_titles(db.session, collections) == 1
 
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
+    def test_backfill_skips_suspected_magazines_unless_asked(
+        self,
+        mock_api_class: MagicMock,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        redis_fixture: RedisFixture,
+    ) -> None:
+        """A title whose series is its own title is left alone by default.
+
+        Overdrive serves magazines under a format id we do not map, so repairing one
+        spends a blocking request to leave it exactly as damaged as it was.
+        """
+        collection = overdrive_api_fixture.collection
+        magazine = self._healthy_pool(db, collection)
+        magazine.presentation_edition.series = magazine.presentation_edition.title
+        for lpdm in list(magazine.delivery_mechanisms):
+            lpdm.delete()
+        db.session.flush()
+
+        mock_api = mock_api_class.return_value
+        overdrive.backfill_collection.delay(collection.id).wait()
+        mock_api.ensure_bibliographic_coverage.assert_not_called()
+
+        overdrive.backfill_collection.delay(
+            collection.id, include_suspected_magazines=True
+        ).wait()
+        assert [
+            c.args[0] for c in mock_api.ensure_bibliographic_coverage.call_args_list
+        ] == [magazine]
+
     @patch("palace.manager.celery.tasks.overdrive.chain")
     def test_backfill_all_collections_runs_children_after_their_parent(
         self,
