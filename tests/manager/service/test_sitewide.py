@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from contextlib import AbstractContextManager, nullcontext
 from typing import Any
@@ -122,7 +123,7 @@ class TestSitewideConfiguration:
             assert config.patron_web_hostnames == expected
 
     @pytest.mark.parametrize(
-        "patron_web_default_url, expected",
+        "web_catalog_default_url, expected",
         [
             pytest.param(None, None, id="unset"),
             pytest.param(
@@ -145,20 +146,74 @@ class TestSitewideConfiguration:
             ),
         ],
     )
-    def test_patron_web_default_url(
+    def test_web_catalog_default_url(
         self,
         sitewide_configuration_fixture: SitewideConfigurationFixture,
-        patron_web_default_url: str | None,
+        web_catalog_default_url: str | None,
         expected: str | None | type[Exception],
     ) -> None:
         sitewide_configuration_fixture.set(
-            "PALACE_PATRON_WEB_DEFAULT_URL", patron_web_default_url
+            "PALACE_WEB_CATALOG_DEFAULT_URL", web_catalog_default_url
         )
 
         context = sitewide_configuration_fixture.get_context_manager(expected)
         with context:
             config = SitewideConfiguration()
-            assert config.patron_web_default_url == expected
+            assert config.web_catalog_default_url == expected
+
+    @pytest.mark.parametrize(
+        "web_catalog_default_url, patron_web_default_url, expected, expected_warning",
+        [
+            pytest.param(
+                None,
+                "https://old.example.com/lib/",
+                "https://old.example.com/lib",
+                "PALACE_PATRON_WEB_DEFAULT_URL is deprecated. Rename it to "
+                "PALACE_WEB_CATALOG_DEFAULT_URL.",
+                id="deprecated-url-is-used-when-new-url-is-unset",
+            ),
+            pytest.param(
+                "https://new.example.com",
+                "https://old.example.com",
+                "https://new.example.com",
+                "PALACE_PATRON_WEB_DEFAULT_URL is deprecated and is ignored, since "
+                "PALACE_WEB_CATALOG_DEFAULT_URL is also set. Remove "
+                "PALACE_PATRON_WEB_DEFAULT_URL.",
+                id="new-url-wins",
+            ),
+            pytest.param(
+                "https://new.example.com",
+                None,
+                "https://new.example.com",
+                None,
+                id="no-warning-without-deprecated-url",
+            ),
+        ],
+    )
+    def test_deprecated_patron_web_default_url(
+        self,
+        sitewide_configuration_fixture: SitewideConfigurationFixture,
+        caplog: pytest.LogCaptureFixture,
+        web_catalog_default_url: str | None,
+        patron_web_default_url: str | None,
+        expected: str,
+        expected_warning: str | None,
+    ) -> None:
+        sitewide_configuration_fixture.set(
+            "PALACE_WEB_CATALOG_DEFAULT_URL", web_catalog_default_url
+        )
+        sitewide_configuration_fixture.set(
+            "PALACE_PATRON_WEB_DEFAULT_URL", patron_web_default_url
+        )
+        caplog.set_level(logging.WARNING)
+
+        config = SitewideConfiguration()
+
+        assert config.web_catalog_default_url == expected
+        warnings = [
+            r.getMessage() for r in caplog.records if r.levelno == logging.WARNING
+        ]
+        assert warnings == ([expected_warning] if expected_warning else [])
 
     @pytest.mark.parametrize(
         "quicksight_authorized_arns, expected",

@@ -233,7 +233,7 @@ class CirculationManager(LoggerMixin):
         # The default web catalog is a place we send patrons, so it must also be
         # allowed to call the patron endpoints. Only its origin is added, since
         # CORS matches entries against the Origin header, which carries no path.
-        default_url = self.services.config.sitewide.patron_web_default_url()
+        default_url = self.services.config.sitewide.web_catalog_default_url()
         if default_url:
             parts = urlsplit(default_url)
             patron_web_domains.add(f"{parts.scheme}://{parts.netloc}")

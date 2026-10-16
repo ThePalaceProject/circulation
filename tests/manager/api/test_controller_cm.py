@@ -142,7 +142,7 @@ class TestCirculationManager:
 
         # The default web catalog's origin is added too, without its path.
         services_fixture.set_sitewide_config_option(
-            "patron_web_default_url", "https://catalog.4.com/lib"
+            "web_catalog_default_url", "https://catalog.4.com/lib"
         )
         circulation_fixture.manager.load_settings()
         assert {

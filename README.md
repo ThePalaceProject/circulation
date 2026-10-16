@@ -274,7 +274,7 @@ Celery and caching, we recommend that you use a separate database for each purpo
    authentication document, and operational endpoints like `/version.json`) allow all web origins and do not use
    this setting; on those endpoints, patron-specific results are available only by sending the `Authorization`
    header.
-- `PALACE_PATRON_WEB_DEFAULT_URL`: The URL of the web catalog to send a patron to when the application has no
+- `PALACE_WEB_CATALOG_DEFAULT_URL`: The URL of the web catalog to send a patron to when the application has no
    better destination. Currently used when a SAML identity provider sends an unsolicited login response: the
    application does not sign the patron in from such a response, but redirects them to this web catalog so they
    can sign in from there. A `RelayState` supplied by the identity provider is used instead when its scheme,
@@ -284,6 +284,9 @@ Celery and caching, we recommend that you use a separate database for each purpo
    listed in `PALACE_PATRON_WEB_HOSTNAMES`, so the catalog can call the patron endpoints it needs to sign the
    patron in. If unset, unsolicited login responses without a usable `RelayState` are rejected with an error
    (optional).
+- `PALACE_PATRON_WEB_DEFAULT_URL`: **Deprecated. DO NOT USE.** Use `PALACE_WEB_CATALOG_DEFAULT_URL` instead. If
+   this is set, a warning is logged. Its value is used only when `PALACE_WEB_CATALOG_DEFAULT_URL` is unset, and
+   it will be removed in a future release.
 
 #### Storage Service
 
@@ -432,6 +435,22 @@ requests, and identity providers are registered against a specific endpoint. Cha
 is therefore a coordinated configuration change with the identity provider rather than a preference. An
 unrecognized value here is ignored: it is logged as an error and the built-in default (`first_index`) is
 used instead.
+
+When a SAML identity provider sends an unsolicited login response (for example, from an app launcher tile), the
+patron is redirected to a web catalog (see `PALACE_WEB_CATALOG_DEFAULT_URL`). The redirect can ask the catalog to
+promote the libraries that use the patron's SAML integration, to make them easier to find. Each integration decides
+whether to allow this, and what label is sent for those libraries, with its "Web Catalog" settings in the
+Administrative Interface. The following variables override the built-in site-wide defaults for an integration
+that leaves those settings unset. An integration that does set them overrides these site-wide defaults.
+
+- `PALACE_SAML_ALLOW_PROMOTION`: `true` to allow the web catalog to promote an integration's libraries, or
+  `false` (the default) to not allow it.
+- `PALACE_SAML_ACCEPT_RELAY_STATE_PROMOTE_LABEL`: `true` to accept a `promoteLabel` query parameter in the
+  `RelayState` that the identity provider sends (which some identity providers call the start URL) in place of the
+  integration's promote label, or `false` (the default) to ignore it.
+
+An unrecognized value for either variable is ignored: it is logged as an error and the built-in default (`false`)
+is used instead.
 
 #### DeMarque WebReader
 

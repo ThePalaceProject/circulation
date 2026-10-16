@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from functools import partial
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
@@ -11,6 +11,9 @@ from palace.manager.integration.patron_auth.saml.configuration.model import (
     SAMLOneLoginConfiguration,
     SAMLWebSSOAuthLibrarySettings,
     SAMLWebSSOAuthSettings,
+)
+from palace.manager.integration.patron_auth.saml.configuration.promotion import (
+    promotion_configuration,
 )
 from palace.manager.integration.patron_auth.saml.metadata.model import (
     SAMLIdentityProviderMetadata,
@@ -23,6 +26,18 @@ from tests.mocks.saml_strings import CORRECT_XML_WITH_ONE_SP
 
 if TYPE_CHECKING:
     from tests.fixtures.api_controller import ControllerFixture
+
+
+@pytest.fixture(autouse=True)
+def reload_promotion_configuration() -> Generator[None]:
+    """Reloads the site-wide promotion defaults for each test.
+
+    They are cached once per process, so a test that sets their environment
+    variables would otherwise see the values from an earlier test.
+    """
+    promotion_configuration.cache_clear()
+    yield
+    promotion_configuration.cache_clear()
 
 
 @pytest.fixture
