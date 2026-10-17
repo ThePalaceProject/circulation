@@ -1,4 +1,4 @@
-# BaseCoverageRecord, Timestamp, CoverageRecord
+# Timestamp
 from __future__ import annotations
 
 import datetime
@@ -11,7 +11,6 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
-    Index,
     Integer,
     String,
     Unicode,
@@ -28,23 +27,6 @@ from palace.manager.util.sentinel import SentinelType
 
 if TYPE_CHECKING:
     from palace.manager.sqlalchemy.model.collection import Collection
-
-
-class BaseCoverageRecord:
-    """Holds the ``coverage_status`` enum shared by the two dormant coverage models."""
-
-    SUCCESS = "success"
-    TRANSIENT_FAILURE = "transient failure"
-    PERSISTENT_FAILURE = "persistent failure"
-    REGISTERED = "registered"
-
-    status_enum = Enum(
-        SUCCESS,
-        TRANSIENT_FAILURE,
-        PERSISTENT_FAILURE,
-        REGISTERED,
-        name="coverage_status",
-    )
 
 
 class Timestamp(Base):
@@ -306,95 +288,3 @@ class Timestamp(Base):
             self.finish = utc_now()
 
     __table_args__ = (UniqueConstraint("service", "collection_id"),)
-
-
-class CoverageRecord(Base, BaseCoverageRecord):
-    """A record of a Identifier being used as input into some process.
-
-    Dormant: nothing reads or writes this table. The class is retained only so
-    ``create_all`` keeps emitting the table for freshly initialized databases,
-    which N-1 app servers still expect; it and the table are removed together in
-    a follow-up PR. It is deliberately just a table definition -- without the
-    parent relationships, a row written here could not be cleaned up when its
-    Identifier, DataSource or Collection is deleted, and would instead make that
-    delete fail on a foreign key.
-    """
-
-    __tablename__ = "coveragerecords"
-
-    id: Mapped[int] = Column(Integer, primary_key=True)
-    identifier_id = Column(Integer, ForeignKey("identifiers.id"), index=True)
-
-    # If applicable, this is the ID of the data source that took the
-    # Identifier as input.
-    data_source_id = Column(Integer, ForeignKey("datasources.id"))
-    operation = Column(String(255), default=None)
-
-    timestamp = Column(DateTime(timezone=True), index=True)
-
-    status = Column(BaseCoverageRecord.status_enum, index=True)
-    exception = Column(Unicode, index=True)
-
-    # If applicable, this is the ID of the collection for which
-    # coverage has taken place. This is currently only applicable
-    # for Metadata Wrangler coverage.
-    collection_id = Column(Integer, ForeignKey("collections.id"), nullable=True)
-
-    __table_args__ = (
-        Index(
-            "ix_identifier_id_data_source_id_operation",
-            identifier_id,
-            data_source_id,
-            operation,
-            unique=True,
-            postgresql_where=collection_id.is_(None),
-        ),
-        Index(
-            "ix_identifier_id_data_source_id_operation_collection_id",
-            identifier_id,
-            data_source_id,
-            operation,
-            collection_id,
-            unique=True,
-        ),
-    )
-
-
-Index(
-    "ix_coveragerecords_data_source_id_operation_identifier_id",
-    CoverageRecord.data_source_id,
-    CoverageRecord.operation,
-    CoverageRecord.identifier_id,
-)
-
-
-class EquivalencyCoverageRecord(Base, BaseCoverageRecord):
-    """Dormant model retained only so the ``equivalentscoveragerecords`` table
-    stays in the schema for one more release.
-
-    The equivalent-identifiers refresh no longer reads or writes this table — it
-    was replaced by the Redis dirty-set queue and the ``equivalent_identifiers_refresh``
-    Celery task. But per our online-migration convention the table cannot be dropped
-    in the same release that stops using it: during a rolling deploy, N-1 app servers
-    still run the old listener that writes here, so dropping the table now would make
-    them error. The table and this model will be removed in a follow-up PR that ships
-    after this release. See https://github.com/ThePalaceProject/circulation/pull/3459.
-    """
-
-    __tablename__ = "equivalentscoveragerecords"
-
-    id: Mapped[int] = Column(Integer, primary_key=True)
-
-    equivalency_id: Mapped[int] = Column(
-        Integer,
-        ForeignKey("equivalents.id", ondelete="CASCADE"),
-        index=True,
-        nullable=False,
-    )
-
-    operation = Column(String(255), index=True, default=None)
-    timestamp = Column(DateTime(timezone=True), index=True)
-    status = Column(BaseCoverageRecord.status_enum, index=True)
-    exception = Column(Unicode)
-
-    __table_args__ = (UniqueConstraint(equivalency_id, operation),)
