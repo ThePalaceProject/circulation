@@ -11,6 +11,7 @@ from palace.manager.integration.patron_auth.saml.configuration.model import (
     SAMLOneLoginConfiguration,
     SAMLWebSSOAuthLibrarySettings,
     SAMLWebSSOAuthSettings,
+    sp_environment_check,
 )
 from palace.manager.integration.patron_auth.saml.configuration.promotion import (
     promotion_configuration,
@@ -38,6 +39,18 @@ def reload_promotion_configuration() -> Generator[None]:
     promotion_configuration.cache_clear()
     yield
     promotion_configuration.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def recheck_sp_environment() -> Generator[None]:
+    """Clears the cached Service Provider environment check for each test.
+
+    Without this, a test that sets the SP environment variables could see the
+    result from an earlier test.
+    """
+    sp_environment_check.cache_clear()
+    yield
+    sp_environment_check.cache_clear()
 
 
 @pytest.fixture

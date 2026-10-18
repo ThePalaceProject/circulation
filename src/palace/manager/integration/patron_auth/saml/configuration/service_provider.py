@@ -19,6 +19,10 @@ from palace.manager.service.configuration.service_configuration import (
 )
 
 ACS_SELECTION_POLICY_ENV_VAR = "PALACE_SAML_SP_ACS_SELECTION_POLICY"
+METADATA_ENV_VAR = "PALACE_SAML_SP_METADATA"
+METADATA_FILE_ENV_VAR = "PALACE_SAML_SP_METADATA_FILE"
+PRIVATE_KEY_ENV_VAR = "PALACE_SAML_SP_PRIVATE_KEY"
+PRIVATE_KEY_FILE_ENV_VAR = "PALACE_SAML_SP_PRIVATE_KEY_FILE"
 
 
 class SamlServiceProviderConfiguration(ServiceConfiguration, LoggerMixin):
