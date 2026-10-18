@@ -107,8 +107,13 @@ class FormMetadata(LoggerMixin):
 
     # Required is usually determined by the Pydantic model, but can be overridden
     # here, in the case where a field would not be required in the model, but is
-    # required in the admin interface.
-    required: bool | typing.Literal[SentinelType.NotGiven] = SentinelType.NotGiven
+    # required in the admin interface. It can be a bool, or a callable for a field
+    # that is required only in some environments. The callable runs each time the
+    # form is built. Callers such as the admin controllers can cache the built form,
+    # so the callable may not run each time the form is shown.
+    required: bool | Callable[[], bool] | typing.Literal[SentinelType.NotGiven] = (
+        SentinelType.NotGiven
+    )
 
     # The weight determines the order of the form items in the admin interface.
     # Form items with a lower weight will be displayed first. Items with the same
@@ -153,15 +158,16 @@ class FormMetadata(LoggerMixin):
 
         The dictionary is in the format expected by the admin interface.
         """
+        form_required = self.required() if callable(self.required) else self.required
         form_entry: dict[str, Any] = {
             "label": self.label,
             "key": key,
             "required": required
-            or (self.required if self.required is not SentinelType.NotGiven else False),
+            or (form_required if form_required is not SentinelType.NotGiven else False),
             "hidden": self.hidden,
         }
 
-        if required is True and self.required is False:
+        if required is True and form_required is False:
             self.log.warning(
                 f'Configuration form item (label="{self.label}", key={key}) does not have a default value or '
                 f"factory and yet its required property is set to False.  This condition may indicate a "

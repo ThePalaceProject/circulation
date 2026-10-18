@@ -1,16 +1,18 @@
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
+from functools import cache
 from re import Pattern
 from threading import Lock
-from typing import Annotated, Any, Final
+from typing import Annotated, Any, Final, NamedTuple
 
 from annotated_types import Ge, Le
 from flask_babel import LazyString, lazy_gettext as _
 from frozendict import frozendict
 from onelogin.saml2.settings import OneLogin_Saml2_Settings
-from pydantic import PositiveInt, field_validator
+from pydantic import PositiveInt, ValidationError, field_validator
 from sqlalchemy.orm import Session
 
 from palace.util.exceptions import BasePalaceException
@@ -21,6 +23,7 @@ from palace.manager.api.authentication.base import (
     AuthProviderLibrarySettings,
     AuthProviderSettings,
 )
+from palace.manager.core.config import CannotLoadConfiguration
 from palace.manager.integration.patron_auth.saml.configuration.problem_details import (
     SAML_GENERIC_PARSING_ERROR,
     SAML_INCORRECT_FILTER_EXPRESSION,
@@ -37,6 +40,10 @@ from palace.manager.integration.patron_auth.saml.configuration.promotion import 
 )
 from palace.manager.integration.patron_auth.saml.configuration.service_provider import (
     ACS_SELECTION_POLICY_ENV_VAR,
+    METADATA_ENV_VAR,
+    METADATA_FILE_ENV_VAR,
+    PRIVATE_KEY_ENV_VAR,
+    PRIVATE_KEY_FILE_ENV_VAR,
     SamlServiceProviderConfiguration,
 )
 from palace.manager.integration.patron_auth.saml.metadata.federations import incommon
@@ -65,6 +72,7 @@ from palace.manager.sqlalchemy.model.saml import (
     SAMLFederation,
 )
 from palace.manager.util.filter import FilterExpression, FilterExpressionError
+from palace.manager.util.string_helpers import oxford_comma_join
 
 
 class SAMLConfigurationError(BasePalaceException):
@@ -278,6 +286,160 @@ def _promotion_setting_description(
         )
 
     return LazyString(describe)
+
+
+def _sp_metadata_environment_source(
+    sp_configuration: SamlServiceProviderConfiguration,
+) -> str | None:
+    """Returns the environment variable that provides the SP metadata, if any.
+
+    The value is checked the same way the setting's validator checks it.
+
+    :raises SettingsValidationError: If the environment's metadata is not valid
+    """
+    if not (metadata := sp_configuration.get_metadata()):
+        return None
+    SAMLWebSSOAuthSettings.validate_sp_xml_metadata_value(metadata, "environment")
+    return METADATA_FILE_ENV_VAR if sp_configuration.metadata_file else METADATA_ENV_VAR
+
+
+def _sp_private_key_environment_source(
+    sp_configuration: SamlServiceProviderConfiguration,
+) -> str | None:
+    """Returns the environment variable that provides the SP private key, if any.
+
+    The value is checked the same way the setting's validator checks it.
+
+    :raises SettingsValidationError: If the environment's private key is not valid
+    """
+    if not (key := (sp_configuration.get_private_key() or "").strip()):
+        return None
+    SAMLWebSSOAuthSettings.validate_sp_private_key_value(key, "environment")
+    return (
+        PRIVATE_KEY_FILE_ENV_VAR
+        if sp_configuration.private_key_file
+        else PRIVATE_KEY_ENV_VAR
+    )
+
+
+# Errors that mean the environment's SAML Service Provider configuration is not valid.
+_INVALID_SP_ENVIRONMENT_ERRORS: Final = (
+    ValidationError,
+    CannotLoadConfiguration,
+    OSError,
+    UnicodeDecodeError,
+    SettingsValidationError,
+)
+
+
+class SPEnvironmentCheck(NamedTuple):
+    """What the environment provides for one Service Provider setting."""
+
+    # False if the environment's SAML Service Provider configuration is not valid.
+    valid: bool
+    # The environment variable that provides a valid value, or None if none does.
+    source: str | None
+
+
+@cache
+def sp_environment_check(
+    environment_source: Callable[[SamlServiceProviderConfiguration], str | None],
+) -> SPEnvironmentCheck:
+    """Checks what the environment provides for a Service Provider setting.
+
+    The admin form uses the result to decide whether the setting is required.
+
+    The result is cached for the life of the process. Environment variables do
+    not change while the process runs. Without the cache, each form request
+    would parse the metadata again and log any parsing error again.
+
+    Limitation: the files named by PALACE_SAML_SP_METADATA_FILE and
+    PALACE_SAML_SP_PRIVATE_KEY_FILE can change while the app runs. The form
+    does not show such a change until the app restarts. Saving still reads the
+    environment, so a save that depends on a changed file reports any problem.
+    To show file changes without a restart, the cache must expire. For example,
+    it could expire when a file's modification time changes, or after a set time.
+
+    :param environment_source: Returns the environment variable that provides
+        the setting's value, or None if none does
+    """
+    try:
+        return SPEnvironmentCheck(
+            valid=True,
+            source=environment_source(SamlServiceProviderConfiguration()),
+        )
+    except _INVALID_SP_ENVIRONMENT_ERRORS:
+        return SPEnvironmentCheck(valid=False, source=None)
+
+
+@dataclass(frozen=True)
+class _SPEnvironmentSetting:
+    """A Service Provider setting whose value the environment can provide.
+
+    The setting is required only when the environment does not provide a valid
+    value. The required flag and the description use the same cached check
+    (see :func:`sp_environment_check`), so they always agree.
+
+    :param intro: What the setting is
+    :param environment_source: Returns the environment variable that provides
+        the setting's value, or None if no variable provides one
+    :param env_vars: Environment variables that can provide the value
+    """
+
+    intro: str
+    environment_source: Callable[[SamlServiceProviderConfiguration], str | None]
+    env_vars: Sequence[str]
+
+    def required(self) -> bool:
+        """Whether the setting is required, given the environment.
+
+        If the environment's configuration is not valid, the setting is required.
+        """
+        check = sp_environment_check(self.environment_source)
+        return not check.valid or check.source is None
+
+    def description(self) -> LazyString:
+        """Returns the setting's description, built each time the form is sent."""
+        return LazyString(self._describe)
+
+    def _describe(self) -> str:
+        """States whether the setting is required, and why."""
+        check = sp_environment_check(self.environment_source)
+        if not check.valid:
+            status = (
+                "Required, because the SAML Service Provider configuration in the "
+                "environment is not valid."
+            )
+        elif source := check.source:
+            status = (
+                f"Optional, because the {source} environment variable provides "
+                "a value. Leave empty to use the environment's value, or enter "
+                "a value here to override it."
+            )
+        else:
+            status = (
+                "Required, because the environment does not provide a value. "
+                f"Set {oxford_comma_join(self.env_vars, 'or')} in the environment "
+                "to make this setting optional."
+            )
+        return f"{self.intro}<br><br>{status}"
+
+
+_SP_METADATA_SETTING: Final = _SPEnvironmentSetting(
+    intro=(
+        "SAML metadata of the Circulation Manager's Service Provider in an XML format. "
+        "MUST contain exactly one SPSSODescriptor tag with at least one "
+        "AssertionConsumerService tag with Binding attribute set to "
+        "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST."
+    ),
+    environment_source=_sp_metadata_environment_source,
+    env_vars=(METADATA_ENV_VAR, METADATA_FILE_ENV_VAR),
+)
+_SP_PRIVATE_KEY_SETTING: Final = _SPEnvironmentSetting(
+    intro="Private key used for encrypting SAML requests.",
+    environment_source=_sp_private_key_environment_source,
+    env_vars=(PRIVATE_KEY_ENV_VAR, PRIVATE_KEY_FILE_ENV_VAR),
+)
 
 
 class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
@@ -609,25 +771,20 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
         str | None,
         FormMetadata(
             label="SP: XML Metadata",
-            description=(
-                "SAML metadata of the Circulation Manager's Service Provider in an XML format. "
-                "MUST contain exactly one SPSSODescriptor tag with at least one "
-                "AssertionConsumerService tag with Binding attribute set to "
-                "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST. "
-                "Leave empty to use environment configuration (PALACE_SAML_SP_METADATA or PALACE_SAML_SP_METADATA_FILE)."
-            ),
+            description=_SP_METADATA_SETTING.description(),
             type=FormFieldType.TEXTAREA,
             use_monospace_font=True,
+            required=_SP_METADATA_SETTING.required,
         ),
     ] = None
     service_provider_private_key: Annotated[
         str | None,
         FormMetadata(
             label="SP: Private Key",
-            description="Private key used for encrypting SAML requests. "
-            "Leave empty to use environment configuration (PALACE_SAML_SP_PRIVATE_KEY or PALACE_SAML_SP_PRIVATE_KEY_FILE).",
+            description=_SP_PRIVATE_KEY_SETTING.description(),
             type=FormFieldType.TEXTAREA,
             use_monospace_font=True,
+            required=_SP_PRIVATE_KEY_SETTING.required,
         ),
     ] = None
     service_provider_strict_mode: Annotated[
@@ -710,6 +867,17 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
                 )
             )
 
+        cls.validate_sp_xml_metadata_value(xml_metadata, value_from)
+        return v
+
+    @classmethod
+    def validate_sp_xml_metadata_value(cls, xml_metadata: str, value_from: str) -> None:
+        """Ensure that SP metadata is valid.
+
+        :param xml_metadata: The metadata to check, which must not be empty
+        :param value_from: Where the metadata came from, for the error message
+        :raises SettingsValidationError: If the metadata is not valid
+        """
         providers = cls.validate_xml_metadata(xml_metadata, "Service Provider")
         if len(providers) != 1:
             raise SettingsValidationError(
@@ -717,8 +885,6 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
                     f"Service Provider's XML metadata (from {value_from}) must contain exactly one declaration of SPSSODescriptor"
                 )
             )
-
-        return v
 
     @field_validator("service_provider_private_key")
     @classmethod
@@ -748,6 +914,17 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
                 )
             )
 
+        cls.validate_sp_private_key_value(key, value_from)
+        return v
+
+    @classmethod
+    def validate_sp_private_key_value(cls, key: str, value_from: str) -> None:
+        """Ensure that an SP private key is in a valid format.
+
+        :param key: The key to check, with surrounding whitespace removed
+        :param value_from: Where the key came from, for the error message
+        :raises SettingsValidationError: If the key is not in a valid format
+        """
         # Ensure that the key has the required header and footer text. Some
         # keys encode their algorithm in their body. Other do not and, thus,
         # must hint it in their header/footer.
@@ -762,8 +939,6 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
                     "The value must include the '-----BEGIN ...-----' header and '-----END ...-----' footer text."
                 )
             )
-
-        return v
 
     @field_validator("non_federated_identity_provider_xml_metadata")
     @classmethod
