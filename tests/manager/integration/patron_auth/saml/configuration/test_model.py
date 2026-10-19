@@ -1,7 +1,9 @@
+import html
 import json
 import logging
 from collections.abc import Callable
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, call, create_autospec
 
@@ -20,6 +22,7 @@ from palace.manager.integration.patron_auth.saml.configuration.model import (
     SAMLAuthnContextComparison,
     SAMLOneLoginConfiguration,
     SAMLWebSSOAuthSettings,
+    sp_environment_check,
 )
 from palace.manager.integration.patron_auth.saml.configuration.problem_details import (
     SAML_INCORRECT_METADATA,
@@ -708,6 +711,307 @@ class TestSAMLSettings:
             {"key": "true", "label": allow},
             {"key": "false", "label": disallow},
         ]
+
+    @pytest.mark.parametrize(
+        "key, inline_var, file_var, value, invalid_value, other_file_var",
+        [
+            pytest.param(
+                "service_provider_xml_metadata",
+                "PALACE_SAML_SP_METADATA",
+                "PALACE_SAML_SP_METADATA_FILE",
+                saml_strings.CORRECT_XML_WITH_ONE_SP,
+                saml_strings.INVALID_XML,
+                "PALACE_SAML_SP_PRIVATE_KEY_FILE",
+                id="metadata",
+            ),
+            pytest.param(
+                "service_provider_private_key",
+                "PALACE_SAML_SP_PRIVATE_KEY",
+                "PALACE_SAML_SP_PRIVATE_KEY_FILE",
+                saml_strings.PRIVATE_KEY,
+                saml_strings.INVALID_PRIVATE_KEY,
+                "PALACE_SAML_SP_METADATA_FILE",
+                id="private-key",
+            ),
+        ],
+    )
+    @pytest.mark.parametrize(
+        "source, expected_required, expected_status",
+        [
+            pytest.param(
+                None,
+                True,
+                "Required, because the environment does not provide a value. "
+                "Set {inline_var} or {file_var} in the environment to make this "
+                "setting optional.",
+                id="unset",
+            ),
+            pytest.param(
+                "inline",
+                False,
+                "Optional, because the {inline_var} environment variable provides "
+                "a value. Leave empty to use the environment's value, or enter "
+                "a value here to override it.",
+                id="inline",
+            ),
+            pytest.param(
+                "file",
+                False,
+                "Optional, because the {file_var} environment variable provides "
+                "a value. Leave empty to use the environment's value, or enter "
+                "a value here to override it.",
+                id="file",
+            ),
+            pytest.param(
+                "empty-file",
+                True,
+                "Required, because the environment does not provide a value. "
+                "Set {inline_var} or {file_var} in the environment to make this "
+                "setting optional.",
+                id="empty-file",
+            ),
+            pytest.param(
+                "inline-and-file",
+                True,
+                "Required, because the SAML Service Provider configuration in the "
+                "environment is not valid: ",
+                id="inline-and-file",
+            ),
+            pytest.param(
+                "missing-file",
+                True,
+                "Required, because the SAML Service Provider configuration in the "
+                "environment is not valid: ",
+                id="missing-file",
+            ),
+            pytest.param(
+                "undecodable-file",
+                True,
+                "Required, because the SAML Service Provider configuration in the "
+                "environment is not valid: ",
+                id="undecodable-file",
+            ),
+            pytest.param(
+                "invalid-inline",
+                True,
+                "Required, because the SAML Service Provider configuration in the "
+                "environment is not valid: ",
+                id="invalid-inline",
+            ),
+            pytest.param(
+                "invalid-file",
+                True,
+                "Required, because the SAML Service Provider configuration in the "
+                "environment is not valid: ",
+                id="invalid-file",
+            ),
+            pytest.param(
+                "other-setting-invalid",
+                True,
+                "Required, because the SAML Service Provider configuration in the "
+                "environment is not valid: ",
+                id="other-setting-invalid",
+            ),
+        ],
+    )
+    def test_service_provider_settings_state_whether_required(
+        self,
+        db: DatabaseTransactionFixture,
+        monkeypatch_env: MonkeyPatchEnvFixture,
+        tmp_path: Path,
+        key: str,
+        inline_var: str,
+        file_var: str,
+        value: str,
+        invalid_value: str,
+        other_file_var: str,
+        source: str | None,
+        expected_required: bool,
+        expected_status: str,
+    ) -> None:
+        """The form marks an SP setting required, and says why, given the environment when it is shown."""
+        value_file = tmp_path / "value"
+        value_file.write_text(value)
+        empty_file = tmp_path / "empty"
+        empty_file.write_text("")
+        undecodable_file = tmp_path / "undecodable"
+        undecodable_file.write_bytes(b"\xff\xfe\xfd")
+        invalid_file = tmp_path / "invalid"
+        invalid_file.write_text(invalid_value)
+        env = {
+            None: {},
+            "inline": {inline_var: value},
+            "file": {file_var: str(value_file)},
+            "empty-file": {file_var: str(empty_file)},
+            "inline-and-file": {inline_var: value, file_var: str(value_file)},
+            "missing-file": {file_var: str(tmp_path / "missing")},
+            "undecodable-file": {file_var: str(undecodable_file)},
+            "invalid-inline": {inline_var: invalid_value},
+            "invalid-file": {file_var: str(invalid_file)},
+            # The other setting's broken variable makes the whole
+            # configuration invalid, even though this value is valid.
+            "other-setting-invalid": {
+                inline_var: value,
+                other_file_var: str(tmp_path / "missing"),
+            },
+        }[source]
+        for var in (
+            "PALACE_SAML_SP_METADATA",
+            "PALACE_SAML_SP_METADATA_FILE",
+            "PALACE_SAML_SP_PRIVATE_KEY",
+            "PALACE_SAML_SP_PRIVATE_KEY_FILE",
+        ):
+            monkeypatch_env(var, env.get(var))
+
+        [setting] = [
+            setting
+            for setting in SAMLWebSSOAuthSettings.configuration_form(db.session)
+            if setting["key"] == key
+        ]
+
+        assert setting["required"] is expected_required
+        # A status for a broken environment ends with the reason.
+        status = str(setting["description"]).rpartition("<br><br>")[2]
+        assert status.startswith(
+            expected_status.format(inline_var=inline_var, file_var=file_var)
+        )
+
+    @pytest.mark.parametrize(
+        "key, env, expected_reason",
+        [
+            pytest.param(
+                "service_provider_xml_metadata",
+                {"PALACE_SAML_SP_METADATA_FILE": "{missing_file}"},
+                "PALACE_SAML_SP_METADATA_FILE",
+                id="missing-file",
+            ),
+            pytest.param(
+                "service_provider_xml_metadata",
+                {
+                    "PALACE_SAML_SP_METADATA": saml_strings.CORRECT_XML_WITH_ONE_SP,
+                    "PALACE_SAML_SP_METADATA_FILE": "{undecodable_file}",
+                },
+                "Cannot specify both PALACE_SAML_SP_METADATA_FILE and "
+                "PALACE_SAML_SP_METADATA",
+                id="inline-and-file",
+            ),
+            pytest.param(
+                "service_provider_xml_metadata",
+                {"PALACE_SAML_SP_METADATA_FILE": "{undecodable_file}"},
+                "can't decode",
+                id="undecodable-file",
+            ),
+            pytest.param(
+                "service_provider_private_key",
+                {"PALACE_SAML_SP_PRIVATE_KEY": saml_strings.INVALID_PRIVATE_KEY},
+                "Service Provider's Private Key (from environment) is not in a "
+                "valid format",
+                id="invalid-private-key",
+            ),
+            pytest.param(
+                "service_provider_xml_metadata",
+                {
+                    "PALACE_SAML_SP_METADATA": saml_strings.CORRECT_XML_WITH_ONE_SP,
+                    "PALACE_SAML_SP_PRIVATE_KEY_FILE": "{missing_file}",
+                },
+                "PALACE_SAML_SP_PRIVATE_KEY_FILE",
+                id="other-setting-invalid",
+            ),
+        ],
+    )
+    def test_service_provider_environment_check_reports_reason(
+        self,
+        db: DatabaseTransactionFixture,
+        monkeypatch_env: MonkeyPatchEnvFixture,
+        caplog: pytest.LogCaptureFixture,
+        tmp_path: Path,
+        key: str,
+        env: dict[str, str],
+        expected_reason: str,
+    ) -> None:
+        """A broken SP environment logs a warning and shows a description indicating the problem."""
+        undecodable_file = tmp_path / "undecodable"
+        undecodable_file.write_bytes(b"\xff\xfe\xfd")
+        paths = {
+            "missing_file": str(tmp_path / "missing"),
+            "undecodable_file": str(undecodable_file),
+        }
+        for var in (
+            "PALACE_SAML_SP_METADATA",
+            "PALACE_SAML_SP_METADATA_FILE",
+            "PALACE_SAML_SP_PRIVATE_KEY",
+            "PALACE_SAML_SP_PRIVATE_KEY_FILE",
+        ):
+            value = env.get(var)
+            monkeypatch_env(var, value.format(**paths) if value else None)
+        caplog.set_level(logging.WARNING)
+
+        [setting] = [
+            setting
+            for setting in SAMLWebSSOAuthSettings.configuration_form(db.session)
+            if setting["key"] == key
+        ]
+
+        assert setting["required"] is True
+        # Each SP setting checks the environment, so a configuration that fails
+        # to load logs one warning for each setting.
+        warnings = [
+            record.getMessage()
+            for record in caplog.records
+            if record.levelno == logging.WARNING
+            and "SAML Service Provider configuration in the environment is not valid"
+            in record.getMessage()
+        ]
+        assert warnings
+        assert all(expected_reason in warning for warning in warnings)
+        # The form shows the description as HTML, so the reason is escaped.
+        assert html.escape(expected_reason) in str(setting["description"])
+
+    def test_service_provider_environment_checked_once(
+        self,
+        db: DatabaseTransactionFixture,
+        monkeypatch_env: MonkeyPatchEnvFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """The form checks the SP environment only once per process."""
+        monkeypatch_env("PALACE_SAML_SP_METADATA", "<not-valid-xml")
+        monkeypatch_env("PALACE_SAML_SP_METADATA_FILE", None)
+        monkeypatch_env("PALACE_SAML_SP_PRIVATE_KEY", saml_strings.PRIVATE_KEY)
+        monkeypatch_env("PALACE_SAML_SP_PRIVATE_KEY_FILE", None)
+
+        def metadata_setting() -> dict[str, Any]:
+            [setting] = [
+                setting
+                for setting in SAMLWebSSOAuthSettings.configuration_form(db.session)
+                if setting["key"] == "service_provider_xml_metadata"
+            ]
+            # The description is built when the form is sent.
+            str(setting["description"])
+            return setting
+
+        def stack_traces() -> int:
+            return len([record for record in caplog.records if record.exc_info])
+
+        setting = metadata_setting()
+        assert setting["required"] is True
+        assert "is not valid" in str(setting["description"])
+        logged = stack_traces()
+        assert logged > 0
+
+        # A second build and send does not check the environment again.
+        metadata_setting()
+        assert stack_traces() == logged
+
+        # The form does not show an environment change until the cache is cleared.
+        monkeypatch_env("PALACE_SAML_SP_METADATA", saml_strings.CORRECT_XML_WITH_ONE_SP)
+        assert metadata_setting()["required"] is True
+
+        sp_environment_check.cache_clear()
+        setting = metadata_setting()
+        assert setting["required"] is False
+        assert "PALACE_SAML_SP_METADATA environment variable provides" in str(
+            setting["description"]
+        )
 
     def test_service_provider_mode_constraints(self):
         """Test that service_provider_strict_mode and service_provider_debug_mode enforce ge=0, le=1 constraints."""

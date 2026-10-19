@@ -558,6 +558,44 @@ class TestBaseSettings:
             ) in caplog.text
 
         @pytest.mark.parametrize(
+            "callable_result, model_required, expected_required, expect_warning",
+            [
+                pytest.param(True, False, True, False, id="true-overrides-model"),
+                pytest.param(False, False, False, False, id="false-matches-model"),
+                pytest.param(True, True, True, False, id="true-matches-model"),
+                pytest.param(False, True, True, True, id="false-cannot-override"),
+            ],
+        )
+        def test_required_callable(
+            self,
+            caplog: pytest.LogCaptureFixture,
+            callable_result: bool,
+            model_required: bool,
+            expected_required: bool,
+            expect_warning: bool,
+        ) -> None:
+            caplog.set_level(LogLevel.warning)
+            calls: list[None] = []
+
+            def required() -> bool:
+                calls.append(None)
+                return callable_result
+
+            item = FormMetadata(
+                label="Test", type=FormFieldType.TEXT, required=required
+            )
+
+            # The callable is called each time the form is built.
+            for expected_calls in (1, 2):
+                _, form_entry = item.to_dict(MagicMock(), "test", model_required)
+                assert form_entry["required"] is expected_required
+                assert len(calls) == expected_calls
+
+            assert (
+                "its required property is set to False" in caplog.text
+            ) is expect_warning
+
+        @pytest.mark.parametrize(
             "value, expected",
             [
                 pytest.param(None, "", id="none-becomes-empty-string"),
