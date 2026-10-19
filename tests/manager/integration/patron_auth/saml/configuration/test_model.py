@@ -874,6 +874,86 @@ class TestSAMLSettings:
             + expected_status.format(inline_var=inline_var, file_var=file_var)
         )
 
+    @pytest.mark.parametrize(
+        "key, env, expected_reason",
+        [
+            pytest.param(
+                "service_provider_xml_metadata",
+                {"PALACE_SAML_SP_METADATA_FILE": "{missing_file}"},
+                "PALACE_SAML_SP_METADATA_FILE",
+                id="missing-file",
+            ),
+            pytest.param(
+                "service_provider_xml_metadata",
+                {
+                    "PALACE_SAML_SP_METADATA": saml_strings.CORRECT_XML_WITH_ONE_SP,
+                    "PALACE_SAML_SP_METADATA_FILE": "{undecodable_file}",
+                },
+                "Cannot specify both PALACE_SAML_SP_METADATA_FILE and "
+                "PALACE_SAML_SP_METADATA",
+                id="inline-and-file",
+            ),
+            pytest.param(
+                "service_provider_xml_metadata",
+                {"PALACE_SAML_SP_METADATA_FILE": "{undecodable_file}"},
+                "can't decode",
+                id="undecodable-file",
+            ),
+            pytest.param(
+                "service_provider_private_key",
+                {"PALACE_SAML_SP_PRIVATE_KEY": saml_strings.INVALID_PRIVATE_KEY},
+                "Service Provider's Private Key (from environment) is not in a "
+                "valid format",
+                id="invalid-private-key",
+            ),
+        ],
+    )
+    def test_service_provider_environment_check_logs_reason(
+        self,
+        db: DatabaseTransactionFixture,
+        monkeypatch_env: MonkeyPatchEnvFixture,
+        caplog: pytest.LogCaptureFixture,
+        tmp_path: Path,
+        key: str,
+        env: dict[str, str],
+        expected_reason: str,
+    ) -> None:
+        """A broken SP environment logs a warning that says what is wrong."""
+        undecodable_file = tmp_path / "undecodable"
+        undecodable_file.write_bytes(b"\xff\xfe\xfd")
+        paths = {
+            "missing_file": str(tmp_path / "missing"),
+            "undecodable_file": str(undecodable_file),
+        }
+        for var in (
+            "PALACE_SAML_SP_METADATA",
+            "PALACE_SAML_SP_METADATA_FILE",
+            "PALACE_SAML_SP_PRIVATE_KEY",
+            "PALACE_SAML_SP_PRIVATE_KEY_FILE",
+        ):
+            value = env.get(var)
+            monkeypatch_env(var, value.format(**paths) if value else None)
+        caplog.set_level(logging.WARNING)
+
+        [setting] = [
+            setting
+            for setting in SAMLWebSSOAuthSettings.configuration_form(db.session)
+            if setting["key"] == key
+        ]
+
+        assert setting["required"] is True
+        # Each SP setting checks the environment, so a configuration that fails
+        # to load logs one warning for each setting.
+        warnings = [
+            record.getMessage()
+            for record in caplog.records
+            if record.levelno == logging.WARNING
+            and "SAML Service Provider configuration in the environment is not valid"
+            in record.getMessage()
+        ]
+        assert warnings
+        assert all(expected_reason in warning for warning in warnings)
+
     def test_service_provider_environment_checked_once(
         self,
         db: DatabaseTransactionFixture,

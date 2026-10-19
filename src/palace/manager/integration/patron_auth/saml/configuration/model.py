@@ -12,7 +12,7 @@ from annotated_types import Ge, Le
 from flask_babel import LazyString, lazy_gettext as _
 from frozendict import frozendict
 from onelogin.saml2.settings import OneLogin_Saml2_Settings
-from pydantic import PositiveInt, ValidationError, field_validator
+from pydantic import PositiveInt, field_validator
 from sqlalchemy.orm import Session
 
 from palace.util.exceptions import BasePalaceException
@@ -324,7 +324,6 @@ def _sp_private_key_environment_source(
 
 # Errors that mean the environment's SAML Service Provider configuration is not valid.
 _INVALID_SP_ENVIRONMENT_ERRORS: Final = (
-    ValidationError,
     CannotLoadConfiguration,
     OSError,
     UnicodeDecodeError,
@@ -368,7 +367,17 @@ def sp_environment_check(
             valid=True,
             source=environment_source(SamlServiceProviderConfiguration()),
         )
-    except _INVALID_SP_ENVIRONMENT_ERRORS:
+    except _INVALID_SP_ENVIRONMENT_ERRORS as exception:
+        # A SettingsValidationError's message is only its problem title, so log
+        # the detail, which names the problem and where the value came from.
+        reason = (
+            exception.problem_detail.detail
+            if isinstance(exception, SettingsValidationError)
+            else None
+        ) or str(exception)
+        SamlServiceProviderConfiguration.logger().warning(
+            f"SAML Service Provider configuration in the environment is not valid: {reason}"
+        )
         return SPEnvironmentCheck(valid=False, source=None)
 
 
