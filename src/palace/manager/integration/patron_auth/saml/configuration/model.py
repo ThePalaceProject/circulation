@@ -1,3 +1,4 @@
+import html
 import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -12,7 +13,7 @@ from annotated_types import Ge, Le
 from flask_babel import LazyString, lazy_gettext as _
 from frozendict import frozendict
 from onelogin.saml2.settings import OneLogin_Saml2_Settings
-from pydantic import PositiveInt, ValidationError, field_validator
+from pydantic import PositiveInt, field_validator
 from sqlalchemy.orm import Session
 
 from palace.util.exceptions import BasePalaceException
@@ -324,7 +325,6 @@ def _sp_private_key_environment_source(
 
 # Errors that mean the environment's SAML Service Provider configuration is not valid.
 _INVALID_SP_ENVIRONMENT_ERRORS: Final = (
-    ValidationError,
     CannotLoadConfiguration,
     OSError,
     UnicodeDecodeError,
@@ -339,6 +339,8 @@ class SPEnvironmentCheck(NamedTuple):
     valid: bool
     # The environment variable that provides a valid value, or None if none does.
     source: str | None
+    # The reason the configuration is not valid, or None if it is valid.
+    reason: str | None = None
 
 
 @cache
@@ -368,8 +370,18 @@ def sp_environment_check(
             valid=True,
             source=environment_source(SamlServiceProviderConfiguration()),
         )
-    except _INVALID_SP_ENVIRONMENT_ERRORS:
-        return SPEnvironmentCheck(valid=False, source=None)
+    except _INVALID_SP_ENVIRONMENT_ERRORS as exception:
+        # A SettingsValidationError's message is only its problem title, so use
+        # the detail, which names the problem and where the value came from.
+        reason = (
+            exception.problem_detail.detail
+            if isinstance(exception, SettingsValidationError)
+            else None
+        ) or str(exception)
+        SamlServiceProviderConfiguration.logger().warning(
+            f"SAML Service Provider configuration in the environment is not valid: {reason}"
+        )
+        return SPEnvironmentCheck(valid=False, source=None, reason=reason)
 
 
 @dataclass(frozen=True)
@@ -406,9 +418,10 @@ class _SPEnvironmentSetting:
         """States whether the setting is required, and why."""
         check = sp_environment_check(self.environment_source)
         if not check.valid:
+            # The form shows the description as HTML, so escape the reason.
             status = (
                 "Required, because the SAML Service Provider configuration in the "
-                "environment is not valid."
+                f"environment is not valid: {html.escape(check.reason or '')}"
             )
         elif source := check.source:
             status = (
@@ -863,7 +876,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
             raise SettingsValidationError(
                 problem_detail=INCOMPLETE_CONFIGURATION.detailed(
                     "Service Provider's XML Metadata is required. "
-                    "Provide it here or set PALACE_SAML_SP_METADATA or PALACE_SAML_SP_METADATA_FILE in the environment."
+                    f"Provide it here or set {METADATA_ENV_VAR} or {METADATA_FILE_ENV_VAR} in the environment."
                 )
             )
 
@@ -910,7 +923,7 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
             raise SettingsValidationError(
                 problem_detail=INCOMPLETE_CONFIGURATION.detailed(
                     "Service Provider's Private Key is required. "
-                    "Provide it here or set PALACE_SAML_SP_PRIVATE_KEY or PALACE_SAML_SP_PRIVATE_KEY_FILE in the environment."
+                    f"Provide it here or set {PRIVATE_KEY_ENV_VAR} or {PRIVATE_KEY_FILE_ENV_VAR} in the environment."
                 )
             )
 
