@@ -803,7 +803,7 @@ class TestSAMLSettings:
         with pytest.raises(ProblemDetailException) as exc_info:
             SAMLWebSSOAuthSettings(extra_data="{not valid json}")
         assert exc_info.value.problem_detail.uri == INVALID_CONFIGURATION_OPTION.uri
-        assert "'Extra Data' must be valid JSON" in (
+        assert "'Authorization Filter: Extra Data' must be valid JSON" in (
             exc_info.value.problem_detail.detail or ""
         )
 
