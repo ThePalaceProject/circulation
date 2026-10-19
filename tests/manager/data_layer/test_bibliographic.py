@@ -17,6 +17,7 @@ from palace.manager.data_layer.bibliographic import (
 )
 from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.contributor import ContributorData
+from palace.manager.data_layer.format import FormatData
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.data_layer.link import LinkData
 from palace.manager.data_layer.measurement import MeasurementData
@@ -27,7 +28,10 @@ from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.sqlalchemy.model.licensing import RightsStatus
+from palace.manager.sqlalchemy.model.licensing import (
+    DeliveryMechanism,
+    RightsStatus,
+)
 from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.sqlalchemy.model.work import Work
@@ -1147,6 +1151,47 @@ class TestBibliographicData:
         same_time_changed.apply(db.session, edition, None)
         assert edition.updated_at == now
         assert edition.updated_at_data_hash == same_time_changed.calculate_hash()
+
+    def test_calculate_hash_excludes_circulation_including_formats(self) -> None:
+        """The delivery formats do not influence the bibliographic fingerprint.
+
+        They are tracked by ``CirculationData``'s own fingerprint instead. Every
+        importer carries one ``CirculationData`` per title and dispatches a single
+        apply, so a format change is detected there -- see
+        ``OverdriveImporter._process_book`` and ``opds/importer.py``. Folding formats
+        in here would instead change the fingerprint of every record in every license
+        source, forcing a one-time re-save across all of them for no added coverage.
+        """
+
+        def bibliographic_with(formats: list[FormatData]) -> BibliographicData:
+            return BibliographicData(
+                data_source_name=DataSource.OVERDRIVE,
+                title="Test Title",
+                circulation=CirculationData(
+                    data_source_name=DataSource.OVERDRIVE,
+                    primary_identifier_data=IdentifierData(
+                        type=Identifier.OVERDRIVE_ID, identifier="overdrive-id"
+                    ),
+                    formats=formats,
+                ),
+            )
+
+        epub_adobe = FormatData(
+            content_type=Representation.EPUB_MEDIA_TYPE,
+            drm_scheme=DeliveryMechanism.ADOBE_DRM,
+        )
+
+        # Gaining a format leaves the bibliographic fingerprint untouched...
+        assert (
+            bibliographic_with([]).calculate_hash()
+            == bibliographic_with([epub_adobe]).calculate_hash()
+        )
+
+        # ...because the circulation fingerprint is what notices.
+        no_formats = bibliographic_with([]).circulation
+        one_format = bibliographic_with([epub_adobe]).circulation
+        assert no_formats is not None and one_format is not None
+        assert no_formats.calculate_hash() != one_format.calculate_hash()
 
     def test_validate_primary_identifier_case_insensitive(
         self, db: DatabaseTransactionFixture

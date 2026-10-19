@@ -13,6 +13,7 @@ from palace.manager.celery.tasks.apply import (
     ApplyBibliographicCallable,
     ApplyCirculationCallable,
 )
+from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.integration.license.overdrive.api import OverdriveAPI
@@ -40,6 +41,19 @@ class FeedImportResult:
 
 class OverdriveImporter(LoggerMixin):
     DEFAULT_PAGE_SIZE = 100
+
+    #: The policy every import applies under. ``formats=True`` is the part that
+    #: matters most: Overdrive's metadata record carries the full format list, so an
+    #: apply built from it has to be allowed to remove a format Overdrive dropped.
+    #: Tests assert against this rather than against a copy, so a change here cannot
+    #: leave them passing on a policy production no longer uses.
+    REPLACEMENT_POLICY = ReplacementPolicy(
+        identifiers=False,
+        subjects=True,
+        contributions=True,
+        formats=True,
+        links=True,
+    )
 
     def __init__(
         self,
@@ -96,6 +110,81 @@ class OverdriveImporter(LoggerMixin):
         )
         return timestamp
 
+    @staticmethod
+    def _bibliographic_matches_identifier(
+        bibliographic: BibliographicData, identifier: Identifier
+    ) -> bool:
+        """Whether converted bibliographic data describes the expected title.
+
+        The identifier comes from the product list, while the bibliographic data is
+        converted from the separately fetched metadata record, so the two can in
+        principle disagree -- for instance if Overdrive redirects a merged title to a
+        different id. The comparison is case-insensitive, mirroring
+        :meth:`BibliographicData._validate_primary_identifier`, because Overdrive is
+        not consistent about the case of its ids. Only the identifier is compared;
+        the type is always Identifier.OVERDRIVE_ID on both sides.
+
+        :param bibliographic: Bibliographic data converted from the metadata record.
+        :param identifier: The identifier taken from the product list.
+        :return: True if the data can safely be applied to ``identifier``.
+        """
+        primary = bibliographic.primary_identifier_data
+        if primary is None:
+            return False
+        return primary.identifier.lower() == identifier.identifier.lower()
+
+    def _usable_bibliographic(
+        self, book: dict[str, Any], identifier: Identifier
+    ) -> BibliographicData | None:
+        """Convert a book's metadata record, or return None if it is not usable.
+
+        :param book: Book data dictionary, whose ``metadata`` key holds the record.
+        :param identifier: The identifier the product list pointed us at.
+        :return: The converted data, or None if there is no metadata, it could not be
+            converted, or it describes a different title.
+        """
+        # It is possible that we attempted to fetch metadata but got nothing back from
+        # Overdrive, or that we did not attempt to fetch it because the parent
+        # collection already processed it.
+        if not book.get("metadata"):
+            return None
+
+        bibliographic = self._extractor.book_info_to_bibliographic(book["metadata"])
+        if bibliographic is None:
+            # A non-empty metadata entry is not necessarily a usable record.
+            # Overdrive reports an unrecognized identifier as an HTTP 200 whose body
+            # is an error document (see OverdriveClientRequests.metadata), and such a
+            # document passes the check above while carrying no "id" for the extractor
+            # to key on. Report it as unusable; the caller still attempts the
+            # circulation update, which is worth doing on its own.
+            self.log.warning(
+                f"Could not extract bibliographic data from Overdrive metadata for "
+                f"{identifier}. Skipping bibliographic update."
+            )
+            return None
+
+        if not self._bibliographic_matches_identifier(bibliographic, identifier):
+            # The record we converted describes a different title than the one the
+            # product list pointed us at. Nothing downstream catches this: the apply
+            # task is dispatched without an edition id, so it resolves the edition
+            # from the record's own identifier and the primary-identifier check there
+            # compares the record against itself and passes. The wrong title's
+            # bibliographic data would simply be written.
+            #
+            # This has to run before the merge below, which grafts the metadata
+            # record's format list onto the availability snapshot and then applies it
+            # with the policy, giving it authority to remove formats. So a mismatched
+            # record would also replace the delivery mechanisms of the title the
+            # product list named with those of an unrelated one.
+            self.log.warning(
+                f"Overdrive metadata for {identifier} reports a different identifier "
+                f"({bibliographic.primary_identifier_data}). Skipping bibliographic "
+                f"update."
+            )
+            return None
+
+        return bibliographic
+
     def _process_book(
         self,
         book: dict[str, Any],
@@ -108,7 +197,9 @@ class OverdriveImporter(LoggerMixin):
 
         :param book: Book data dictionary from OverDrive API
         :param fetch_metadata: Whether metadata was already fetched
-        :param policy: Replacement policy for bibliographic updates
+        :param policy: Replacement policy for the apply. Passed to a bibliographic
+            apply, and to a circulation apply whose formats came from the metadata
+            record -- see the dispatch below for why the two differ.
         :param apply_bibliographic: Callback to apply bibliographic updates
         :param apply_circulation: Callback to apply circulation updates
         :return: Tuple of (identifier, changed) where changed is True if any data changed
@@ -142,25 +233,11 @@ class OverdriveImporter(LoggerMixin):
         ):
             book["metadata"] = self._api.metadata_lookup(identifier=identifier).raw
 
-        # we need to check that there is metadata because it is possible that we attempted to fetch it, but we
-        # didn't get anything back from overdrive (ie from the book list fetch above) or we did not attempt to
-        # fetch it because it was already processed by the parent collection.
-        if book.get("metadata"):
-            bibliographic = self._extractor.book_info_to_bibliographic(book)
-            # The bibliographic should never be null here because there is a non-null entry for metadata in the
-            # book dictionary.  Mypy complains without an assertion or type hints.
-            assert bibliographic
-
-            if bibliographic.needs_apply(self._db):
-                changed = True
-                apply_bibliographic(
-                    bibliographic,
-                    collection_id=self._collection.id,
-                    replace=policy,
-                )
+        bibliographic = self._usable_bibliographic(book, identifier)
 
         # availability needs to be checked/updated in all but a few instances so it is
         # probably not worth the compute time to save ourselves a handful of unnecessary updates.
+        circulation = None
         availability_data = book.get("availabilityV2", None)
         if not availability_data:
             # This is a rare and probably transient case where the availabilityV2
@@ -176,9 +253,67 @@ class OverdriveImporter(LoggerMixin):
             # book dictionary.  Mypy complains without an assertion or type hints.
             assert circulation
 
-            if circulation.needs_apply(self._db, self._collection):
-                changed = True
-                apply_circulation(circulation, collection_id=self._collection.id)
+        # Overdrive is the only distributor whose formats and availability counts come
+        # from two different documents, and converting them produced two separate
+        # CirculationData objects. Fold them into one before anything is dispatched.
+        #
+        # This is not tidying. Each object stamps ``pool.updated_at`` with its own
+        # ``as_of_timestamp`` on apply, and ``should_apply_to`` rejects any snapshot
+        # strictly older than that stamp. Two objects built microseconds apart and
+        # queued as two independent tasks can therefore arrive in either order, and if
+        # the availability one lands first the formats one is discarded -- while the
+        # edition's hash is still stamped, so no later import retries it. One object
+        # has one timestamp and cannot race itself. OPDS, ODL and Boundless have always
+        # worked this way; see ``opds/importer.py`` and ``boundless/importer.py``.
+        formats_from_metadata = False
+        if bibliographic is not None and bibliographic.circulation is not None:
+            if circulation is None:
+                # No availability document, so the formats-only snapshot the converter
+                # built is all we have. Dispatch it as-is.
+                circulation = bibliographic.circulation
+            else:
+                # Assignment re-runs CirculationData's normalising validator, which is
+                # what we want; it also clears the memoised hash.
+                circulation.formats = bibliographic.circulation.formats
+                bibliographic.circulation = circulation
+            formats_from_metadata = True
+
+        # Dispatch exactly one task. ``BibliographicData.apply`` applies the circulation
+        # data hanging off it, so queuing both would make two writers for one pool.
+        if bibliographic is not None and bibliographic.needs_apply(self._db):
+            changed = True
+            apply_bibliographic(
+                bibliographic,
+                collection_id=self._collection.id,
+                replace=policy,
+            )
+        elif circulation is not None and circulation.needs_apply(
+            self._db, self._collection
+        ):
+            # The bibliographic data is unchanged but the circulation data is not --
+            # an availability flip, or a change to the format list. Apply it on its own.
+            #
+            # Whether this apply may *remove* formats depends on where its format list
+            # came from, and getting it wrong is damaging in both directions:
+            #
+            # * Formats read from the metadata record are the full, authoritative list,
+            #   so a format Overdrive has dropped must be removed. Without the policy,
+            #   ``replace.formats`` defaults to False, the stale delivery mechanism
+            #   survives, and the apply still records the new hash -- so no later import
+            #   retries the removal and patrons keep being offered a format Overdrive no
+            #   longer has.
+            # * An availability-only snapshot has no formats at all. The Advantage path
+            #   skips the metadata lookup for any title the parent collection already
+            #   imported, so passing the policy there would treat an empty list as
+            #   authoritative and delete every delivery mechanism -- and because
+            #   delivery mechanisms are keyed on data source and identifier rather than
+            #   on collection, that would take the parent's titles with it.
+            changed = True
+            apply_circulation(
+                circulation,
+                collection_id=self._collection.id,
+                replace=policy if formats_from_metadata else None,
+            )
 
         return identifier, changed
 
@@ -202,8 +337,12 @@ class OverdriveImporter(LoggerMixin):
              skipping books that are already in the parent collection
 
         2. **Change Detection**:
-           - Only applies bibliographic updates if metadata has changed
-           - Always checks circulation data as availability changes frequently and applies changes only if changed.
+           - Each book queues at most one apply. If its metadata changed, the
+             bibliographic apply runs and carries the circulation data with it.
+             Otherwise the circulation data is checked on its own, and applied if
+             the availability or the format list has moved.
+           - See :meth:`_process_book` for why the two halves have to travel on a
+             single object rather than as two independent tasks.
 
         :param apply_bibliographic: Callback to apply bibliographic metadata updates (title, author, etc.)
         :param apply_circulation: Callback to apply circulation data updates (copies owned, available, etc.)
@@ -223,13 +362,7 @@ class OverdriveImporter(LoggerMixin):
            - Logs progress information
         """
         identifiers = []
-        policy = ReplacementPolicy(
-            identifiers=False,
-            subjects=True,
-            contributions=True,
-            formats=True,
-            links=True,
-        )
+        policy = self.REPLACEMENT_POLICY
 
         self.log.info(
             f"Starting process of queuing items in collection {self._collection.name} (id={self._collection.id} "

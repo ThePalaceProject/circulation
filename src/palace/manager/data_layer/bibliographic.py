@@ -102,8 +102,20 @@ class BibliographicData(BaseMutableData):
         return self
 
     def fields_excluded_from_hash(self) -> set[str]:
-        # CirculationData is considered separate from bibliographic data, so
-        # we want to exclude it from the hash calculation.
+        """Exclude the nested circulation data from the bibliographic fingerprint.
+
+        ``CirculationData`` is considered separate from bibliographic data and keeps
+        its own fingerprint, which already covers the delivery formats -- see
+        :meth:`~palace.manager.data_layer.circulation.CirculationData.fields_excluded_from_hash`.
+        An importer that carries one ``CirculationData`` per title therefore detects a
+        format change through that object, and nothing needs folding in here.
+
+        The exclusion also has to stay for a mechanical reason: ``CirculationData``
+        inherits ``created_at``, which defaults to the current time, and the set
+        returned here is applied by ``model_dump(exclude=...)`` to top-level names
+        only. Including ``circulation`` would pull a nested, always-changing timestamp
+        into the fingerprint and re-import every book on every run.
+        """
         return super().fields_excluded_from_hash().union({"circulation"})
 
     @classmethod
