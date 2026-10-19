@@ -1,3 +1,4 @@
+import html
 import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -338,6 +339,8 @@ class SPEnvironmentCheck(NamedTuple):
     valid: bool
     # The environment variable that provides a valid value, or None if none does.
     source: str | None
+    # The reason the configuration is not valid, or None if it is valid.
+    reason: str | None = None
 
 
 @cache
@@ -368,7 +371,7 @@ def sp_environment_check(
             source=environment_source(SamlServiceProviderConfiguration()),
         )
     except _INVALID_SP_ENVIRONMENT_ERRORS as exception:
-        # A SettingsValidationError's message is only its problem title, so log
+        # A SettingsValidationError's message is only its problem title, so use
         # the detail, which names the problem and where the value came from.
         reason = (
             exception.problem_detail.detail
@@ -378,7 +381,7 @@ def sp_environment_check(
         SamlServiceProviderConfiguration.logger().warning(
             f"SAML Service Provider configuration in the environment is not valid: {reason}"
         )
-        return SPEnvironmentCheck(valid=False, source=None)
+        return SPEnvironmentCheck(valid=False, source=None, reason=reason)
 
 
 @dataclass(frozen=True)
@@ -415,9 +418,10 @@ class _SPEnvironmentSetting:
         """States whether the setting is required, and why."""
         check = sp_environment_check(self.environment_source)
         if not check.valid:
+            # The form shows the description as HTML, so escape the reason.
             status = (
                 "Required, because the SAML Service Provider configuration in the "
-                "environment is not valid."
+                f"environment is not valid: {html.escape(check.reason or '')}"
             )
         elif source := check.source:
             status = (

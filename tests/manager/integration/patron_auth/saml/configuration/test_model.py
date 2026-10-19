@@ -1,3 +1,4 @@
+import html
 import json
 import logging
 from collections.abc import Callable
@@ -773,42 +774,42 @@ class TestSAMLSettings:
                 "inline-and-file",
                 True,
                 "Required, because the SAML Service Provider configuration in the "
-                "environment is not valid.",
+                "environment is not valid: ",
                 id="inline-and-file",
             ),
             pytest.param(
                 "missing-file",
                 True,
                 "Required, because the SAML Service Provider configuration in the "
-                "environment is not valid.",
+                "environment is not valid: ",
                 id="missing-file",
             ),
             pytest.param(
                 "undecodable-file",
                 True,
                 "Required, because the SAML Service Provider configuration in the "
-                "environment is not valid.",
+                "environment is not valid: ",
                 id="undecodable-file",
             ),
             pytest.param(
                 "invalid-inline",
                 True,
                 "Required, because the SAML Service Provider configuration in the "
-                "environment is not valid.",
+                "environment is not valid: ",
                 id="invalid-inline",
             ),
             pytest.param(
                 "invalid-file",
                 True,
                 "Required, because the SAML Service Provider configuration in the "
-                "environment is not valid.",
+                "environment is not valid: ",
                 id="invalid-file",
             ),
             pytest.param(
                 "other-setting-invalid",
                 True,
                 "Required, because the SAML Service Provider configuration in the "
-                "environment is not valid.",
+                "environment is not valid: ",
                 id="other-setting-invalid",
             ),
         ],
@@ -869,9 +870,10 @@ class TestSAMLSettings:
         ]
 
         assert setting["required"] is expected_required
-        assert str(setting["description"]).endswith(
-            "<br><br>"
-            + expected_status.format(inline_var=inline_var, file_var=file_var)
+        # A status for a broken environment ends with the reason.
+        status = str(setting["description"]).rpartition("<br><br>")[2]
+        assert status.startswith(
+            expected_status.format(inline_var=inline_var, file_var=file_var)
         )
 
     @pytest.mark.parametrize(
@@ -906,9 +908,18 @@ class TestSAMLSettings:
                 "valid format",
                 id="invalid-private-key",
             ),
+            pytest.param(
+                "service_provider_xml_metadata",
+                {
+                    "PALACE_SAML_SP_METADATA": saml_strings.CORRECT_XML_WITH_ONE_SP,
+                    "PALACE_SAML_SP_PRIVATE_KEY_FILE": "{missing_file}",
+                },
+                "PALACE_SAML_SP_PRIVATE_KEY_FILE",
+                id="other-setting-invalid",
+            ),
         ],
     )
-    def test_service_provider_environment_check_logs_reason(
+    def test_service_provider_environment_check_reports_reason(
         self,
         db: DatabaseTransactionFixture,
         monkeypatch_env: MonkeyPatchEnvFixture,
@@ -918,7 +929,7 @@ class TestSAMLSettings:
         env: dict[str, str],
         expected_reason: str,
     ) -> None:
-        """A broken SP environment logs a warning that says what is wrong."""
+        """A broken SP environment logs a warning and shows a description indicating the problem."""
         undecodable_file = tmp_path / "undecodable"
         undecodable_file.write_bytes(b"\xff\xfe\xfd")
         paths = {
@@ -953,6 +964,8 @@ class TestSAMLSettings:
         ]
         assert warnings
         assert all(expected_reason in warning for warning in warnings)
+        # The form shows the description as HTML, so the reason is escaped.
+        assert html.escape(expected_reason) in str(setting["description"])
 
     def test_service_provider_environment_checked_once(
         self,
