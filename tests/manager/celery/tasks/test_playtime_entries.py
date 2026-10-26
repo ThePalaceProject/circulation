@@ -1323,47 +1323,44 @@ class TestGeneratePlaytimeReport:
         # The task completed instead of raising.
         assert any("already present" in record.message for record in caplog.records)
 
-    def test_generate_playtime_report_retries_when_drive_unavailable(
+    @pytest.mark.parametrize(
+        "error,expected_attempts",
+        [
+            pytest.param(
+                GoogleDriveUnavailable("Drive returned a retryable error"),
+                DRIVE_MAX_RETRIES + 1,
+                id="drive-unavailable-is-retried",
+            ),
+            pytest.param(
+                ValueError("something is actually wrong"),
+                1,
+                id="other-errors-fail-fast",
+            ),
+        ],
+    )
+    def test_generate_playtime_report_retry_behaviour(
         self,
+        error: Exception,
+        expected_attempts: int,
         db: DatabaseTransactionFixture,
         celery_fixture: CeleryFixture,
         services_fixture: ServicesFixture,
         redis_fixture: RedisFixture,
         monkeypatch: pytest.MonkeyPatch,
     ):
-        """A Drive outage that outlasts the in-request budget retries the task.
+        """Only a Drive outage re-runs the task.
 
-        GoogleDriveService exhausts its own retries within a single call in about
-        30 seconds; this is what covers an outage lasting longer than that.
+        GoogleDriveService spends its own retries within a single call in about
+        30 seconds; retrying the task is what covers an outage lasting longer
+        than that. Anything else is a real failure and must not be retried for a
+        quarter of an hour before surfacing.
         """
         mock_drive = self._setup_single_collection_report(
             db, services_fixture, monkeypatch
         )
-        mock_drive.create_file.side_effect = GoogleDriveUnavailable(
-            "Google Drive returned a retryable error (status=500)"
-        )
+        mock_drive.create_file.side_effect = error
 
         with celery_fixture.patch_retry_backoff():
             generate_playtime_report.delay().get(propagate=False)
 
-        # One initial attempt plus DRIVE_MAX_RETRIES retries.
-        assert mock_drive.create_file.call_count == DRIVE_MAX_RETRIES + 1
-
-    def test_generate_playtime_report_does_not_retry_other_errors(
-        self,
-        db: DatabaseTransactionFixture,
-        celery_fixture: CeleryFixture,
-        services_fixture: ServicesFixture,
-        redis_fixture: RedisFixture,
-        monkeypatch: pytest.MonkeyPatch,
-    ):
-        """Errors outside the retryable set fail fast rather than retrying."""
-        mock_drive = self._setup_single_collection_report(
-            db, services_fixture, monkeypatch
-        )
-        mock_drive.create_file.side_effect = ValueError("something is actually wrong")
-
-        with celery_fixture.patch_retry_backoff():
-            generate_playtime_report.delay().get(propagate=False)
-
-        assert mock_drive.create_file.call_count == 1
+        assert mock_drive.create_file.call_count == expected_attempts

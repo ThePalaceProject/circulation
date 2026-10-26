@@ -275,123 +275,89 @@ class TestGoogleDriveService:
         # The retry resends the full multipart body, not an exhausted stream.
         assert "Hello world" in str(http_mock_sequence.request_sequence[2][2])
 
-    def test_create_file_raises_when_retries_exhausted(self, no_retry_sleep: None):
-        """A 5xx outlasting the retry budget is re-raised as retryable.
-
-        Callers (the playtime report task) key their own, much longer, retry
-        schedule off GoogleDriveUnavailable.
-        """
-        file_name = "file.txt"
-        http_mock_sequence = HttpMockSequence(
-            [({"status": "200"}, '{"files": []}')]
-            # num_retries retries on top of the initial attempt.
-            + [({"status": "500"}, '{"error": {}}')] * (API_NUM_RETRIES + 1)
-        )
-        service = drive_service(http=http_mock_sequence)
-
-        with pytest.raises(GoogleDriveUnavailable):
-            service.create_file(
-                file_name=file_name,
-                stream=BytesIO(b"Hello world"),
-                content_type="text/plain",
-            )
-
-        assert len(http_mock_sequence.request_sequence) == API_NUM_RETRIES + 2
-
-    def test_create_file_retries_quota_exhaustion(self, no_retry_sleep: None):
-        """Drive signals quota exhaustion with a 403, not a 429.
-
-        The status alone is indistinguishable from a real permission failure, so
-        the reason is what decides; Google documents these as retryable.
-        """
-        rate_limited = json.dumps(
-            {
-                "error": {
-                    "code": 403,
-                    "message": "Rate Limit Exceeded",
-                    "errors": [
-                        {
-                            "domain": "usageLimits",
-                            "reason": "rateLimitExceeded",
-                            "message": "Rate Limit Exceeded",
-                        }
-                    ],
-                }
-            }
-        )
-        # googleapiclient retries this reason itself, so the budget has to be
-        # spent before the error reaches our classifier.
-        http_mock_sequence = HttpMockSequence(
-            [({"status": "200"}, '{"files": []}')]
-            + [({"status": "403"}, rate_limited)] * (API_NUM_RETRIES + 1)
-        )
-        service = drive_service(http=http_mock_sequence)
-
-        with pytest.raises(GoogleDriveUnavailable):
-            service.create_file(
-                file_name="file.txt",
-                stream=BytesIO(b"Hello world"),
-                content_type="text/plain",
-            )
-
-    def test_create_file_does_not_retry_permission_denied(self, no_retry_sleep: None):
-        """A 403 that is a real permission problem is not treated as transient."""
-        forbidden = json.dumps(
-            {
-                "error": {
-                    "code": 403,
-                    "message": "Insufficient permissions",
-                    "errors": [
-                        {
-                            "domain": "global",
-                            "reason": "insufficientFilePermissions",
-                            "message": "Insufficient permissions",
-                        }
-                    ],
-                }
-            }
-        )
-        http_mock_sequence = HttpMockSequence(
-            [
-                ({"status": "200"}, '{"files": []}'),
-                ({"status": "403"}, forbidden),
-            ]
-        )
-        service = drive_service(http=http_mock_sequence)
-
-        with pytest.raises(HttpError) as exc_info:
-            service.create_file(
-                file_name="file.txt",
-                stream=BytesIO(b"Hello world"),
-                content_type="text/plain",
-            )
-
-        assert not isinstance(exc_info.value, GoogleDriveUnavailable)
-
-    @pytest.mark.parametrize("status", ["400", "401", "404"])
-    def test_create_file_does_not_retry_client_error(
-        self, status: str, no_retry_sleep: None
+    @pytest.mark.parametrize(
+        "status,reason,retryable,upload_attempts",
+        [
+            # googleapiclient retries 5xx, 429 and two of the rate-limit reasons
+            # itself, so for those the whole budget is spent before our
+            # classifier ever sees the error.
+            pytest.param("500", None, True, API_NUM_RETRIES + 1, id="server-error"),
+            pytest.param(
+                "429", None, True, API_NUM_RETRIES + 1, id="too-many-requests"
+            ),
+            pytest.param(
+                "403", "rateLimitExceeded", True, API_NUM_RETRIES + 1, id="rate-limit"
+            ),
+            pytest.param(
+                "403",
+                "userRateLimitExceeded",
+                True,
+                API_NUM_RETRIES + 1,
+                id="user-rate-limit",
+            ),
+            # googleapiclient does not recognise this one, so it arrives after a
+            # single attempt -- our classifier is what makes it retryable.
+            pytest.param(
+                "403", "sharingRateLimitExceeded", True, 1, id="sharing-rate-limit"
+            ),
+            # A 403 that is a real permission problem, not a quota one.
+            pytest.param(
+                "403", "insufficientFilePermissions", False, 1, id="permission-denied"
+            ),
+            pytest.param("400", None, False, 1, id="bad-request"),
+            pytest.param("401", None, False, 1, id="unauthorized"),
+            pytest.param("404", None, False, 1, id="not-found"),
+        ],
+    )
+    def test_create_file_error_classification(
+        self,
+        status: str,
+        reason: str | None,
+        retryable: bool,
+        upload_attempts: int,
+        no_retry_sleep: None,
     ):
-        """A non-retryable status fails fast and keeps its original exception.
+        """Only errors worth waiting out become GoogleDriveUnavailable.
 
-        Retrying these for a quarter of an hour would only delay surfacing a
-        misconfiguration, so they must not become GoogleDriveUnavailable.
+        Callers key their own, much longer, retry schedule off that exception,
+        so a misconfiguration must keep its original error and surface at once
+        rather than being retried for a quarter of an hour. Drive muddies this
+        by reporting quota exhaustion with the same 403 as a real permission
+        failure, distinguished only by the reason.
+
+        ``upload_attempts`` records which layer caught the error: more than one
+        means googleapiclient retried within the request before giving up.
         """
+        # googleapiclient reads error.message before it collects error.errors,
+        # so a body without a message never yields parsed error details.
+        body = (
+            json.dumps(
+                {
+                    "error": {
+                        "code": int(status),
+                        "message": reason,
+                        "errors": [{"reason": reason}],
+                    }
+                }
+            )
+            if reason
+            else '{"error": {}}'
+        )
+        # Always offer a full budget of failures; a non-retryable error simply
+        # leaves the surplus unused.
         http_mock_sequence = HttpMockSequence(
-            [
-                ({"status": "200"}, '{"files": []}'),
-                ({"status": status}, '{"error": {}}'),
-            ]
+            [({"status": "200"}, '{"files": []}')]
+            + [({"status": status}, body)] * (API_NUM_RETRIES + 1)
         )
         service = drive_service(http=http_mock_sequence)
 
-        with pytest.raises(HttpError) as exc_info:
+        with pytest.raises(HttpError if not retryable else GoogleDriveUnavailable) as e:
             service.create_file(
                 file_name="file.txt",
                 stream=BytesIO(b"Hello world"),
                 content_type="text/plain",
             )
 
-        assert not isinstance(exc_info.value, GoogleDriveUnavailable)
-        # The upload was attempted exactly once -- no retries.
-        assert len(http_mock_sequence.request_sequence) == 2
+        assert isinstance(e.value, GoogleDriveUnavailable) == retryable
+        # One request for the duplicate check, then the upload attempts.
+        assert len(http_mock_sequence.request_sequence) == upload_attempts + 1
