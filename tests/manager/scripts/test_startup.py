@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from palace.util.datetime_helpers import utc_now
 
 from palace.manager.scripts.startup import (
+    STARTUP_TASKS_DIR,
     _slugify,
     create_startup_task,
     discover_startup_tasks,
@@ -93,6 +94,26 @@ class TestDiscoverStartupTasks:
 
         assert result == {}
         assert "does not exist" in caplog.text
+
+    def test_discover_shipped_startup_tasks(self) -> None:
+        """Every task we actually ship imports and exposes a usable run().
+
+        The other tests here point discovery at `tmp_path`, so nothing else
+        imports `startup_tasks/` -- a task that fails to load would ship green.
+        Discovery logs and skips a module it cannot import, so compare against
+        the files on disk rather than just checking what came back.
+        """
+        expected = {
+            path.stem
+            for path in STARTUP_TASKS_DIR.glob("*.py")
+            if not path.stem.startswith("_")
+        }
+
+        result = discover_startup_tasks(STARTUP_TASKS_DIR)
+
+        assert expected, f"No startup tasks found in {STARTUP_TASKS_DIR}."
+        assert set(result) == expected
+        assert all(callable(run) for run in result.values())
 
 
 class RunStartupTasksFixture:
