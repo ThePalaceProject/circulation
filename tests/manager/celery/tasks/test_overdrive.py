@@ -1820,6 +1820,72 @@ class TestBackfillCollection:
         assert any(lpdm.available for lpdm in pool.delivery_mechanisms)
         assert overdrive.count_backfill_candidates(db.session, collection.id) == 0
 
+    def test_backfill_repairs_a_shared_title_for_every_collection(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
+        redis_fixture: RedisFixture,
+    ) -> None:
+        """Repairing a title through one collection repairs it for all of them.
+
+        The whole run is sequenced on this: collections go in one chain, and each
+        one is cheaper than the last because titles the previous collection already
+        repaired no longer match. If a repair only fixed the collection it ran
+        through, every other collection holding the title would still select it and
+        pay for it again.
+
+        Worth pinning because the second pool is fixed indirectly. Its own
+        ``calculate_work`` never runs -- by the time it would, the shared work is
+        already presentation-ready -- so it depends on ``Work.calculate_presentation``
+        setting a presentation edition on every pool attached to the work, not just
+        the one the repair was reached through.
+        """
+        parent = overdrive_api_fixture.collection
+        child = db.collection(protocol=OverdriveAPI)
+        child.parent = parent
+
+        metadata = json.loads(
+            overdrive_files_fixture.sample_data("overdrive_metadata.json")
+        )
+        pools = [
+            LicensePool.for_foreign_id(
+                db.session,
+                DataSource.OVERDRIVE,
+                Identifier.OVERDRIVE_ID,
+                metadata["id"],
+                collection=collection,
+            )[0]
+            for collection in (parent, child)
+        ]
+        db.session.flush()
+
+        # Two damaged pools, one title.
+        collections = [parent.id, child.id]
+        assert overdrive.count_backfill_candidates(db.session, collections) == 2
+        assert overdrive.count_backfill_titles(db.session, collections) == 1
+
+        # Repair through the parent only, and only one metadata response is queued,
+        # so a second request would fail the test rather than pass silently.
+        overdrive_api_fixture.queue_access_token_response()
+        overdrive_api_fixture.queue_collection_token()
+        overdrive_api_fixture.mock_http.queue_response(
+            200, content=json.dumps(metadata)
+        )
+        overdrive.backfill_collection.delay(parent.id).wait()
+        db.session.expire_all()
+
+        # Both pools are whole, including the one in the collection that never ran.
+        for pool in pools:
+            assert pool.presentation_edition is not None
+            assert pool.work is not None
+            assert pool.work.presentation_ready
+            assert any(lpdm.available for lpdm in pool.delivery_mechanisms)
+
+        # And neither collection would spend another request on it.
+        assert overdrive.count_backfill_candidates(db.session, collections) == 0
+
     def test_counts_distinguish_shared_titles_from_pools(
         self,
         db: DatabaseTransactionFixture,
