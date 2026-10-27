@@ -54,7 +54,7 @@ from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.flask import FlaskAppFixture
+from tests.fixtures.flask import NON_SYSTEM_ADMIN_ROLES, FlaskAppFixture
 from tests.fixtures.services import ServicesFixture
 
 
@@ -228,10 +228,72 @@ class TestCollectionSettings:
         [coll3] = data.get("collections", [])
         assert c3.integration_configuration.id == coll3.get("id")
 
-        coll3_libraries = coll3.get("libraries")
-        assert 1 == len(coll3_libraries)
-        assert "L2" == coll3_libraries[0].get("short_name")
-        assert 14 == coll3_libraries[0].get("ebook_loan_duration")
+        # A librarian gets only the fields needed to pick a collection, never
+        # its settings, which hold vendor credentials.
+        assert coll3 == {
+            "id": c3.integration_configuration.id,
+            "name": c3.name,
+            "protocol": c3.protocol,
+            "goal": Goals.LICENSE_GOAL.value,
+            "marked_for_deletion": False,
+            "parent_id": c2.integration_configuration.id,
+            "libraries": [{"short_name": "L2"}],
+        }
+
+    @pytest.mark.parametrize("role, library_scoped", NON_SYSTEM_ADMIN_ROLES)
+    def test_collections_get_limits_info_for_non_system_admins(
+        self,
+        controller: CollectionSettingsController,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+        role: str,
+        library_scoped: bool,
+    ) -> None:
+        library = db.library(short_name="L1")
+        collection = db.collection(
+            name="Vendor Collection",
+            protocol=OverdriveAPI,
+            settings=db.overdrive_settings(
+                overdrive_client_secret="secret",
+                overdrive_client_key="key",
+                overdrive_website_id="100",
+                external_account_id="1234",
+            ),
+            library=library,
+        )
+        db.integration_library_configuration(
+            collection.integration_configuration,
+            library,
+            OverdriveLibrarySettings(ebook_loan_duration=14),
+        )
+        admin = flask_app_fixture.admin_user(
+            email="admin@example.org",
+            role=role,
+            library=library if library_scoped else None,
+        )
+
+        with flask_app_fixture.test_request_context("/", admin=admin):
+            response = controller.process_collections()
+        assert isinstance(response, Response)
+        data = response.json
+        assert isinstance(data, dict)
+        collections = data.get("collections", [])
+
+        # Every admin who isn't a system admin gets only the fields needed to
+        # pick a collection, and never any settings.
+        [result] = [
+            c for c in collections if c["id"] == collection.integration_configuration.id
+        ]
+        assert result == {
+            "id": collection.integration_configuration.id,
+            "name": "Vendor Collection",
+            "protocol": collection.protocol,
+            "goal": Goals.LICENSE_GOAL.value,
+            "marked_for_deletion": False,
+            "parent_id": None,
+            "libraries": [{"short_name": "L1"}],
+        }
+        assert all("settings" not in c for c in collections)
 
     @pytest.mark.parametrize(
         "post_data,expected,detailed",
@@ -833,10 +895,58 @@ class TestCollectionSettings:
             response = controller.process_delete(parent.integration_configuration.id)
             assert response == CANNOT_DELETE_COLLECTION_WITH_CHILDREN
 
-    def test_collection_self_tests_with_no_identifier(
-        self, controller: CollectionSettingsController
+    @pytest.mark.parametrize(
+        "role, library_scoped",
+        [pytest.param(None, False, id="no-admin"), *NON_SYSTEM_ADMIN_ROLES],
+    )
+    @pytest.mark.parametrize("method", ["GET", "POST"])
+    @pytest.mark.parametrize(
+        "use_real_id",
+        [
+            pytest.param(True, id="real-id"),
+            pytest.param(False, id="unknown-id"),
+        ],
+    )
+    def test_collection_self_tests_requires_system_admin(
+        self,
+        controller: CollectionSettingsController,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+        monkeypatch: MonkeyPatch,
+        role: str | None,
+        library_scoped: bool,
+        method: str,
+        use_real_id: bool,
     ):
-        response = controller.process_collection_self_tests(None)
+        mock_run_self_tests = MagicMock()
+        monkeypatch.setattr(HasSelfTests, "run_self_tests", mock_run_self_tests)
+        library = db.default_library()
+        collection = db.collection(protocol=BoundlessApi, library=library)
+        identifier = collection.integration_configuration.id if use_real_id else -1
+        admin = (
+            flask_app_fixture.admin_user(
+                email="admin@example.org",
+                role=role,
+                library=library if library_scoped else None,
+            )
+            if role
+            else None
+        )
+
+        # The role check runs before the lookup, so an unknown ID also gets an
+        # authorization error and the response does not show which IDs exist.
+        with flask_app_fixture.test_request_context("/", method=method, admin=admin):
+            with pytest.raises(AdminNotAuthorized):
+                controller.process_collection_self_tests(identifier)
+        mock_run_self_tests.assert_not_called()
+
+    def test_collection_self_tests_with_no_identifier(
+        self,
+        controller: CollectionSettingsController,
+        flask_app_fixture: FlaskAppFixture,
+    ):
+        with flask_app_fixture.test_request_context_system_admin("/"):
+            response = controller.process_collection_self_tests(None)
         assert isinstance(response, ProblemDetail)
         assert response.title == MISSING_IDENTIFIER.title
         assert response.detail == MISSING_IDENTIFIER.detail
@@ -920,6 +1030,16 @@ class TestCollectionSettings:
         assert test_results.get("protocol") == collection.protocol
         assert test_results.get("self_test_results") == self_test_results
         assert mock.call_count == 1
+
+        # The response never includes the collection's settings, which hold
+        # vendor credentials.
+        assert set(test_results) == {
+            "id",
+            "name",
+            "protocol",
+            "goal",
+            "self_test_results",
+        }
 
     def test_collection_self_tests_failed_post(
         self,

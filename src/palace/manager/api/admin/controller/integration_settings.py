@@ -11,6 +11,7 @@ from werkzeug.datastructures import ImmutableMultiDict
 
 from palace.util.log import LoggerMixin
 
+from palace.manager.api.admin.controller.base import AdminPermissionsControllerMixin
 from palace.manager.api.admin.problem_details import (
     CANNOT_CHANGE_PROTOCOL,
     FAILED_TO_RUN_SELF_TESTS,
@@ -441,7 +442,18 @@ class IntegrationSettingsController[T: HasIntegrationConfiguration[BaseSettings]
 
 class IntegrationSettingsSelfTestsController[
     T: HasIntegrationConfiguration[BaseSettings]
-](IntegrationSettingsController[T], ABC):
+](IntegrationSettingsController[T], AdminPermissionsControllerMixin, ABC):
+    # The service info fields that the self tests endpoint returns. Settings can
+    # hold credentials, and the admin UI's self tests screen doesn't use them.
+    SELF_TEST_INFO_KEYS = frozenset(
+        {"id", "name", "protocol", "goal", "self_test_results"}
+    )
+
+    @staticmethod
+    def _only_keys(info: dict[str, Any], keys: frozenset[str]) -> dict[str, Any]:
+        """Return a copy of ``info`` that has only the keys in ``keys``."""
+        return {key: value for key, value in info.items() if key in keys}
+
     @abstractmethod
     def run_self_tests(
         self, integration: IntegrationConfiguration
@@ -493,7 +505,10 @@ class IntegrationSettingsSelfTestsController[
         Generic request handler for GET and POST requests to the self tests endpoint.
         This is often used by implementations that don't need to do any additional
         processing of the request data.
+
+        Only system admins can view or run self tests.
         """
+        self.require_system_admin()
         if not identifier:
             return MISSING_IDENTIFIER
         try:
@@ -506,15 +521,19 @@ class IntegrationSettingsSelfTestsController[
 
     def self_tests_process_get(self, identifier: int) -> Response:
         """
-        Return all the details for a given integration along with the self test results
-        for the integration as a JSON response.
+        Return the self test results for a given integration as a JSON response.
 
-        TODO: It doesn't seem like all the details for an integration should be contained
-          in the `self_test_results` key. But this is what the admin ui expects, so for now
-          we'll return everything in that key.
+        The response holds only the fields in `SELF_TEST_INFO_KEYS`, never the
+        integration's settings. It is nested in the `self_test_results` key because
+        this is what the admin UI expects.
+
+        This method does not check permissions. Code that calls it must first call
+        `require_system_admin()`, as `process_self_tests` does.
         """
         integration = self.get_existing_service(identifier)
         info = self.configured_service_info(integration)
+        if info is not None:
+            info = self._only_keys(info, self.SELF_TEST_INFO_KEYS)
         return Response(
             json_serializer({"self_test_results": info}),
             status=200,
@@ -525,6 +544,9 @@ class IntegrationSettingsSelfTestsController[
         """
         Attempt to run the self tests for the given integration and return a response
         indicating whether we were able to run the self tests or not.
+
+        This method does not check permissions. Code that calls it must first call
+        `require_system_admin()`, as `process_self_tests` does.
         """
         integration = self.get_existing_service(identifier)
         results = self.run_self_tests(integration)

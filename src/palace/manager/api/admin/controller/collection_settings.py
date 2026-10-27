@@ -5,7 +5,6 @@ from typing import Any
 import flask
 from flask import Response
 
-from palace.manager.api.admin.controller.base import AdminPermissionsControllerMixin
 from palace.manager.api.admin.controller.integration_settings import (
     IntegrationSettingsSelfTestsController,
 )
@@ -46,8 +45,14 @@ from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailExcep
 
 class CollectionSettingsController(
     IntegrationSettingsSelfTestsController[CirculationApiType],
-    AdminPermissionsControllerMixin,
 ):
+    # The collection fields that admins who aren't system admins can see. These
+    # admins use the collections list only to pick collections. They don't need
+    # the settings, which can hold secrets.
+    LIMITED_SERVICE_INFO_KEYS = frozenset(
+        {"id", "name", "protocol", "goal", "marked_for_deletion", "parent_id"}
+    )
+
     def configured_service_info(
         self, service: IntegrationConfiguration
     ) -> dict[str, Any] | None:
@@ -65,7 +70,9 @@ class CollectionSettingsController(
                 service.collection.export_marc_records
             ).lower()
             if user and user.can_see_collection(service.collection):
-                return service_info
+                if user.is_system_admin():
+                    return service_info
+                return self._only_keys(service_info, self.LIMITED_SERVICE_INFO_KEYS)
         return None
 
     def configured_service_library_info(
@@ -75,7 +82,9 @@ class CollectionSettingsController(
         user = get_request_admin(default=None)
         if library_info:
             if user and user.is_librarian(library_configuration.library):
-                return library_info
+                if user.is_system_admin():
+                    return library_info
+                return {"short_name": library_info["short_name"]}
         return None
 
     def process_collections(self) -> Response | ProblemDetail:

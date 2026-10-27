@@ -37,7 +37,7 @@ from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util.problem_detail import ProblemDetail
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.flask import FlaskAppFixture
+from tests.fixtures.flask import NON_SYSTEM_ADMIN_ROLES, FlaskAppFixture
 from tests.fixtures.services import ServicesFixture
 
 
@@ -536,14 +536,61 @@ class TestMetadataServices:
         )
         assert service is None
 
-    def test_metadata_service_self_tests_with_no_identifier(
-        self, metadata_services_fixture: MetadataServicesFixture
+    @pytest.mark.parametrize(
+        "role, library_scoped",
+        [pytest.param(None, False, id="no-admin"), *NON_SYSTEM_ADMIN_ROLES],
+    )
+    @pytest.mark.parametrize("method", ["GET", "POST"])
+    @pytest.mark.parametrize(
+        "use_real_id",
+        [
+            pytest.param(True, id="real-id"),
+            pytest.param(False, id="unknown-id"),
+        ],
+    )
+    def test_metadata_service_self_tests_requires_system_admin(
+        self,
+        metadata_services_fixture: MetadataServicesFixture,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+        monkeypatch: MonkeyPatch,
+        role: str | None,
+        library_scoped: bool,
+        method: str,
+        use_real_id: bool,
     ):
-        response = (
-            metadata_services_fixture.controller.process_metadata_service_self_tests(
+        mock_run_self_tests = MagicMock()
+        monkeypatch.setattr(NYTBestSellerAPI, "run_self_tests", mock_run_self_tests)
+        metadata_service = metadata_services_fixture.create_nyt_integration()
+        identifier = metadata_service.id if use_real_id else -1
+        admin = (
+            flask_app_fixture.admin_user(
+                email="admin@example.org",
+                role=role,
+                library=db.default_library() if library_scoped else None,
+            )
+            if role
+            else None
+        )
+
+        # The role check runs before the lookup, so an unknown ID also gets an
+        # authorization error and the response does not show which IDs exist.
+        with flask_app_fixture.test_request_context("/", method=method, admin=admin):
+            with pytest.raises(AdminNotAuthorized):
+                metadata_services_fixture.controller.process_metadata_service_self_tests(
+                    identifier
+                )
+        mock_run_self_tests.assert_not_called()
+
+    def test_metadata_service_self_tests_with_no_identifier(
+        self,
+        metadata_services_fixture: MetadataServicesFixture,
+        flask_app_fixture: FlaskAppFixture,
+    ):
+        with flask_app_fixture.test_request_context_system_admin("/"):
+            response = metadata_services_fixture.controller.process_metadata_service_self_tests(
                 None
             )
-        )
         assert isinstance(response, ProblemDetail)
         assert response.title == MISSING_IDENTIFIER.title
         assert response.detail == MISSING_IDENTIFIER.detail
@@ -554,7 +601,7 @@ class TestMetadataServices:
         metadata_services_fixture: MetadataServicesFixture,
         flask_app_fixture: FlaskAppFixture,
     ):
-        with flask_app_fixture.test_request_context("/"):
+        with flask_app_fixture.test_request_context_system_admin("/"):
             response = metadata_services_fixture.controller.process_metadata_service_self_tests(
                 -1
             )
@@ -571,7 +618,7 @@ class TestMetadataServices:
 
         # Make sure that HasSelfTest.prior_test_results() was called and that
         # it is in the response's self tests object.
-        with flask_app_fixture.test_request_context("/"):
+        with flask_app_fixture.test_request_context_system_admin("/"):
             response = metadata_services_fixture.controller.process_metadata_service_self_tests(
                 metadata_service.id
             )
@@ -592,13 +639,23 @@ class TestMetadataServices:
                 "test": "results"
             }
 
+            # The response never includes the integration's settings, which
+            # hold the API key.
+            assert set(response_metadata_service) == {
+                "id",
+                "name",
+                "protocol",
+                "goal",
+                "self_test_results",
+            }
+
     def test_metadata_service_self_tests_test_get_not_supported(
         self,
         metadata_services_fixture: MetadataServicesFixture,
         flask_app_fixture: FlaskAppFixture,
     ):
         metadata_service = metadata_services_fixture.create_novelist_integration()
-        with flask_app_fixture.test_request_context("/"):
+        with flask_app_fixture.test_request_context_system_admin("/"):
             response = metadata_services_fixture.controller.process_metadata_service_self_tests(
                 metadata_service.id
             )
@@ -632,7 +689,7 @@ class TestMetadataServices:
         monkeypatch.setattr(NYTBestSellerAPI, "run_self_tests", mock_run_self_tests)
 
         controller = metadata_services_fixture.controller
-        with flask_app_fixture.test_request_context("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             response = controller.process_metadata_service_self_tests(
                 metadata_service.id
             )
@@ -655,7 +712,7 @@ class TestMetadataServices:
     ):
         metadata_service = metadata_services_fixture.create_novelist_integration()
         controller = metadata_services_fixture.controller
-        with flask_app_fixture.test_request_context("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             response = controller.process_metadata_service_self_tests(
                 metadata_service.id
             )

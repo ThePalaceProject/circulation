@@ -6,7 +6,6 @@ from typing import Any
 import flask
 from flask import Response
 
-from palace.manager.api.admin.controller.base import AdminPermissionsControllerMixin
 from palace.manager.api.admin.controller.integration_settings import (
     IntegrationSettingsSelfTestsController,
     UpdatedLibrarySettingsTuple,
@@ -44,7 +43,6 @@ from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailExcep
 
 class PatronAuthServicesController(
     IntegrationSettingsSelfTestsController[AuthenticationProviderType],
-    AdminPermissionsControllerMixin,
 ):
     @property
     def basic_auth_protocols(self) -> set[str]:
