@@ -17,7 +17,6 @@ from palace.manager.celery.tasks.playtime_entries import (
     DRIVE_MAX_RETRIES,
     REPORT_DATE_FORMAT,
     _fetch_distinct_eligible_data_source_names,
-    _report_uid,
     generate_playtime_report,
     sum_playtime_entries,
 )
@@ -808,9 +807,9 @@ class TestGeneratePlaytimeReport:
             "loan count",
         ]
 
-        assert (
-            f"{cutoff.strftime(REPORT_DATE_FORMAT)}-{until.strftime(REPORT_DATE_FORMAT)}-playtime-summary-test_cm-ds_a-"
-            in ds_a_filename
+        assert ds_a_filename == (
+            f"{cutoff.strftime(REPORT_DATE_FORMAT)}-{until.strftime(REPORT_DATE_FORMAT)}"
+            f"-playtime-summary-test_cm-ds_a.csv"
         )
 
         assert ds_a_data == [
@@ -867,9 +866,9 @@ class TestGeneratePlaytimeReport:
             ],
         ]
 
-        assert (
-            f"{cutoff.strftime(REPORT_DATE_FORMAT)}-{until.strftime(REPORT_DATE_FORMAT)}-playtime-summary-test_cm-ds_b-"
-            in ds_b_filename
+        assert ds_b_filename == (
+            f"{cutoff.strftime(REPORT_DATE_FORMAT)}-{until.strftime(REPORT_DATE_FORMAT)}"
+            f"-playtime-summary-test_cm-ds_b.csv"
         )
 
         assert ds_b_data == [
@@ -906,9 +905,9 @@ class TestGeneratePlaytimeReport:
             ],  # Identifier with edition
         ]
 
-        assert (
-            f"{cutoff.strftime(REPORT_DATE_FORMAT)}-{until.strftime(REPORT_DATE_FORMAT)}-playtime-summary-test_cm-ds_c-"
-            in ds_c_filename
+        assert ds_c_filename == (
+            f"{cutoff.strftime(REPORT_DATE_FORMAT)}-{until.strftime(REPORT_DATE_FORMAT)}"
+            f"-playtime-summary-test_cm-ds_c.csv"
         )
 
         assert ds_c_data == [
@@ -1215,36 +1214,6 @@ class TestGeneratePlaytimeReport:
             0,
         )
         return mock_google_drive_service
-
-    def test_report_uid_is_stable_for_the_same_report(self):
-        """The file-name id depends only on the report's identity.
-
-        This is what makes the task safe to retry: the same report always
-        resolves to the same Drive file name, so a retry can recognise work an
-        earlier attempt already finished.
-        """
-        kwargs: dict[str, Any] = dict(
-            reporting_name="test cm",
-            data_source_name="ds_a",
-            start=date(2025, 1, 1),
-            until=date(2025, 1, 31),
-        )
-
-        assert _report_uid(**kwargs) == _report_uid(**kwargs)
-
-        # ... but any component of that identity changes it.
-        assert _report_uid(**{**kwargs, "data_source_name": "ds_b"}) != _report_uid(
-            **kwargs
-        )
-        assert _report_uid(**{**kwargs, "reporting_name": "other cm"}) != _report_uid(
-            **kwargs
-        )
-        assert _report_uid(**{**kwargs, "start": date(2025, 2, 1)}) != _report_uid(
-            **kwargs
-        )
-        assert _report_uid(**{**kwargs, "until": date(2025, 2, 28)}) != _report_uid(
-            **kwargs
-        )
 
     def test_generate_playtime_report_file_name_is_stable_across_runs(
         self,

@@ -5,7 +5,6 @@ import os
 import random
 import tempfile
 import time
-import uuid
 from collections import defaultdict
 from collections.abc import Iterable
 from datetime import date, datetime, timedelta, timezone
@@ -40,7 +39,6 @@ from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.time_tracking import PlaytimeEntry, PlaytimeSummary
-from palace.manager.util.uuid import uuid_encode
 
 if TYPE_CHECKING:
     from googleapiclient._apis.drive.v3 import File
@@ -167,12 +165,6 @@ FOLDER_LOCK_ACQUIRE_TIMEOUT: float | int = 60
 # Exposed as a module-level constant so tests can set it to 0.
 FOLDER_CREATION_JITTER_MAX: int = 10
 
-# Namespace for deriving the stable id embedded in each report's file name.
-# Any fixed UUID would do, but this value must never change: the derived names
-# are how a retry recognises reports that an earlier attempt already uploaded,
-# so changing it would cause duplicate uploads of existing reports.
-REPORT_UUID_NAMESPACE = uuid.UUID("6714036e-d424-46bc-993a-d474b42a9909")
-
 # How many times the task re-runs itself when Google Drive is unavailable, and
 # the base delay (seconds) for the exponential backoff between those attempts.
 # GoogleDriveService already retries within a single request, but that budget
@@ -200,10 +192,11 @@ def generate_playtime_report(
     a shared Google Drive. If no date range is supplied, it will include summaries from the previous month.
 
     The task is retried when Drive is unavailable. Because a retry re-runs the
-    whole data source loop, each report's file name is derived from the report's
-    identity rather than randomly generated, and a report already present in
-    Drive is skipped -- so a retry resumes where the failed attempt stopped
-    instead of uploading a second copy of everything that already succeeded.
+    whole data source loop, each report's file name is determined entirely by
+    the report's date range, data source and circulation manager, and a report
+    already present in Drive is skipped -- so a retry resumes where the failed
+    attempt stopped instead of uploading a second copy of everything that
+    already succeeded.
     """
 
     default_start, default_until = (
@@ -250,13 +243,7 @@ def generate_playtime_report(
             reporting_name_with_no_spaces = (
                 f"{reporting_name}-{data_source_name}".replace(" ", "_")
             )
-            uid = _report_uid(
-                reporting_name=reporting_name,
-                data_source_name=data_source_name,
-                start=start,
-                until=until,
-            )
-            file_name_prefix = f"{formatted_start_date}-{formatted_until_date}-playtime-summary-{reporting_name_with_no_spaces}-{uid}"
+            file_name_prefix = f"{formatted_start_date}-{formatted_until_date}-playtime-summary-{reporting_name_with_no_spaces}"
             linked_file_name = f"{file_name_prefix}.{link_extension}"
 
             nested_folders = [
@@ -333,36 +320,6 @@ def generate_playtime_report(
                     f"Stored {'/'.join(nested_folders + [linked_file_name])} in Google Drive"
                     f"{'' if not root_folder_id else f' under the parent folder (id={root_folder_id}'}."
                 )
-
-
-def _report_uid(
-    *,
-    reporting_name: str,
-    data_source_name: str,
-    start: date,
-    until: date,
-) -> str:
-    """
-    Derive the stable id embedded in a report's file name.
-
-    This used to be a single random ``uuid4`` per task invocation, which meant
-    every attempt produced differently-named files. That defeated
-    :meth:`GoogleDriveService.create_file`'s duplicate guard and made the task
-    unsafe to retry, because a retry after a partial failure would upload a
-    second copy of every report that had already succeeded. Deriving the id from
-    the report's identity instead makes the name reproducible, so a retry can
-    recognise -- and skip -- its own earlier work.
-
-    :param reporting_name: The name identifying this circulation manager.
-    :param data_source_name: The data source the report covers.
-    :param start: First day of the reporting period.
-    :param until: Last day of the reporting period.
-    :return: A compact, URL-safe id, stable for a given set of arguments.
-    """
-    key = "|".join(
-        [reporting_name, data_source_name, start.isoformat(), until.isoformat()]
-    )
-    return uuid_encode(uuid.uuid5(REPORT_UUID_NAMESPACE, key))
 
 
 def _create_report_folders(
