@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import ssl
 from io import IOBase
 from typing import IO, TYPE_CHECKING, Any, Protocol, TypeVar, cast
 
+from google.auth.exceptions import TransportError
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseUpload
+from httplib2 import ServerNotFoundError
 
 from palace.util.exceptions import BasePalaceException
 from palace.util.log import LoggerMixin
@@ -40,6 +43,34 @@ RETRYABLE_403_REASONS = frozenset(
         "userRateLimitExceeded",
         "sharingRateLimitExceeded",
     }
+)
+
+# Network-level failures that mean Drive could not be reached, as opposed to
+# Drive answering with an error. googleapiclient retries these itself and
+# re-raises the last one once ``num_retries`` is spent, so seeing one here means
+# the outage outlasted the in-request budget -- the same situation a retryable
+# 5xx leaves us in, and it must be classified the same way or the caller's
+# longer retry never runs.
+#
+# This mirrors googleapiclient's own retryable set exactly. It catches
+# ``ssl.SSLError`` and ``ServerNotFoundError`` directly; ``socket.timeout`` is an
+# alias of ``TimeoutError``; and the raw-``OSError`` branch it guards by errno
+# (ETIMEDOUT, EPIPE, ECONNABORTED, ECONNREFUSED, ECONNRESET) needs no separate
+# entry because ``OSError`` maps each of those to a ``ConnectionError`` or
+# ``TimeoutError`` subclass on construction. Listing ``OSError`` itself would be
+# wrong: googleapiclient re-raises every other errno without retrying.
+#
+# ``TransportError`` is the exception to the mirror. googleapiclient does not
+# retry it at all, so a token refresh that fails mid-outage escapes on the first
+# attempt with no backoff; it is still a transient network failure and belongs on
+# the longer schedule. Bad credentials raise ``RefreshError``, which is a sibling
+# rather than a subclass, so that keeps failing fast.
+UNREACHABLE_ERRORS: tuple[type[Exception], ...] = (
+    ConnectionError,
+    TimeoutError,
+    ssl.SSLError,
+    ServerNotFoundError,
+    TransportError,
 )
 
 T_co = TypeVar("T_co", covariant=True)
@@ -95,7 +126,9 @@ class GoogleDriveService(LoggerMixin):
         jitter for 5xx responses and socket errors, which covers a brief blip
         within the single call. A failure that survives that budget is
         re-raised as :class:`GoogleDriveUnavailable` so the caller can retry on
-        a much longer schedule; non-retryable statuses propagate unchanged.
+        a much longer schedule -- whether Drive answered with a retryable status
+        or could not be reached at all. Non-retryable statuses, and errors that
+        mean the request itself was bad, propagate unchanged.
         """
         try:
             return request.execute(num_retries=API_NUM_RETRIES)
@@ -106,6 +139,8 @@ class GoogleDriveService(LoggerMixin):
                     f"(status={e.resp.status}): {e}"
                 ) from e
             raise
+        except UNREACHABLE_ERRORS as e:
+            raise GoogleDriveUnavailable(f"Could not reach Google Drive: {e!r}") from e
 
     def get_file(self, name: str, parent_folder_id: str | None = None) -> File | None:
         """

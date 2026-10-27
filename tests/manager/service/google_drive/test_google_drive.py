@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+import errno
 import json
+import ssl
 from io import BytesIO
-from typing import TYPE_CHECKING
+from typing import Any
 from urllib.parse import unquote_plus
 
 import pytest
+from google.auth.exceptions import RefreshError, TransportError
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import HttpMockSequence
+from httplib2 import ServerNotFoundError
 
 from palace.manager.service.google_drive.google_drive import (
     API_NUM_RETRIES,
@@ -16,8 +20,29 @@ from palace.manager.service.google_drive.google_drive import (
     GoogleDriveUnavailable,
 )
 
-if TYPE_CHECKING:
-    pass
+
+class UnreachableHttp(HttpMockSequence):
+    """A transport that answers once, then fails at the socket level.
+
+    ``HttpMockSequence`` can only produce HTTP responses, so an outage where
+    Drive cannot be reached at all needs a transport that raises instead. The
+    one canned response satisfies ``create_file``'s duplicate check, putting the
+    failure on the upload itself -- the call that failed in production.
+    """
+
+    def __init__(self, error: Exception) -> None:
+        canned = [({"status": "200"}, '{"files": []}')]
+        super().__init__(canned)
+        self.error = error
+        self.canned_remaining = len(canned)
+        self.upload_attempts = 0
+
+    def request(self, *args: Any, **kwargs: Any) -> Any:
+        if self.canned_remaining:
+            self.canned_remaining -= 1
+            return super().request(*args, **kwargs)
+        self.upload_attempts += 1
+        raise self.error
 
 
 def drive_service(http: HttpMockSequence) -> GoogleDriveService:
@@ -361,3 +386,104 @@ class TestGoogleDriveService:
         assert isinstance(e.value, GoogleDriveUnavailable) == retryable
         # One request for the duplicate check, then the upload attempts.
         assert len(http_mock_sequence.request_sequence) == upload_attempts + 1
+
+    @pytest.mark.parametrize(
+        "error,upload_attempts",
+        [
+            pytest.param(
+                ConnectionResetError(errno.ECONNRESET, "Connection reset by peer"),
+                API_NUM_RETRIES + 1,
+                id="connection-reset",
+            ),
+            pytest.param(
+                TimeoutError(errno.ETIMEDOUT, "Connection timed out"),
+                API_NUM_RETRIES + 1,
+                id="timeout",
+            ),
+            pytest.param(
+                BrokenPipeError(errno.EPIPE, "Broken pipe"),
+                API_NUM_RETRIES + 1,
+                id="broken-pipe",
+            ),
+            pytest.param(
+                ssl.SSLError("record layer failure"), API_NUM_RETRIES + 1, id="ssl"
+            ),
+            pytest.param(
+                ServerNotFoundError("Unable to find the server"),
+                API_NUM_RETRIES + 1,
+                id="dns",
+            ),
+            pytest.param(
+                TransportError("token refresh failed"), 1, id="auth-transport"
+            ),
+        ],
+    )
+    def test_create_file_wraps_unreachable_errors(
+        self,
+        error: Exception,
+        upload_attempts: int,
+        no_retry_sleep: None,
+    ):
+        """An outage that hides Drive entirely is retryable, like a 5xx is.
+
+        A 500 means Drive answered; a reset socket or a failed DNS lookup means
+        it never did. Both leave the report unwritten for the same transient
+        reason, so both have to reach the caller as GoogleDriveUnavailable --
+        otherwise the longer, task-level retry never runs and a network blip
+        costs the month's report, exactly as a 500 used to.
+
+        ``upload_attempts`` records whether googleapiclient retried before
+        giving up. It does for socket-level errors; a token refresh failing
+        mid-outage raises TransportError, which it does not retry at all, so
+        that one arrives here after a single attempt.
+        """
+        http = UnreachableHttp(error)
+        service = drive_service(http=http)
+
+        with pytest.raises(GoogleDriveUnavailable) as raised:
+            service.create_file(
+                file_name="file.txt",
+                stream=BytesIO(b"Hello world"),
+                content_type="text/plain",
+            )
+
+        assert raised.value.__cause__ is error
+        assert http.upload_attempts == upload_attempts
+
+    @pytest.mark.parametrize(
+        "error",
+        [
+            pytest.param(
+                PermissionError(errno.EACCES, "Permission denied"),
+                id="unrelated-oserror",
+            ),
+            pytest.param(
+                RefreshError("invalid_grant: account disabled"), id="bad-credentials"
+            ),
+        ],
+    )
+    def test_create_file_does_not_wrap_permanent_errors(
+        self, error: Exception, no_retry_sleep: None
+    ):
+        """Failures that waiting cannot fix keep their own type.
+
+        Neither of these is a transient outage: a local OSError that is not one
+        of googleapiclient's retryable errnos is a genuine fault, and a
+        RefreshError means the credentials themselves are rejected. Wrapping
+        either would hide a permanent problem behind a quarter of an hour of
+        pointless retries. RefreshError is a sibling of TransportError rather
+        than a subclass, which is what keeps them on opposite sides of this line.
+        """
+        http = UnreachableHttp(error)
+        service = drive_service(http=http)
+
+        with pytest.raises(type(error)) as raised:
+            service.create_file(
+                file_name="file.txt",
+                stream=BytesIO(b"Hello world"),
+                content_type="text/plain",
+            )
+
+        assert raised.value is error
+        # Given up on immediately, with no retrying of any kind.
+        assert http.upload_attempts == 1
