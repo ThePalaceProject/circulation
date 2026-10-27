@@ -119,7 +119,7 @@ class GoogleDriveService(LoggerMixin):
     def __init__(self, api_client: DriveResource) -> None:
         self.api_client = api_client
 
-    def _execute(self, request: _ApiRequest[T_co]) -> T_co:
+    def _execute(self, request: _ApiRequest[T_co], operation: str) -> T_co:
         """Run a Drive API request, retrying and classifying transient failures.
 
         ``num_retries`` turns on googleapiclient's exponential backoff with
@@ -129,18 +129,25 @@ class GoogleDriveService(LoggerMixin):
         a much longer schedule -- whether Drive answered with a retryable status
         or could not be reached at all. Non-retryable statuses, and errors that
         mean the request itself was bad, propagate unchanged.
+
+        :param request: The built Drive request to run.
+        :param operation: What the request was doing, named in any raised
+            error. A caller that retries may surface nothing but this message,
+            so it has to say which call failed on its own.
         """
         try:
             return request.execute(num_retries=API_NUM_RETRIES)
         except HttpError as e:
             if _is_retryable(e):
                 raise GoogleDriveUnavailable(
-                    f"Google Drive returned a retryable error "
+                    f"Google Drive returned a retryable error while {operation} "
                     f"(status={e.resp.status}): {e}"
                 ) from e
             raise
         except UNREACHABLE_ERRORS as e:
-            raise GoogleDriveUnavailable(f"Could not reach Google Drive: {e!r}") from e
+            raise GoogleDriveUnavailable(
+                f"Could not reach Google Drive while {operation}: {e!r}"
+            ) from e
 
     def get_file(self, name: str, parent_folder_id: str | None = None) -> File | None:
         """
@@ -174,7 +181,8 @@ class GoogleDriveService(LoggerMixin):
                 orderBy="createdTime",
                 supportsAllDrives=True,
                 includeItemsFromAllDrives=True,
-            )
+            ),
+            operation=f"looking up {name!r}",
         )
 
         files: list[File] = results["files"]
@@ -210,7 +218,8 @@ class GoogleDriveService(LoggerMixin):
                 media_body=media,
                 fields="*",
                 supportsAllDrives=True,
-            )
+            ),
+            operation=f"uploading {file_name!r}",
         )
 
         self.log.info(f"Stored '{file_name}' in parent_folder[{parent_folder_id}].")
@@ -240,7 +249,8 @@ class GoogleDriveService(LoggerMixin):
                     self.api_client.files().create(
                         body=body,
                         supportsAllDrives=True,
-                    )
+                    ),
+                    operation=f"creating folder {folder_name!r}",
                 )
 
             results.append(folder)

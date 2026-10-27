@@ -6,7 +6,8 @@ import random
 import tempfile
 import time
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Generator, Iterable
+from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
 from io import TextIOWrapper
 from typing import TYPE_CHECKING, Any, Protocol
@@ -169,8 +170,18 @@ FOLDER_CREATION_JITTER_MAX: int = 10
 # the base delay (seconds) for the exponential backoff between those attempts.
 # GoogleDriveService already retries within a single request, but that budget
 # only spans ~30s; these cover a Drive outage lasting into the minutes. 4
-# retries at a 60s base gives roughly 60s, 120s, 240s and 480s -- about a
-# quarter of an hour in total.
+# retries at a 60s base gives 60s, 120s, 240s and 480s -- a quarter of an hour
+# in total.
+#
+# Those delays hold only because jitter is disabled on the task. Celery's
+# retry_jitter defaults to True, which would pick each delay at random from
+# between zero and the figures above: the schedule would cover about half as
+# long on average, and the first retry could follow almost immediately. The
+# floor matters as much as the total, because the delay is also what lets
+# Drive's list API catch up with the previous attempt's writes before the skip
+# check reads them. Spreading load across circulation managers is not a concern
+# here -- that is what FOLDER_CREATION_JITTER_MAX does, on every run rather
+# than only during an outage.
 DRIVE_MAX_RETRIES = 4
 DRIVE_RETRY_BACKOFF = 60
 
@@ -181,6 +192,7 @@ DRIVE_RETRY_BACKOFF = 60
     max_retries=DRIVE_MAX_RETRIES,
     autoretry_for=(GoogleDriveUnavailable,),
     retry_backoff=DRIVE_RETRY_BACKOFF,
+    retry_jitter=False,
 )
 def generate_playtime_report(
     task: Task,
@@ -252,74 +264,98 @@ def generate_playtime_report(
                 reporting_name,
                 str(start.year),
             ]
+            report_path = "/".join(nested_folders + [linked_file_name])
 
-            leaf_folder = _create_report_folders(
-                task=task,
-                google_drive=google_drive,
-                redis_client=redis_client,
-                nested_folders=nested_folders,
-                root_folder_id=root_folder_id,
-                data_source_name=data_source_name,
-            )
-
-            # Skip reports a previous attempt of this task already uploaded. The
-            # folder hierarchy is created first so that this check can run before
-            # the report is regenerated, which keeps a retry from repeating the
-            # expensive query and CSV build for work that is already done.
-            if google_drive.get_file(
-                name=linked_file_name, parent_folder_id=leaf_folder["id"]
-            ):
-                task.log.info(
-                    f"{'/'.join(nested_folders + [linked_file_name])} already exists in "
-                    "Google Drive; skipping. Remove the existing file if you need to "
-                    "regenerate this report."
-                )
-                continue
-
-            # Write to a temporary file so we don't overflow the memory
-            with tempfile.NamedTemporaryFile(
-                "w+b",
-                prefix=f"{file_name_prefix}",
-                suffix=link_extension,
-            ) as temp:
-                # Write the data as a CSV
-                writer = csv.writer(
-                    TextIOWrapper(temp, encoding="utf-8", write_through=True)
-                )
-                _produce_report(
-                    writer,
-                    date_label=report_date_label,
-                    records=_fetch_report_records(
-                        session=session,
-                        start=start,
-                        until=until,
-                        data_source_name=data_source_name,
-                    ),
+            with _drive_failures_naming(report_path):
+                leaf_folder = _create_report_folders(
+                    task=task,
+                    google_drive=google_drive,
+                    redis_client=redis_client,
+                    nested_folders=nested_folders,
+                    root_folder_id=root_folder_id,
+                    data_source_name=data_source_name,
                 )
 
-                # store file
-                try:
-                    google_drive.create_file(
-                        file_name=linked_file_name,
-                        parent_folder_id=leaf_folder["id"],
-                        content_type="text/csv",
-                        stream=temp,
-                    )
-                except FileExistsError:
-                    # The check above can miss a file this task uploaded moments
-                    # earlier, because Drive's list API lags its writes. Losing
-                    # that race means the report is already stored, which is the
-                    # outcome we wanted, so treat it as success.
+                # Skip reports a previous attempt of this task already uploaded. The
+                # folder hierarchy is created first so that this check can run before
+                # the report is regenerated, which keeps a retry from repeating the
+                # expensive query and CSV build for work that is already done.
+                if google_drive.get_file(
+                    name=linked_file_name, parent_folder_id=leaf_folder["id"]
+                ):
                     task.log.info(
-                        f"{'/'.join(nested_folders + [linked_file_name])} was already "
-                        "present in Google Drive; skipping."
+                        f"{report_path} already exists in "
+                        "Google Drive; skipping. Remove the existing file if you need to "
+                        "regenerate this report."
                     )
                     continue
 
-                task.log.info(
-                    f"Stored {'/'.join(nested_folders + [linked_file_name])} in Google Drive"
-                    f"{'' if not root_folder_id else f' under the parent folder (id={root_folder_id}'}."
-                )
+                # Write to a temporary file so we don't overflow the memory
+                with tempfile.NamedTemporaryFile(
+                    "w+b",
+                    prefix=f"{file_name_prefix}",
+                    suffix=link_extension,
+                ) as temp:
+                    # Write the data as a CSV
+                    writer = csv.writer(
+                        TextIOWrapper(temp, encoding="utf-8", write_through=True)
+                    )
+                    _produce_report(
+                        writer,
+                        date_label=report_date_label,
+                        records=_fetch_report_records(
+                            session=session,
+                            start=start,
+                            until=until,
+                            data_source_name=data_source_name,
+                        ),
+                    )
+
+                    # store file
+                    try:
+                        google_drive.create_file(
+                            file_name=linked_file_name,
+                            parent_folder_id=leaf_folder["id"],
+                            content_type="text/csv",
+                            stream=temp,
+                        )
+                    except FileExistsError:
+                        # The check above can miss a file this task uploaded moments
+                        # earlier, because Drive's list API lags its writes. Losing
+                        # that race means the report is already stored, which is the
+                        # outcome we wanted, so treat it as success.
+                        task.log.info(
+                            f"{report_path} was already "
+                            "present in Google Drive; skipping."
+                        )
+                        continue
+
+                    task.log.info(
+                        f"Stored {report_path} in Google Drive"
+                        f"{'' if not root_folder_id else f' under the parent folder (id={root_folder_id}'}."
+                    )
+
+
+@contextmanager
+def _drive_failures_naming(report_path: str) -> Generator[None]:
+    """Name the report in any Drive failure raised inside the block.
+
+    A run that exhausts its retries ends with this exception, and that message
+    is all the operator gets to tell them which report was left unwritten. The
+    service layer names the Drive call that failed but cannot know the report it
+    belonged to, so the path is attached here, where it is.
+
+    Re-raising the same type keeps the task's ``autoretry_for`` applicable, so
+    adding the path costs no retries.
+
+    :param report_path: The report's full path in Drive, folders included.
+    """
+    try:
+        yield
+    except GoogleDriveUnavailable as e:
+        raise GoogleDriveUnavailable(
+            f"Failed to store report {report_path}: {e}"
+        ) from e
 
 
 def _create_report_folders(

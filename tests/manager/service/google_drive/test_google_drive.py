@@ -30,8 +30,8 @@ class UnreachableHttp(HttpMockSequence):
     failure on the upload itself -- the call that failed in production.
     """
 
-    def __init__(self, error: Exception) -> None:
-        canned = [({"status": "200"}, '{"files": []}')]
+    def __init__(self, error: Exception, canned_responses: int = 1) -> None:
+        canned = [({"status": "200"}, '{"files": []}')] * canned_responses
         super().__init__(canned)
         self.error = error
         self.canned_remaining = len(canned)
@@ -487,3 +487,57 @@ class TestGoogleDriveService:
         assert raised.value is error
         # Given up on immediately, with no retrying of any kind.
         assert http.upload_attempts == 1
+
+    @pytest.mark.parametrize(
+        "call,canned_responses,operation",
+        [
+            pytest.param(
+                lambda service: service.get_file(name="report.csv"),
+                0,
+                "looking up 'report.csv'",
+                id="lookup",
+            ),
+            pytest.param(
+                lambda service: service.create_file(
+                    file_name="report.csv",
+                    stream=BytesIO(b"Hello world"),
+                    content_type="text/csv",
+                ),
+                1,
+                "uploading 'report.csv'",
+                id="upload",
+            ),
+            pytest.param(
+                lambda service: service.create_nested_folders_if_not_exist(
+                    folders=["Usage Reports"]
+                ),
+                1,
+                "creating folder 'Usage Reports'",
+                id="folder-creation",
+            ),
+        ],
+    )
+    def test_unavailable_error_names_the_failed_call(
+        self,
+        call: Any,
+        canned_responses: int,
+        operation: str,
+        no_retry_sleep: None,
+    ):
+        """Every Drive call says what it was doing when it failed.
+
+        A caller that retries may surface nothing but this message, and the
+        three calls fail for the same reasons, so naming the one that failed is
+        what distinguishes a report that could not be uploaded from one whose
+        folder could not be created.
+        """
+        service = drive_service(
+            http=UnreachableHttp(
+                ConnectionResetError(errno.ECONNRESET, "reset"), canned_responses
+            )
+        )
+
+        with pytest.raises(GoogleDriveUnavailable) as raised:
+            call(service)
+
+        assert operation in str(raised.value)

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import csv
+import sys
 from datetime import date, datetime, timedelta, timezone
 from io import IOBase, StringIO
 from typing import Any, Literal
 from unittest.mock import DEFAULT, create_autospec
 
 import pytest
+from celery.utils.time import get_exponential_backoff_interval
 from sqlalchemy.sql.expression import and_, null
 
 from palace.util.datetime_helpers import previous_months, utc_now
@@ -1214,6 +1216,69 @@ class TestGeneratePlaytimeReport:
             0,
         )
         return mock_google_drive_service
+
+    def test_generate_playtime_report_retry_schedule(self):
+        """The retry delays are the fixed ones the constants document.
+
+        Celery's ``retry_jitter`` defaults to True, which would draw each delay
+        at random from between zero and the figures below -- reaching about half
+        as far on average, and allowing the first retry almost immediately. The
+        task turns it off, so this pins the total as well as the one-minute
+        floor, which is also what gives Drive's list API time to catch up with
+        the previous attempt's writes before the skip check reads them.
+        """
+        assert generate_playtime_report.retry_jitter is False
+
+        delays = [
+            get_exponential_backoff_interval(
+                factor=generate_playtime_report.retry_backoff,
+                retries=retry,
+                maximum=sys.maxsize,
+                full_jitter=generate_playtime_report.retry_jitter,
+            )
+            for retry in range(generate_playtime_report.max_retries)
+        ]
+
+        assert delays == [60, 120, 240, 480]
+        assert sum(delays) == 15 * 60
+
+    def test_generate_playtime_report_names_the_report_in_drive_failures(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        services_fixture: ServicesFixture,
+        redis_fixture: RedisFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        """A run that gives up says which report it failed to store.
+
+        The task uploads one report per data source, and the exception ending
+        the run is all the operator gets to tell them which one was left
+        unwritten. Drive's own error knows the call that failed but not the
+        report it belonged to, so the path has to be added by the task.
+        """
+        mock_drive = self._setup_single_collection_report(
+            db, services_fixture, monkeypatch
+        )
+        mock_drive.create_file.side_effect = GoogleDriveUnavailable(
+            "Could not reach Google Drive while uploading 'report.csv': boom"
+        )
+        start, until = previous_months(number_of_months=1)
+
+        with celery_fixture.patch_retry_backoff():
+            result = generate_playtime_report.delay().get(propagate=False)
+
+        assert isinstance(result, GoogleDriveUnavailable)
+        message = str(result)
+        # The whole path, so the report is identifiable without guessing which
+        # folder it landed in.
+        assert f"ds_a/Usage Reports/test cm/{start.year}/" in message
+        assert (
+            f"{start.strftime(REPORT_DATE_FORMAT)}-{until.strftime(REPORT_DATE_FORMAT)}"
+            f"-playtime-summary-test_cm-ds_a.csv" in message
+        )
+        # ... without losing what Drive actually said.
+        assert "Could not reach Google Drive while uploading" in message
 
     def test_generate_playtime_report_file_name_is_stable_across_runs(
         self,
