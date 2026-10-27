@@ -558,7 +558,12 @@ class TestMetadataServices:
         library_scoped: bool,
         method: str,
         use_real_id: bool,
-    ):
+    ) -> None:
+        """
+        Only a system admin can view or run metadata service self tests. Other
+        admins, and requests with no admin, get an authorization error, and no self
+        test runs.
+        """
         mock_run_self_tests = MagicMock()
         monkeypatch.setattr(NYTBestSellerAPI, "run_self_tests", mock_run_self_tests)
         metadata_service = metadata_services_fixture.create_nyt_integration()

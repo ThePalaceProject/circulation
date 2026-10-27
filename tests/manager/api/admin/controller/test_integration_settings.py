@@ -148,7 +148,11 @@ class TestIntegrationSettingsSelfTestsController:
         info: dict[str, object],
         keys: frozenset[str],
         expected: dict[str, object],
-    ):
+    ) -> None:
+        """
+        _only_keys() returns a new dict that has only the given keys. It does not
+        change the input dict.
+        """
         original = dict(info)
         result = IntegrationSettingsSelfTestsController._only_keys(info, keys)
         assert result == expected

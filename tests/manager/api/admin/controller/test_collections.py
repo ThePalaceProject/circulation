@@ -249,6 +249,10 @@ class TestCollectionSettings:
         role: str,
         library_scoped: bool,
     ) -> None:
+        """
+        An admin who isn't a system admin gets only the collection fields needed to
+        pick a collection. The response never holds the collection's settings.
+        """
         library = db.library(short_name="L1")
         collection = db.collection(
             name="Vendor Collection",
@@ -917,7 +921,11 @@ class TestCollectionSettings:
         library_scoped: bool,
         method: str,
         use_real_id: bool,
-    ):
+    ) -> None:
+        """
+        Only a system admin can view or run collection self tests. Other admins, and
+        requests with no admin, get an authorization error, and no self test runs.
+        """
         mock_run_self_tests = MagicMock()
         monkeypatch.setattr(HasSelfTests, "run_self_tests", mock_run_self_tests)
         library = db.default_library()

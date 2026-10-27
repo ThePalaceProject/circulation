@@ -1069,7 +1069,11 @@ class TestPatronAuth:
         library_scoped: bool,
         method: str,
         use_real_id: bool,
-    ):
+    ) -> None:
+        """
+        Only a system admin can view or run patron auth self tests. Other admins, and
+        requests with no admin, get an authorization error, and no self test runs.
+        """
         mock_run_self_tests = MagicMock()
         monkeypatch.setattr(HasSelfTests, "run_self_tests", mock_run_self_tests)
         auth_service = db.simple_auth_integration(library=default_library)
@@ -1219,7 +1223,7 @@ class TestPatronAuth:
         db: DatabaseTransactionFixture,
         default_library: Library,
         monkeypatch: MonkeyPatch,
-    ):
+    ) -> None:
         """
         When configured_service_info() returns None, the response holds None in
         self_test_results.
