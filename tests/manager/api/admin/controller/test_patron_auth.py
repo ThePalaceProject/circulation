@@ -1212,6 +1212,34 @@ class TestPatronAuth:
             "self_test_results",
         }
 
+    def test_patron_auth_self_tests_get_no_service_info(
+        self,
+        controller_fixture: ControllerFixture,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+        default_library: Library,
+        monkeypatch: MonkeyPatch,
+    ):
+        """
+        When configured_service_info() returns None, the response holds None in
+        self_test_results.
+        """
+        controller = controller_fixture.controller
+        auth_service = db.simple_auth_integration(library=default_library)
+        monkeypatch.setattr(
+            PatronAuthServicesController,
+            "configured_service_info",
+            MagicMock(return_value=None),
+        )
+
+        with flask_app_fixture.test_request_context_system_admin("/"):
+            response_obj = controller.process_patron_auth_service_self_tests(
+                auth_service.id
+            )
+        assert isinstance(response_obj, Response)
+        assert response_obj.status_code == 200
+        assert response_obj.json == {"self_test_results": None}
+
     def test_patron_auth_self_tests_post_with_no_libraries(
         self,
         controller_fixture: ControllerFixture,

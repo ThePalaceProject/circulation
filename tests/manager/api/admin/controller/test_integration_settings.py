@@ -4,6 +4,7 @@ import pytest
 
 from palace.manager.api.admin.controller.integration_settings import (
     IntegrationSettingsController,
+    IntegrationSettingsSelfTestsController,
 )
 from palace.manager.integration.base import HasIntegrationConfiguration
 from palace.manager.integration.goals import Goals
@@ -116,3 +117,40 @@ class TestIntegrationSettingsController:
             controller.get_existing_service(
                 integration.id, protocol="mock_integration_2"
             )
+
+
+class TestIntegrationSettingsSelfTestsController:
+    @pytest.mark.parametrize(
+        "info, keys, expected",
+        [
+            pytest.param(
+                {"id": 1, "name": "x", "settings": {"password": "secret"}},
+                frozenset({"id", "name"}),
+                {"id": 1, "name": "x"},
+                id="drops-other-keys",
+            ),
+            pytest.param(
+                {"id": 1},
+                frozenset({"id", "name"}),
+                {"id": 1},
+                id="missing-keys-not-added",
+            ),
+            pytest.param(
+                {"id": 1, "name": "x"},
+                frozenset(),
+                {},
+                id="no-keys",
+            ),
+        ],
+    )
+    def test_only_keys(
+        self,
+        info: dict[str, object],
+        keys: frozenset[str],
+        expected: dict[str, object],
+    ):
+        original = dict(info)
+        result = IntegrationSettingsSelfTestsController._only_keys(info, keys)
+        assert result == expected
+        # The input dict is not changed.
+        assert info == original
