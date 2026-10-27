@@ -421,7 +421,7 @@ settings in the future.
 
 When SP metadata declares more than one `AssertionConsumerService` endpoint, only one of them is named in
 the authentication requests we send. The following variable sets the site-wide default rule for choosing it,
-which applies to any SAML integration that leaves its own "Assertion Consumer Service Endpoint Selection"
+which applies to any SAML integration that leaves its own "IdP: Expected SP ACS Endpoint"
 setting unset in the Administrative Interface. An integration that does set it overrides this default, and
 clearing that setting returns the integration to this default.
 
