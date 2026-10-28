@@ -28,6 +28,7 @@ from palace.manager.integration.patron_auth.saml.configuration.model import (
     sp_environment_check,
 )
 from palace.manager.integration.patron_auth.saml.configuration.problem_details import (
+    SAML_GENERIC_PARSING_ERROR,
     SAML_INCORRECT_METADATA,
     SAML_INCORRECT_PRIVATE_KEY,
 )
@@ -56,6 +57,7 @@ from palace.manager.integration.patron_auth.saml.metadata.model import (
 )
 from palace.manager.integration.patron_auth.saml.metadata.parser import (
     SAMLMetadataParser,
+    SAMLMetadataParsingError,
 )
 from palace.manager.sqlalchemy.model.saml import (
     SAMLFederatedIdentityProvider,
@@ -458,6 +460,71 @@ class TestSamlSpConfiguration:
         assert exc.value.problem_detail == SAML_INCORRECT_METADATA.detailed(
             "Service Provider's XML metadata (from this setting) must contain exactly one declaration of SPSSODescriptor"
         )
+
+    @pytest.mark.parametrize(
+        "setting, metadata_type",
+        [
+            pytest.param("service_provider_xml_metadata", "Service Provider", id="sp"),
+            pytest.param(
+                "non_federated_identity_provider_xml_metadata",
+                "Identity Provider",
+                id="idp",
+            ),
+        ],
+    )
+    @pytest.mark.parametrize(
+        "error, expected, expected_detail",
+        [
+            pytest.param(
+                SAMLMetadataParsingError("bad tag"),
+                SAML_INCORRECT_METADATA,
+                "{metadata_type}'s metadata has incorrect format: bad tag",
+                id="parsing-error",
+            ),
+            pytest.param(
+                ValueError("unexpected"),
+                SAML_GENERIC_PARSING_ERROR,
+                "unexpected",
+                id="unexpected-error",
+            ),
+        ],
+    )
+    def test_settings_with_unparseable_xml_metadata(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+        setting: str,
+        metadata_type: str,
+        error: Exception,
+        expected: ProblemDetail,
+        expected_detail: str,
+    ) -> None:
+        unparseable = "<xml/>"
+        parse = SAMLMetadataParser.parse
+
+        def fail_on_unparseable(
+            parser: SAMLMetadataParser, xml_metadata: str
+        ) -> list[Any]:
+            if xml_metadata == unparseable:
+                raise error
+            return parse(parser, xml_metadata)
+
+        monkeypatch.setattr(SAMLMetadataParser, "parse", fail_on_unparseable)
+        settings: dict[str, Any] = {
+            "service_provider_xml_metadata": saml_strings.CORRECT_XML_WITH_ONE_SP,
+            "service_provider_private_key": saml_strings.PRIVATE_KEY,
+            setting: unparseable,
+        }
+
+        with pytest.raises(ProblemDetailException) as exc:
+            SAMLWebSSOAuthSettings(**settings)
+
+        assert exc.value.problem_detail == expected.detailed(
+            expected_detail.format(metadata_type=metadata_type)
+        )
+        assert [record.exc_info[1] for record in caplog.records if record.exc_info] == [
+            error
+        ]
 
     def test_no_settings_without_sp_private_key(
         self,
