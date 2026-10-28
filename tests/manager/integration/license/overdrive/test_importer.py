@@ -1080,6 +1080,117 @@ class TestOverdriveImporter:
         # But circulation should still be applied
         assert mock_apply_circ.call_count == 1
 
+    def test_import_collection_skips_a_record_with_no_identifier(
+        self,
+        db: DatabaseTransactionFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        services_fixture: ServicesFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A converted record carrying no identifier cannot be matched, so it is
+        skipped rather than trusted."""
+        collection = overdrive_api_fixture.collection
+        registry = services_fixture.services.integration_registry.license_providers()
+        api = overdrive_api_fixture.api
+        importer = OverdriveImporter(
+            db=db.session, collection=collection, registry=registry, api=api
+        )
+        api.async_requests.fetch_book_info_list = AsyncMock(
+            return_value=(
+                [
+                    {
+                        "id": "overdrive-id-1",
+                        "metadata": {"title": "A Book"},
+                        "availabilityV2": {"copiesOwned": 1},
+                    }
+                ],
+                None,
+            )
+        )
+
+        mock_bibliographic, _ = self._mock_extractor(importer, "overdrive-id-1")
+        mock_bibliographic.primary_identifier_data = None
+
+        mock_apply_bib = Mock()
+        with caplog.at_level(logging.WARNING):
+            importer.import_collection(
+                apply_bibliographic=mock_apply_bib,
+                apply_circulation=Mock(),
+            )
+
+        mock_apply_bib.assert_not_called()
+        assert "reports a different identifier" in caplog.text
+
+    def test_import_collection_applies_nothing_when_nothing_changed(
+        self,
+        db: DatabaseTransactionFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        services_fixture: ServicesFixture,
+    ) -> None:
+        """Neither half changed, so the book costs no apply at all."""
+        collection = overdrive_api_fixture.collection
+        registry = services_fixture.services.integration_registry.license_providers()
+        api = overdrive_api_fixture.api
+        importer = OverdriveImporter(
+            db=db.session, collection=collection, registry=registry, api=api
+        )
+        api.async_requests.fetch_book_info_list = AsyncMock(
+            return_value=(
+                [
+                    {
+                        "id": "overdrive-id-1",
+                        "metadata": {"title": "Unchanged Book"},
+                        "availabilityV2": {"copiesOwned": 1},
+                    }
+                ],
+                None,
+            )
+        )
+
+        self._mock_extractor(
+            importer,
+            "overdrive-id-1",
+            bibliographic_changed=False,
+            circulation_changed=False,
+        )
+
+        mock_apply_bib = Mock()
+        mock_apply_circ = Mock()
+        importer.import_collection(
+            apply_bibliographic=mock_apply_bib,
+            apply_circulation=mock_apply_circ,
+        )
+
+        mock_apply_bib.assert_not_called()
+        mock_apply_circ.assert_not_called()
+
+    def test_import_collection_reports_elapsed_time_when_known(
+        self,
+        db: DatabaseTransactionFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        services_fixture: ServicesFixture,
+    ) -> None:
+        """A timestamp with both ends known contributes an elapsed time."""
+        collection = overdrive_api_fixture.collection
+        registry = services_fixture.services.integration_registry.license_providers()
+        api = overdrive_api_fixture.api
+        importer = OverdriveImporter(
+            db=db.session, collection=collection, registry=registry, api=api
+        )
+        timestamp = importer.get_timestamp()
+        timestamp.start = datetime_utc(2023, 1, 1, 0, 0, 0)
+        timestamp.finish = datetime_utc(2023, 1, 1, 0, 0, 30)
+        db.session.flush()
+
+        api.async_requests.fetch_book_info_list = AsyncMock(return_value=([], None))
+        importer.import_collection(
+            apply_bibliographic=Mock(),
+            apply_circulation=Mock(),
+        )
+
+        assert timestamp.achievements is not None
+        assert "Elapsed time: 30.00 seconds." in timestamp.achievements
+
     def test_import_collection_handles_missing_metadata(
         self,
         db: DatabaseTransactionFixture,
