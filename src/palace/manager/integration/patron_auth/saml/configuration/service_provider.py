@@ -128,8 +128,8 @@ class SamlServiceProviderConfiguration(ServiceConfiguration, LoggerMixin):
         """
         if self.private_key_file and self.private_key:
             raise CannotLoadConfiguration(
-                "Cannot specify both PALACE_SAML_SP_PRIVATE_KEY_FILE and "
-                "PALACE_SAML_SP_PRIVATE_KEY. Use only one."
+                f"Cannot specify both {PRIVATE_KEY_FILE_ENV_VAR} and "
+                f"{PRIVATE_KEY_ENV_VAR}. Use only one."
             )
 
         if self.private_key_file:
@@ -150,8 +150,8 @@ class SamlServiceProviderConfiguration(ServiceConfiguration, LoggerMixin):
         """
         if self.metadata_file and self.metadata:
             raise CannotLoadConfiguration(
-                "Cannot specify both PALACE_SAML_SP_METADATA_FILE and "
-                "PALACE_SAML_SP_METADATA. Use only one."
+                f"Cannot specify both {METADATA_FILE_ENV_VAR} and "
+                f"{METADATA_ENV_VAR}. Use only one."
             )
 
         if self.metadata_file:
