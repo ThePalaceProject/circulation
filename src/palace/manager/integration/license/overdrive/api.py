@@ -1258,7 +1258,7 @@ class OverdriveAPI(
             # Either this is the first time we've seen this book or it doesn't
             # have an associated work. Make sure its identifier has bibliographic
             # coverage and a presentation-ready work.
-            self._ensure_bibliographic_coverage(license_pool)
+            self.ensure_bibliographic_coverage(license_pool)
 
         return self.update_licensepool_with_book_info(
             availability, resolved_book_id, license_pool, is_new
@@ -1279,7 +1279,9 @@ class OverdriveAPI(
             licensepool.identifier.identifier,
         )
 
-    def _ensure_bibliographic_coverage(self, license_pool: LicensePool) -> None:
+    def ensure_bibliographic_coverage(
+        self, license_pool: LicensePool, *, force: bool = False
+    ) -> None:
         """Fetch Overdrive bibliographic metadata, apply it to the Edition, and
         make the LicensePool's Work presentation-ready.
 
@@ -1295,6 +1297,13 @@ class OverdriveAPI(
         ``apply`` (a ``KeyError``, a SQLAlchemy error) means a bug or a
         broken database session. Both should stop the run loudly instead of
         quietly leaving thousands of pools without Works.
+
+        :param license_pool: The pool whose Edition and Work should be refreshed.
+        :param force: Apply the bibliographic data even when its fingerprint
+            matches what is already stored. Normal callers leave this False so an
+            unchanged title is cheap; a repair pass sets it, because the whole
+            point of such a run is to rewrite records whose stored data is wrong
+            in ways the fingerprint cannot see.
         """
         identifier = license_pool.identifier
         info = self.metadata_lookup(identifier)
@@ -1322,7 +1331,9 @@ class OverdriveAPI(
                 self._db,
                 edition,
                 self.collection,
-                replace=ReplacementPolicy.from_license_source(),
+                replace=ReplacementPolicy.from_license_source(
+                    even_if_not_apparently_updated=force
+                ),
             )
         except BasePalaceException as e:
             # Bad or incomplete data for this one title: log it, leave the
@@ -1353,7 +1364,7 @@ class OverdriveAPI(
 
         Then find or create the Edition that holds Overdrive's metadata for
         the pool. Bibliographic data is applied by the caller, via
-        :meth:`_ensure_bibliographic_coverage`.
+        :meth:`ensure_bibliographic_coverage`.
 
         :param availability: The parsed Overdrive availability document.
         :param book_id: The Overdrive product ID for this book.

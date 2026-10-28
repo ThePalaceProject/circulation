@@ -30,6 +30,7 @@ from palace.manager.api.circulation.fulfillment import (
 from palace.manager.api.config import Configuration
 from palace.manager.celery.tasks import overdrive as overdrive_celery
 from palace.manager.core.config import CannotLoadConfiguration
+from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.integration.license.overdrive.api import (
     OverdriveAPI,
     OverdriveToken,
@@ -1557,7 +1558,7 @@ class TestOverdriveAPI:
         "error_code",
         ["InvalidGuid", "NotFound"],
     )
-    def test_ensure_bibliographic_coverage_unusable_identifier(
+    def testensure_bibliographic_coverage_unusable_identifier(
         self,
         overdrive_api_fixture: OverdriveAPIFixture,
         db: DatabaseTransactionFixture,
@@ -1580,7 +1581,7 @@ class TestOverdriveAPI:
             200, content=json.dumps({"errorCode": error_code, "message": "no good"})
         )
 
-        overdrive_api_fixture.api._ensure_bibliographic_coverage(pool)
+        overdrive_api_fixture.api.ensure_bibliographic_coverage(pool)
 
         assert not pool.work
         assert f"Could not get Overdrive metadata for {identifier.identifier}" in (
@@ -1588,7 +1589,7 @@ class TestOverdriveAPI:
         )
         assert error_code in caplog.text
 
-    def test_ensure_bibliographic_coverage_unextractable_document(
+    def testensure_bibliographic_coverage_unextractable_document(
         self,
         overdrive_api_fixture: OverdriveAPIFixture,
         db: DatabaseTransactionFixture,
@@ -1610,12 +1611,43 @@ class TestOverdriveAPI:
             200, content=json.dumps({"title": "A book"})
         )
 
-        overdrive_api_fixture.api._ensure_bibliographic_coverage(pool)
+        overdrive_api_fixture.api.ensure_bibliographic_coverage(pool)
 
         assert not pool.work
         assert "Could not extract bibliographic data" in caplog.text
 
-    def test_ensure_bibliographic_coverage_apply_error(
+    @pytest.mark.parametrize("force,expected", [(False, False), (True, True)])
+    def testensure_bibliographic_coverage_force_controls_the_apply(
+        self,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        db: DatabaseTransactionFixture,
+        force: bool,
+        expected: bool,
+    ):
+        """``force`` decides whether an unchanged fingerprint still gets applied.
+
+        A repair pass needs it: the records it exists to fix are wrong in ways the
+        stored fingerprint cannot see, so an unforced apply could skip them.
+        """
+        identifier = db.identifier(identifier_type=Identifier.OVERDRIVE_ID)
+        pool, _ = LicensePool.for_foreign_id(
+            db.session,
+            DataSource.OVERDRIVE,
+            Identifier.OVERDRIVE_ID,
+            identifier.identifier,
+            collection=overdrive_api_fixture.collection,
+        )
+        overdrive_api_fixture.mock_http.queue_response(
+            200, content=json.dumps({"id": identifier.identifier, "title": "A book"})
+        )
+
+        with patch.object(BibliographicData, "apply") as mock_apply:
+            overdrive_api_fixture.api.ensure_bibliographic_coverage(pool, force=force)
+
+        policy = mock_apply.call_args.kwargs["replace"]
+        assert policy.even_if_not_apparently_updated is expected
+
+    def testensure_bibliographic_coverage_apply_error(
         self,
         overdrive_api_fixture: OverdriveAPIFixture,
         db: DatabaseTransactionFixture,
@@ -1647,13 +1679,13 @@ class TestOverdriveAPI:
             return_value=bibliographic,
         ):
             # Should not raise.
-            api._ensure_bibliographic_coverage(pool)
+            api.ensure_bibliographic_coverage(pool)
 
         bibliographic.apply.assert_called_once()
         assert not pool.work
         assert "Error applying Overdrive bibliographic data" in caplog.text
 
-    def test_ensure_bibliographic_coverage_reraises_unexpected_error(
+    def testensure_bibliographic_coverage_reraises_unexpected_error(
         self,
         overdrive_api_fixture: OverdriveAPIFixture,
         db: DatabaseTransactionFixture,
@@ -1682,7 +1714,7 @@ class TestOverdriveAPI:
             return_value=bibliographic,
         ):
             with pytest.raises(KeyError):
-                api._ensure_bibliographic_coverage(pool)
+                api.ensure_bibliographic_coverage(pool)
 
     def test_update_new_licensepool(
         self, overdrive_api_fixture: OverdriveAPIFixture, db: DatabaseTransactionFixture
