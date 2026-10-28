@@ -2024,6 +2024,116 @@ class TestBackfillCollection:
         queued = [signature.args[0] for signature in mock_chain.call_args.args]
         assert queued == [parent.id, child.id]
 
+    @patch("palace.manager.celery.tasks.overdrive.chain")
+    def test_backfill_all_collections_names_what_a_failure_would_skip(
+        self,
+        mock_chain: MagicMock,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+    ) -> None:
+        """Each collection carries an error callback naming what follows it.
+
+        A chain stops at its first failure, so without this the collections queued
+        behind a failed one would never run and never be mentioned again.
+        """
+        first = overdrive_api_fixture.collection
+        second = db.collection(protocol=OverdriveAPI)
+        db.session.flush()
+
+        overdrive.backfill_all_collections.delay().wait()
+
+        queued = list(mock_chain.call_args.args)
+        # Every signature has one, and each names only the collections after it.
+        reported = [
+            (
+                signature.options["link_error"][0].kwargs["failed_collection_id"],
+                signature.options["link_error"][0].kwargs["skipped_collection_ids"],
+            )
+            for signature in queued
+        ]
+        order = [signature.args[0] for signature in queued]
+        assert reported == [
+            (collection_id, order[position + 1 :])
+            for position, collection_id in enumerate(order)
+        ]
+        # The last one has nothing behind it.
+        assert reported[-1][1] == []
+        assert set(order) == {first.id, second.id}
+
+    def test_report_backfill_stopped_names_the_skipped_collections(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """The report names the failed collection and the ones left unstarted."""
+        caplog.set_level(LogLevel.error)
+        failed = overdrive_api_fixture.collection
+        skipped = db.collection(protocol=OverdriveAPI)
+        db.session.flush()
+
+        overdrive.report_backfill_stopped.delay(
+            failed_collection_id=failed.id,
+            skipped_collection_ids=[skipped.id],
+        ).wait()
+
+        assert f"collection '{failed.name}'" in caplog.text
+        assert f"'{skipped.name}'" in caplog.text
+        assert "1 collection(s) queued behind it did not start" in caplog.text
+        assert "Re-running the backfill is safe" in caplog.text
+
+    def test_report_backfill_stopped_when_nothing_followed(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A failure on the last collection skipped nothing."""
+        caplog.set_level(LogLevel.error)
+        failed = overdrive_api_fixture.collection
+        db.session.flush()
+
+        overdrive.report_backfill_stopped.delay(
+            failed_collection_id=failed.id,
+            skipped_collection_ids=[],
+        ).wait()
+
+        assert "It was the last one, so nothing was skipped." in caplog.text
+
+    @patch.object(OverdriveAPI, "ensure_bibliographic_coverage")
+    def test_backfill_all_collections_reports_a_run_that_stopped_early(
+        self,
+        mock_coverage: MagicMock,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        redis_fixture: RedisFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A real failure reaches the error callback, not just the wiring.
+
+        The other tests here check that the callback is attached and what it says.
+        This one lets a collection actually fail and confirms Celery runs it.
+        """
+        caplog.set_level(LogLevel.error)
+        first = overdrive_api_fixture.collection
+        self._healthy_pool(db, first).presentation_edition.publisher = None
+        second = db.collection(protocol=OverdriveAPI)
+        db.session.flush()
+
+        mock_coverage.side_effect = ValueError("Overdrive fell over")
+        # The parent only queues the chain, so the collection's failure surfaces
+        # through the error callback rather than here.
+        overdrive.backfill_all_collections.delay().wait()
+
+        assert "Overdrive backfill stopped" in caplog.text
+        assert f"collection '{first.name}'" in caplog.text
+        assert f"'{second.name}'" in caplog.text
+        assert "Re-running the backfill is safe" in caplog.text
+
     def test_backfill_all_collections_queues_each_collection(
         self,
         db: DatabaseTransactionFixture,

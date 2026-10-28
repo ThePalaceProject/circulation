@@ -1011,19 +1011,77 @@ def backfill_all_collections(
         ordered.extend(orphan for ids in children.values() for orphan in ids)
 
     if ordered:
-        chain(
-            *(
-                backfill_collection.si(
-                    collection_id,
-                    max_titles=max_titles,
-                    imported_since=imported_since,
-                    include_suspected_magazines=include_suspected_magazines,
-                )
-                for collection_id in ordered
+        signatures = []
+        for position, collection_id in enumerate(ordered):
+            signature = backfill_collection.si(
+                collection_id,
+                max_titles=max_titles,
+                imported_since=imported_since,
+                include_suspected_magazines=include_suspected_magazines,
             )
-        ).delay()
+            # A chain stops at its first failure, so everything queued behind a
+            # failed collection silently never runs. Each task carries its own
+            # error callback naming what would have followed it, so the run does
+            # not just go quiet. Attached per signature rather than to the chain,
+            # because what is skipped depends on which collection failed.
+            signature.link_error(
+                report_backfill_stopped.si(
+                    failed_collection_id=collection_id,
+                    skipped_collection_ids=ordered[position + 1 :],
+                )
+            )
+            signatures.append(signature)
+        chain(*signatures).delay()
 
     task.log.info(
         f"Queued {len(ordered)} Overdrive collection(s) for backfill, "
         f"to run one after another."
+    )
+
+
+@shared_task(queue=QueueNames.default, bind=True)
+def report_backfill_stopped(
+    task: Task,
+    *,
+    failed_collection_id: int,
+    skipped_collection_ids: list[int],
+) -> None:
+    """Say which collections a failed backfill never reached.
+
+    Error callback for each collection in :func:`backfill_all_collections`'s chain.
+    The failure itself is already logged by the task that raised it; what is lost
+    otherwise is that every collection queued behind it was dropped too.
+
+    :param failed_collection_id: The collection whose task failed.
+    :param skipped_collection_ids: The collections that were queued after it, in
+        order, and so never started.
+    """
+    with task.session() as session:
+        names = {
+            collection.id: collection.name
+            for collection in session.scalars(
+                select(Collection).where(
+                    Collection.id.in_([failed_collection_id, *skipped_collection_ids])
+                )
+            )
+        }
+
+    failed = names.get(failed_collection_id, str(failed_collection_id))
+    if not skipped_collection_ids:
+        skipped_note = "It was the last one, so nothing was skipped."
+    else:
+        listed = ", ".join(
+            f"'{names.get(collection_id, collection_id)}'"
+            for collection_id in skipped_collection_ids
+        )
+        skipped_note = (
+            f"The {len(skipped_collection_ids)} collection(s) queued behind it did "
+            f"not start: {listed}."
+        )
+
+    task.log.error(
+        f"Overdrive backfill stopped: collection '{failed}' "
+        f"(id={failed_collection_id}) failed and ended the run. {skipped_note} "
+        f"Re-running the backfill is safe and resumes rather than starting over, "
+        f"because a repaired title no longer matches the damage query."
     )
