@@ -1765,6 +1765,52 @@ class TestBackfillCollection:
         assert mock_replace.call_args[0][0].kwargs["max_titles"] == 3
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
+    def test_backfill_max_titles_survives_a_retry(
+        self,
+        mock_api_class: MagicMock,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        redis_fixture: RedisFixture,
+    ) -> None:
+        """Titles repaired before a retryable failure still count against the cap.
+
+        A retry re-queues the task with the arguments its failed attempt was given, so
+        a cap counted down only once a batch finished would start the retry over at its
+        full value. Repaired titles drop out of the damage query, so that allowance
+        would be spent on titles the run was never asked to touch.
+        """
+        collection = overdrive_api_fixture.collection
+        pools = []
+        for _ in range(10):
+            pool = self._healthy_pool(db, collection)
+            # Symptom (c): a presentation edition with no publisher.
+            pool.presentation_edition.publisher = None
+            pools.append(pool)
+        db.session.flush()
+
+        attempts: list[int] = []
+
+        def repair_but_fail_once(pool: LicensePool, *, force: bool = False) -> None:
+            attempts.append(pool.id)
+            if len(attempts) == 5:
+                raise BadResponseException(
+                    "http://test.com", "Bad response", MockRequestsResponse(500)
+                )
+            pool.presentation_edition.publisher = "A Publisher"
+
+        mock_api_class.return_value.ensure_bibliographic_coverage.side_effect = (
+            repair_but_fail_once
+        )
+
+        with celery_fixture.patch_retry_backoff():
+            overdrive.backfill_collection.delay(collection.id, max_titles=5).wait()
+        db.session.expire_all()
+
+        repaired = [p for p in pools if p.presentation_edition.publisher is not None]
+        assert len(repaired) == 5
+
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
     def test_backfill_imported_since_bounds_the_run(
         self,
         mock_api_class: MagicMock,

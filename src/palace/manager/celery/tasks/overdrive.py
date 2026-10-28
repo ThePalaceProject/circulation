@@ -858,9 +858,10 @@ def backfill_collection(
     :param collection_id: The ID of the Overdrive collection to back-fill.
     :param offset: The last LicensePool.id processed; used to resume across batches.
     :param batch_size: Number of pools to process per batch.
-    :param max_titles: Stop after this many titles. Counts down across batches, so it
-        caps the whole run rather than each batch. Useful for measuring the real
-        per-title cost on a sample before committing a whole collection.
+    :param max_titles: Stop after this many titles. Counts down across batches, and
+        across retries, so it caps the whole run rather than each batch or attempt.
+        Useful for measuring the real per-title cost on a sample before committing a
+        whole collection.
     :param imported_since: Only repair titles whose presentation edition was last
         written at or after this time. The damage was done by a known release, so
         bounding by when *we* last wrote a record isolates what that release touched.
@@ -914,19 +915,44 @@ def backfill_collection(
             api = OverdriveAPI(session, collection)
             new_offset = offset
             processed_count = 0
-            for pool in pools:
-                # Read the id before the commit below expires the instance.
-                pool_id = pool.id
-                # force=True: these records are wrong in ways the stored fingerprint
-                # cannot see, so an unforced apply could decide there is nothing to do.
-                api.ensure_bibliographic_coverage(pool, force=True)
-                # Commit each title on its own, so a failure part way through a batch
-                # keeps the repairs already paid for. A retry restarts at the same
-                # offset, but the committed titles no longer match the damage query,
-                # so they are skipped rather than fetched again.
-                session.commit()
-                new_offset = pool_id
-                processed_count += 1
+            try:
+                for pool in pools:
+                    # Read the id before the commit below expires the instance.
+                    pool_id = pool.id
+                    # force=True: these records are wrong in ways the stored
+                    # fingerprint cannot see, so an unforced apply could decide there
+                    # is nothing to do.
+                    api.ensure_bibliographic_coverage(pool, force=True)
+                    # Commit each title on its own, so a failure part way through a
+                    # batch keeps the repairs already paid for.
+                    session.commit()
+                    new_offset = pool_id
+                    processed_count += 1
+            # The task's own autoretry_for exceptions, caught here only to record what
+            # this attempt got through before handing them back.
+            except (BadResponseException, RequestTimedOut):
+                # Celery re-queues a retry with the arguments the failed attempt was
+                # given, so a retry would otherwise restart at the original offset with
+                # the original allowance. The titles committed above are already
+                # repaired and no longer match the damage query, so that allowance
+                # would be spent on titles this run was never asked to touch: a run
+                # capped at five could repair five more on every retry. Hand the retry
+                # the progress instead.
+                #
+                # Done by correcting the request rather than by calling task.retry()
+                # here, because autoretry is what applies retry_backoff, and because
+                # the workflow lock stays held for these exceptions but not for the
+                # Retry that task.retry() would raise.
+                retry_state = signature_with(
+                    task,
+                    offset=new_offset,
+                    max_titles=(
+                        None if max_titles is None else max_titles - processed_count
+                    ),
+                )
+                task.request.args = retry_state.args
+                task.request.kwargs = retry_state.kwargs
+                raise
 
         task.log.info(
             f"Overdrive backfill: processed {processed_count} pools for collection "
