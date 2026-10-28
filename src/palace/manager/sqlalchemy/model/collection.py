@@ -20,6 +20,7 @@ from sqlalchemy.ext.associationproxy import association_proxy
 from sqlalchemy.orm import Mapped, Query, aliased, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql import Select
+from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.sql.expression import and_, or_, true
 from sqlalchemy.sql.functions import count
 
@@ -641,17 +642,17 @@ class Collection(Base, HasSessionCache, RedisKeyMixin):
         #     - At least one available license (if holds are not allowed)
         #  - Unlimited type and active
         #     - Open access are a subset of unlimited
-        metered_filter = and_(  # type: ignore[type-var]
+        metered_filter: ColumnElement[Boolean] = and_(  # type: ignore[type-var]
             LicensePool.active_status == true(),
             LicensePool.metered_or_equivalent_type == true(),
         )
         if not allow_holds:
-            metered_filter = and_(  # type: ignore[assignment]
+            metered_filter = and_(
                 metered_filter,
                 LicensePool.licenses_available > 0,
             )
 
-        unlimited_filter = and_(  # type: ignore[type-var]
+        unlimited_filter: ColumnElement[Boolean] = and_(  # type: ignore[type-var]
             LicensePool.unlimited_type == true(),
             LicensePool.active_status == true(),
         )
