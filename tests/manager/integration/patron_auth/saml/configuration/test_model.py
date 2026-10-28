@@ -1,6 +1,8 @@
 import html
 import json
 import logging
+import subprocess
+import sys
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
@@ -25,6 +27,7 @@ from palace.manager.integration.patron_auth.saml.configuration.model import (
     sp_environment_check,
 )
 from palace.manager.integration.patron_auth.saml.configuration.problem_details import (
+    SAML_GENERIC_PARSING_ERROR,
     SAML_INCORRECT_METADATA,
     SAML_INCORRECT_PRIVATE_KEY,
 )
@@ -34,6 +37,10 @@ from palace.manager.integration.patron_auth.saml.configuration.promotion import 
 )
 from palace.manager.integration.patron_auth.saml.configuration.service_provider import (
     ACS_SELECTION_POLICY_ENV_VAR,
+    METADATA_ENV_VAR,
+    METADATA_FILE_ENV_VAR,
+    PRIVATE_KEY_ENV_VAR,
+    PRIVATE_KEY_FILE_ENV_VAR,
 )
 from palace.manager.integration.patron_auth.saml.metadata.federations import incommon
 from palace.manager.integration.patron_auth.saml.metadata.model import (
@@ -49,6 +56,7 @@ from palace.manager.integration.patron_auth.saml.metadata.model import (
 )
 from palace.manager.integration.patron_auth.saml.metadata.parser import (
     SAMLMetadataParser,
+    SAMLMetadataParsingError,
 )
 from palace.manager.sqlalchemy.model.saml import (
     SAMLFederatedIdentityProvider,
@@ -451,6 +459,71 @@ class TestSamlSpConfiguration:
         assert exc.value.problem_detail == SAML_INCORRECT_METADATA.detailed(
             "Service Provider's XML metadata (from this setting) must contain exactly one declaration of SPSSODescriptor"
         )
+
+    @pytest.mark.parametrize(
+        "setting, metadata_type",
+        [
+            pytest.param("service_provider_xml_metadata", "Service Provider", id="sp"),
+            pytest.param(
+                "non_federated_identity_provider_xml_metadata",
+                "Identity Provider",
+                id="idp",
+            ),
+        ],
+    )
+    @pytest.mark.parametrize(
+        "error, expected, expected_detail",
+        [
+            pytest.param(
+                SAMLMetadataParsingError("bad tag"),
+                SAML_INCORRECT_METADATA,
+                "{metadata_type}'s metadata has incorrect format: bad tag",
+                id="parsing-error",
+            ),
+            pytest.param(
+                ValueError("unexpected"),
+                SAML_GENERIC_PARSING_ERROR,
+                "unexpected",
+                id="unexpected-error",
+            ),
+        ],
+    )
+    def test_settings_with_unparseable_xml_metadata(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+        setting: str,
+        metadata_type: str,
+        error: Exception,
+        expected: ProblemDetail,
+        expected_detail: str,
+    ) -> None:
+        unparseable = "<xml/>"
+        parse = SAMLMetadataParser.parse
+
+        def fail_on_unparseable(
+            parser: SAMLMetadataParser, xml_metadata: str
+        ) -> list[Any]:
+            if xml_metadata == unparseable:
+                raise error
+            return parse(parser, xml_metadata)
+
+        monkeypatch.setattr(SAMLMetadataParser, "parse", fail_on_unparseable)
+        settings: dict[str, Any] = {
+            "service_provider_xml_metadata": saml_strings.CORRECT_XML_WITH_ONE_SP,
+            "service_provider_private_key": saml_strings.PRIVATE_KEY,
+            setting: unparseable,
+        }
+
+        with pytest.raises(ProblemDetailException) as exc:
+            SAMLWebSSOAuthSettings(**settings)
+
+        assert exc.value.problem_detail == expected.detailed(
+            expected_detail.format(metadata_type=metadata_type)
+        )
+        assert [record.exc_info[1] for record in caplog.records if record.exc_info] == [
+            error
+        ]
 
     def test_no_settings_without_sp_private_key(
         self,
@@ -966,6 +1039,62 @@ class TestSAMLSettings:
         assert all(expected_reason in warning for warning in warnings)
         # The form shows the description as HTML, so the reason is escaped.
         assert html.escape(expected_reason) in str(setting["description"])
+
+    @pytest.mark.parametrize(
+        "environment",
+        [
+            pytest.param(
+                {"PALACE_SAML_SP_METADATA": saml_strings.CORRECT_XML_WITH_ONE_SP},
+                id="metadata",
+            ),
+            pytest.param(
+                {"PALACE_SAML_SP_PRIVATE_KEY": saml_strings.PRIVATE_KEY},
+                id="private-key",
+            ),
+            pytest.param(
+                {
+                    "PALACE_SAML_SP_METADATA": "<invalid>xml</invalid>",
+                    "PALACE_SAML_SP_PRIVATE_KEY": "wrong-key",
+                },
+                id="invalid",
+            ),
+        ],
+    )
+    def test_module_imports_with_service_provider_environment(
+        self,
+        monkeypatch_env: MonkeyPatchEnvFixture,
+        tmp_path: Path,
+        environment: dict[str, str],
+    ) -> None:
+        """The module imports when the environment provides SP settings.
+
+        Building the class builds the settings' descriptions, which check the
+        environment. A fresh interpreter is used, because the module is already
+        imported here and the environment check is cached.
+
+        Only the case's SP variables are set, and the interpreter runs in an
+        empty directory, so no ``.env`` file is read. Otherwise, an inherited
+        file variable alongside a case's inline value makes the getters fail
+        before the validators run, and the test passes anyway.
+        """
+        for name in (
+            METADATA_ENV_VAR,
+            METADATA_FILE_ENV_VAR,
+            PRIVATE_KEY_ENV_VAR,
+            PRIVATE_KEY_FILE_ENV_VAR,
+        ):
+            monkeypatch_env(name, environment.get(name))
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import palace.manager.integration.patron_auth.saml.configuration.model",
+            ],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stderr
 
     def test_service_provider_environment_checked_once(
         self,

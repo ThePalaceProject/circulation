@@ -1,4 +1,5 @@
 import html
+import logging
 import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -60,6 +61,7 @@ from palace.manager.integration.patron_auth.saml.metadata.model import (
 from palace.manager.integration.patron_auth.saml.metadata.parser import (
     SAMLMetadataParser,
     SAMLMetadataParsingError,
+    SAMLMetadataParsingResult,
 )
 from palace.manager.integration.settings import (
     BaseSettings,
@@ -289,6 +291,85 @@ def _promotion_setting_description(
     return LazyString(describe)
 
 
+def _validate_xml_metadata(
+    xml_metadata: str, metadata_type: str
+) -> list[SAMLMetadataParsingResult]:
+    """Parses SAML metadata.
+
+    :param xml_metadata: The metadata to parse
+    :param metadata_type: The kind of provider the metadata is for, for the error message
+    :raises SettingsValidationError: If the metadata cannot be parsed
+    """
+    try:
+        return SAMLMetadataParser().parse(xml_metadata)
+    except SAMLMetadataParsingError as exception:
+        logging.getLogger(__name__).exception(
+            "An unexpected exception occurred during parsing of SAML metadata"
+        )
+        message = f"{metadata_type}'s metadata has incorrect format: {str(exception)}"
+        raise SettingsValidationError(
+            problem_detail=SAML_INCORRECT_METADATA.detailed(message)
+        ) from exception
+    except Exception as exception:
+        logging.getLogger(__name__).exception(
+            "An unexpected exception occurred during parsing of SAML metadata"
+        )
+        message = str(exception)
+        raise SettingsValidationError(
+            problem_detail=SAML_GENERIC_PARSING_ERROR.detailed(message)
+        ) from exception
+
+
+# The Service Provider value validators are module functions, not methods of
+# SAMLWebSSOAuthSettings, because they run before the class name exists.
+# ``Annotated`` caches its arguments, so it hashes each FormMetadata while the
+# class body runs, and hashing a LazyString description renders it. Rendering
+# an SP setting's description runs the environment check, which calls these
+# validators.
+#
+# As a result, the environment check runs at import, before logging is
+# configured. A problem with the environment's SP configuration is logged once,
+# to stderr, without the configured log format. The cached result is reused,
+# so the problem is not logged again, but the admin form still shows it.
+def _validate_sp_xml_metadata_value(xml_metadata: str, value_from: str) -> None:
+    """Ensure that SP metadata is valid.
+
+    :param xml_metadata: The metadata to check, which must not be empty
+    :param value_from: Where the metadata came from, for the error message
+    :raises SettingsValidationError: If the metadata is not valid
+    """
+    providers = _validate_xml_metadata(xml_metadata, "Service Provider")
+    if len(providers) != 1:
+        raise SettingsValidationError(
+            problem_detail=SAML_INCORRECT_METADATA.detailed(
+                f"Service Provider's XML metadata (from {value_from}) must contain exactly one declaration of SPSSODescriptor"
+            )
+        )
+
+
+def _validate_sp_private_key_value(key: str, value_from: str) -> None:
+    """Ensure that an SP private key is in a valid format.
+
+    :param key: The key to check, with surrounding whitespace removed
+    :param value_from: Where the key came from, for the error message
+    :raises SettingsValidationError: If the key is not in a valid format
+    """
+    # Ensure that the key has the required header and footer text. Some
+    # keys encode their algorithm in their body. Other do not and, thus,
+    # must hint it in their header/footer.
+    if not re.fullmatch(
+        r"\s*-----BEGIN.*PRIVATE KEY-----.+-----END.*PRIVATE KEY-----\s*",
+        key,
+        re.DOTALL,
+    ):
+        raise SettingsValidationError(
+            problem_detail=SAML_INCORRECT_PRIVATE_KEY.detailed(
+                f"Service Provider's Private Key (from {value_from}) is not in a valid format. "
+                "The value must include the '-----BEGIN ...-----' header and '-----END ...-----' footer text."
+            )
+        )
+
+
 def _sp_metadata_environment_source(
     sp_configuration: SamlServiceProviderConfiguration,
 ) -> str | None:
@@ -300,7 +381,7 @@ def _sp_metadata_environment_source(
     """
     if not (metadata := sp_configuration.get_metadata()):
         return None
-    SAMLWebSSOAuthSettings.validate_sp_xml_metadata_value(metadata, "environment")
+    _validate_sp_xml_metadata_value(metadata, "environment")
     return METADATA_FILE_ENV_VAR if sp_configuration.metadata_file else METADATA_ENV_VAR
 
 
@@ -315,7 +396,7 @@ def _sp_private_key_environment_source(
     """
     if not (key := (sp_configuration.get_private_key() or "").strip()):
         return None
-    SAMLWebSSOAuthSettings.validate_sp_private_key_value(key, "environment")
+    _validate_sp_private_key_value(key, "environment")
     return (
         PRIVATE_KEY_FILE_ENV_VAR
         if sp_configuration.private_key_file
@@ -823,31 +904,6 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
         Le(1),
     ] = 0
 
-    @classmethod
-    def validate_xml_metadata(cls, v: str, metadata_type: str):
-        metadata_parser = SAMLMetadataParser()
-        try:
-            providers = metadata_parser.parse(v)
-        except SAMLMetadataParsingError as exception:
-            cls.logger().exception(
-                "An unexpected exception occurred during parsing of SAML metadata"
-            )
-            message = (
-                f"{metadata_type}'s metadata has incorrect format: {str(exception)}"
-            )
-            raise SettingsValidationError(
-                problem_detail=SAML_INCORRECT_METADATA.detailed(message)
-            ) from exception
-        except Exception as exception:
-            cls.logger().exception(
-                "An unexpected exception occurred during parsing of SAML metadata"
-            )
-            message = str(exception)
-            raise SettingsValidationError(
-                problem_detail=SAML_GENERIC_PARSING_ERROR.detailed(message)
-            ) from exception
-        return providers
-
     @field_validator("service_provider_xml_metadata")
     @classmethod
     def validate_sp_xml_metadata(cls, v: str | None) -> str | None:
@@ -880,24 +936,8 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
                 )
             )
 
-        cls.validate_sp_xml_metadata_value(xml_metadata, value_from)
+        _validate_sp_xml_metadata_value(xml_metadata, value_from)
         return v
-
-    @classmethod
-    def validate_sp_xml_metadata_value(cls, xml_metadata: str, value_from: str) -> None:
-        """Ensure that SP metadata is valid.
-
-        :param xml_metadata: The metadata to check, which must not be empty
-        :param value_from: Where the metadata came from, for the error message
-        :raises SettingsValidationError: If the metadata is not valid
-        """
-        providers = cls.validate_xml_metadata(xml_metadata, "Service Provider")
-        if len(providers) != 1:
-            raise SettingsValidationError(
-                problem_detail=SAML_INCORRECT_METADATA.detailed(
-                    f"Service Provider's XML metadata (from {value_from}) must contain exactly one declaration of SPSSODescriptor"
-                )
-            )
 
     @field_validator("service_provider_private_key")
     @classmethod
@@ -927,37 +967,14 @@ class SAMLWebSSOAuthSettings(AuthProviderSettings, LoggerMixin):
                 )
             )
 
-        cls.validate_sp_private_key_value(key, value_from)
+        _validate_sp_private_key_value(key, value_from)
         return v
-
-    @classmethod
-    def validate_sp_private_key_value(cls, key: str, value_from: str) -> None:
-        """Ensure that an SP private key is in a valid format.
-
-        :param key: The key to check, with surrounding whitespace removed
-        :param value_from: Where the key came from, for the error message
-        :raises SettingsValidationError: If the key is not in a valid format
-        """
-        # Ensure that the key has the required header and footer text. Some
-        # keys encode their algorithm in their body. Other do not and, thus,
-        # must hint it in their header/footer.
-        if not re.fullmatch(
-            r"\s*-----BEGIN.*PRIVATE KEY-----.+-----END.*PRIVATE KEY-----\s*",
-            key,
-            re.DOTALL,
-        ):
-            raise SettingsValidationError(
-                problem_detail=SAML_INCORRECT_PRIVATE_KEY.detailed(
-                    f"Service Provider's Private Key (from {value_from}) is not in a valid format. "
-                    "The value must include the '-----BEGIN ...-----' header and '-----END ...-----' footer text."
-                )
-            )
 
     @field_validator("non_federated_identity_provider_xml_metadata")
     @classmethod
     def validate_idp_xml_metadata(cls, v: str):
         if v is not None:
-            providers = cls.validate_xml_metadata(v, "Identity Provider")
+            providers = _validate_xml_metadata(v, "Identity Provider")
             if len(providers) == 0:
                 message = "Identity Provider's XML metadata must contain at least one declaration of IDPSSODescriptor"
                 raise SettingsValidationError(
