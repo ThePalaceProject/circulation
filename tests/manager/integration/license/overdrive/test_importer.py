@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import datetime
 import json
-from unittest.mock import AsyncMock, Mock
+import logging
+from typing import Any
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+from sqlalchemy.orm import Session
 
 from palace.util.datetime_helpers import datetime_utc
 from palace.util.exceptions import PalaceValueError
@@ -19,19 +23,29 @@ from palace.manager.integration.license.overdrive.importer import (
     FeedImportResult,
     OverdriveImporter,
 )
-from palace.manager.integration.license.overdrive.model import MetadataResponse
+from palace.manager.integration.license.overdrive.model import (
+    Checkout,
+    MetadataResponse,
+)
 from palace.manager.integration.license.overdrive.representation import (
     OverdriveRepresentationExtractor,
 )
 from palace.manager.integration.license.overdrive.requests import BookInfoEndpoint
 from palace.manager.service.redis.models.set import IdentifierSet
 from palace.manager.sqlalchemy.model.coverage import Timestamp
+from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
+from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism, LicensePool
+from palace.manager.sqlalchemy.model.resource import Representation
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import OverdriveFilesFixture
 from tests.fixtures.overdrive import OverdriveAPIFixture
 from tests.fixtures.redis import RedisFixture
 from tests.fixtures.services import ServicesFixture
+
+# The policy a real import runs under. Referenced, not copied, so that a change to
+# it cannot leave these tests passing against a policy production no longer uses.
+IMPORT_POLICY = OverdriveImporter.REPLACEMENT_POLICY
 
 
 class TestOverdriveImporter:
@@ -42,7 +56,7 @@ class TestOverdriveImporter:
         db: DatabaseTransactionFixture,
         overdrive_api_fixture: OverdriveAPIFixture,
         services_fixture: ServicesFixture,
-    ):
+    ) -> None:
         """Test successful initialization of OverdriveImporter."""
         collection = overdrive_api_fixture.collection
         registry = services_fixture.services.integration_registry.license_providers()
@@ -63,7 +77,7 @@ class TestOverdriveImporter:
         db: DatabaseTransactionFixture,
         overdrive_api_fixture: OverdriveAPIFixture,
         services_fixture: ServicesFixture,
-    ):
+    ) -> None:
         """Test initialization when API instance is provided."""
         collection = overdrive_api_fixture.collection
         registry = services_fixture.services.integration_registry.license_providers()
@@ -80,7 +94,7 @@ class TestOverdriveImporter:
         db: DatabaseTransactionFixture,
         overdrive_api_fixture: OverdriveAPIFixture,
         services_fixture: ServicesFixture,
-    ):
+    ) -> None:
         """Test initialization with identifier_set provided."""
         collection = overdrive_api_fixture.collection
         registry = services_fixture.services.integration_registry.license_providers()
@@ -100,7 +114,7 @@ class TestOverdriveImporter:
         db: DatabaseTransactionFixture,
         overdrive_api_fixture: OverdriveAPIFixture,
         services_fixture: ServicesFixture,
-    ):
+    ) -> None:
         """Test initialization with parent_identifier_set."""
         collection = overdrive_api_fixture.collection
         registry = services_fixture.services.integration_registry.license_providers()
@@ -124,7 +138,7 @@ class TestOverdriveImporter:
         self,
         db: DatabaseTransactionFixture,
         services_fixture: ServicesFixture,
-    ):
+    ) -> None:
         """Test that initialization fails with invalid collection protocol."""
         # Create a collection with wrong protocol
         collection = db.collection(protocol="Not Overdrive")
@@ -140,7 +154,7 @@ class TestOverdriveImporter:
         db: DatabaseTransactionFixture,
         overdrive_api_fixture: OverdriveAPIFixture,
         services_fixture: ServicesFixture,
-    ):
+    ) -> None:
         """Test get_timestamp creates or retrieves a timestamp."""
         collection = overdrive_api_fixture.collection
         registry = services_fixture.services.integration_registry.license_providers()
@@ -167,7 +181,7 @@ class TestOverdriveImporter:
         overdrive_files_fixture: OverdriveFilesFixture,
         services_fixture: ServicesFixture,
         redis_fixture: RedisFixture,
-    ):
+    ) -> None:
         """Ensure _process_book skips metadata update if identifier is in the parent identifier set."""
 
         collection = overdrive_api_fixture.collection
@@ -223,13 +237,641 @@ class TestOverdriveImporter:
         apply_bibliographic.assert_not_called()
         assert apply_circulation.called
 
+    def test_process_book_uses_metadata_record_not_product_summary(
+        self,
+        db: DatabaseTransactionFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
+        services_fixture: ServicesFixture,
+    ) -> None:
+        """_process_book must convert the fetched metadata record, not the product summary.
+
+        The product-list summary does not carry ``creators``, ``publisher``,
+        ``publishDate`` or ``languages``, so converting it loses the author,
+        publisher and publication date and silently defaults the language to
+        English.
+        """
+        collection = overdrive_api_fixture.collection
+        registry = services_fixture.services.integration_registry.license_providers()
+
+        importer = OverdriveImporter(
+            db=db.session,
+            collection=collection,
+            registry=registry,
+            api=overdrive_api_fixture.api,
+        )
+
+        book = self._book_with_both_documents(overdrive_files_fixture)
+        summary = json.loads(
+            overdrive_files_fixture.sample_data("overdrive_book_list.json")
+        )["products"][0]
+        metadata = book["metadata"]
+
+        # Sanity check on the fixture: the fields we care about really are absent
+        # from the summary and present in the metadata record.
+        for field in ("creators", "publisher", "publishDate", "languages"):
+            assert field not in summary
+            assert field in metadata
+
+        apply_bibliographic = Mock()
+        apply_circulation = Mock()
+
+        importer._process_book(
+            book=book,
+            fetch_metadata=True,
+            policy=ReplacementPolicy(),
+            apply_bibliographic=apply_bibliographic,
+            apply_circulation=apply_circulation,
+        )
+
+        apply_bibliographic.assert_called_once()
+        bibliographic = apply_bibliographic.call_args.args[0]
+
+        assert bibliographic.publisher == "Wiley"
+        assert [c.display_name for c in bibliographic.contributors] == [
+            "Andreas Rüping"
+        ]
+        assert bibliographic.published == datetime.date(2005, 1, 31)
+        assert bibliographic.title == metadata["title"]
+        # The language is not checked here. This record's language is English and
+        # so is the value an absent ``languages`` key falls back to, so the check
+        # would pass either way. ``test_process_book_non_english_language_preserved``
+        # covers it with a record that is not in English.
+
+        # Formats are deliberately not part of what converting the metadata record
+        # recovers. The product-list summary carries a ``formats`` list of its own,
+        # and for this fixture pair both documents yield the same four FormatData,
+        # so nothing here tells the fixed code from the unfixed code. Assert them
+        # only as a non-regression check that routing through the metadata record
+        # did not drop them. Noticing a *change* to the formats is a separate
+        # concern, covered by
+        # ``test_process_book_dispatches_a_single_apply_carrying_both_halves``
+        # below and by ``TestCirculationData.test_needs_apply_detects_a_format_only_change``.
+        assert bibliographic.circulation is not None
+        assert len(bibliographic.circulation.formats) == 4
+
+    @staticmethod
+    def _mock_extractor(
+        importer: OverdriveImporter,
+        identifier: str,
+        *,
+        bibliographic_changed: bool = True,
+        circulation_changed: bool = True,
+    ) -> tuple[Mock, Mock]:
+        """Replace the importer's extractor with mocks shaped like the real one.
+
+        Two details matter and are easy to leave out. The real extractor always
+        attaches a CirculationData carrying the metadata record's formats, which
+        ``_process_book`` folds into the availability snapshot; and it keys the
+        primary identifier off the record it was handed, which ``_process_book``
+        checks against the identifier the product list gave it. A mock missing
+        either one is not shaped like anything the importer actually receives.
+
+        :param importer: The importer whose ``_extractor`` is replaced.
+        :param identifier: The Overdrive id the metadata record reports.
+        :param bibliographic_changed: What ``BibliographicData.needs_apply`` returns.
+        :param circulation_changed: What ``CirculationData.needs_apply`` returns.
+        :return: The (bibliographic, circulation) mocks the extractor will return.
+        """
+        bibliographic = Mock(spec=BibliographicData)
+        bibliographic.circulation = Mock(spec=CirculationData)
+        bibliographic.circulation.formats = []
+        bibliographic.needs_apply.return_value = bibliographic_changed
+        bibliographic.primary_identifier_data = IdentifierData(
+            type=Identifier.OVERDRIVE_ID, identifier=identifier
+        )
+
+        circulation = Mock(spec=CirculationData)
+        circulation.needs_apply.return_value = circulation_changed
+
+        importer._extractor.book_info_to_bibliographic = Mock(
+            return_value=bibliographic
+        )
+        importer._extractor.book_info_to_circulation = Mock(return_value=circulation)
+        return bibliographic, circulation
+
+    def _book_with_both_documents(
+        self, overdrive_files_fixture: OverdriveFilesFixture
+    ) -> dict[str, Any]:
+        """A product-list entry with its metadata record and availability attached."""
+        book = json.loads(
+            overdrive_files_fixture.sample_data("overdrive_book_list.json")
+        )["products"][0].copy()
+        metadata = json.loads(
+            overdrive_files_fixture.sample_data("overdrive_metadata.json")
+        )
+        metadata["id"] = book["id"]
+        book["metadata"] = metadata
+        availability = json.loads(
+            overdrive_files_fixture.sample_data(
+                "overdrive_availability_information.json"
+            )
+        )
+        availability["reserveId"] = book["id"]
+        book["availabilityV2"] = availability
+        return book
+
+    def test_process_book_dispatches_a_single_apply_carrying_both_halves(
+        self,
+        db: DatabaseTransactionFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
+        services_fixture: ServicesFixture,
+    ) -> None:
+        """Formats and availability must travel together, in one task.
+
+        Overdrive is the only distributor that reads them from two documents, and
+        converting them yields two CirculationData objects. Dispatching both as
+        independent tasks makes two writers for one pool: each stamps
+        ``pool.updated_at`` with its own ``as_of_timestamp`` and ``should_apply_to``
+        rejects anything strictly older, so whichever lands second is discarded. When
+        that is the formats half, the edition's hash is stamped anyway and no later
+        import retries it -- the title keeps zero delivery mechanisms permanently.
+        """
+        collection = overdrive_api_fixture.collection
+        registry = services_fixture.services.integration_registry.license_providers()
+        importer = OverdriveImporter(
+            db=db.session,
+            collection=collection,
+            registry=registry,
+            api=overdrive_api_fixture.api,
+        )
+
+        book = self._book_with_both_documents(overdrive_files_fixture)
+
+        apply_bibliographic = Mock()
+        apply_circulation = Mock()
+        importer._process_book(
+            book=book,
+            fetch_metadata=True,
+            policy=ReplacementPolicy(),
+            apply_bibliographic=apply_bibliographic,
+            apply_circulation=apply_circulation,
+        )
+
+        # Exactly one task, never two.
+        apply_bibliographic.assert_called_once()
+        apply_circulation.assert_not_called()
+
+        # And the one object it carries holds both halves: the formats from the
+        # metadata record and the counts from the availability document.
+        circulation = apply_bibliographic.call_args.args[0].circulation
+        assert circulation is not None
+        assert len(circulation.formats) == 4
+        assert circulation.licenses_owned is not None
+
+    @pytest.mark.parametrize("bibliographic_changed", [True, False])
+    def test_process_book_without_availability_still_carries_formats(
+        self,
+        db: DatabaseTransactionFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
+        services_fixture: ServicesFixture,
+        bibliographic_changed: bool,
+    ) -> None:
+        """Metadata present but no availability document -- a real Overdrive 404.
+
+        The converter's formats-only snapshot is then the only circulation data we
+        have, and it still has to reach the database by whichever branch runs: hung
+        off the bibliographic payload when the book's details changed, dispatched on
+        its own when they did not.
+        """
+        collection = overdrive_api_fixture.collection
+        registry = services_fixture.services.integration_registry.license_providers()
+        importer = OverdriveImporter(
+            db=db.session,
+            collection=collection,
+            registry=registry,
+            api=overdrive_api_fixture.api,
+        )
+        book = self._book_with_both_documents(overdrive_files_fixture)
+        del book["availabilityV2"]
+
+        apply_bibliographic = Mock()
+        apply_circulation = Mock()
+        policy = IMPORT_POLICY
+        with patch.object(
+            BibliographicData, "needs_apply", return_value=bibliographic_changed
+        ):
+            importer._process_book(
+                book=book,
+                fetch_metadata=True,
+                policy=policy,
+                apply_bibliographic=apply_bibliographic,
+                apply_circulation=apply_circulation,
+            )
+
+        if bibliographic_changed:
+            apply_circulation.assert_not_called()
+            apply_bibliographic.assert_called_once()
+            circulation = apply_bibliographic.call_args.args[0].circulation
+        else:
+            apply_bibliographic.assert_not_called()
+            apply_circulation.assert_called_once()
+            circulation = apply_circulation.call_args.args[0]
+            # The formats came from the metadata record, so this snapshot is
+            # authoritative about them and may remove one that has gone away.
+            assert apply_circulation.call_args.kwargs["replace"].formats is True
+
+        # Either way it is the converter's formats-only snapshot: formats present,
+        # no availability counts, because there was no availability document.
+        assert circulation is not None
+        assert len(circulation.formats) == 4
+        assert circulation.licenses_owned is None
+
+    @pytest.mark.parametrize(
+        "has_metadata, expected_format_count, may_remove_formats",
+        [
+            pytest.param(True, 4, True, id="metadata-record formats are authoritative"),
+            pytest.param(False, 0, False, id="availability-only formats are not"),
+        ],
+    )
+    def test_process_book_circulation_branch_removes_formats_only_when_authoritative(
+        self,
+        db: DatabaseTransactionFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
+        services_fixture: ServicesFixture,
+        has_metadata: bool,
+        expected_format_count: int,
+        may_remove_formats: bool,
+    ) -> None:
+        """Only a snapshot built from the metadata record may remove a format.
+
+        Both cases take the circulation branch, and getting either one wrong does
+        real damage:
+
+        * With the metadata record, the format list is complete, so a format
+          Overdrive has dropped must go away. Deny the policy and the stale delivery
+          mechanism survives while the apply still records the new hash -- no later
+          import retries the removal, and patrons keep being offered a format
+          Overdrive no longer has.
+        * Without it the snapshot has no formats at all, because an Advantage import
+          skips the metadata lookup for any title the parent collection already
+          handled. Grant the policy and that empty list is treated as complete,
+          deleting every delivery mechanism -- and since delivery mechanisms are
+          keyed on data source and identifier rather than on collection, the
+          parent's titles go with them.
+        """
+        collection = overdrive_api_fixture.collection
+        registry = services_fixture.services.integration_registry.license_providers()
+        importer = OverdriveImporter(
+            db=db.session,
+            collection=collection,
+            registry=registry,
+            api=overdrive_api_fixture.api,
+        )
+        book = self._book_with_both_documents(overdrive_files_fixture)
+        if not has_metadata:
+            del book["metadata"]
+
+        apply_bibliographic = Mock()
+        apply_circulation = Mock()
+        # The book's other details are unchanged, so the circulation branch runs.
+        with patch.object(BibliographicData, "needs_apply", return_value=False):
+            importer._process_book(
+                book=book,
+                fetch_metadata=True,
+                policy=IMPORT_POLICY,
+                apply_bibliographic=apply_bibliographic,
+                apply_circulation=apply_circulation,
+            )
+
+        apply_bibliographic.assert_not_called()
+        apply_circulation.assert_called_once()
+
+        circulation = apply_circulation.call_args.args[0]
+        assert len(circulation.formats) == expected_format_count
+
+        replace = apply_circulation.call_args.kwargs.get("replace")
+        assert bool(replace and replace.formats) is may_remove_formats
+
+    def test_process_book_apply_leaves_loan_created_formats_alone(
+        self,
+        db: DatabaseTransactionFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
+        services_fixture: ServicesFixture,
+    ) -> None:
+        """An import apply with removal authority leaves the loan path's formats alone.
+
+        Overdrive is the only distributor that writes delivery mechanisms outside the
+        import. Its metadata record never says which ebook format a title is really
+        in, so the import guesses -- Adobe EPUB available, open EPUB not -- and the
+        checkout document corrects the guess once there is a loan. The correction
+        used here is the exact inverse of the guess.
+
+        Now that the circulation branch may delete a format, those corrections are
+        worth pinning. They survive for two reasons:
+
+        * the loan path only creates mechanisms drawn from
+          ``internal_format_to_delivery_mechanism``, every one of which is already in
+          the default ``ebook-overdrive`` list, so none is ever absent from the
+          incoming formats and none is selected for deletion;
+        * ``FormatData.update_available`` defaults to False on the import path, so
+          re-applying the defaults does not flip an availability back.
+        """
+        collection = overdrive_api_fixture.collection
+        registry = services_fixture.services.integration_registry.license_providers()
+        importer = OverdriveImporter(
+            db=db.session,
+            collection=collection,
+            registry=registry,
+            api=overdrive_api_fixture.api,
+        )
+        book = self._book_with_both_documents(overdrive_files_fixture)
+        pool, _ = LicensePool.for_foreign_id(
+            db.session,
+            DataSource.OVERDRIVE,
+            Identifier.OVERDRIVE_ID,
+            book["id"],
+            collection=collection,
+        )
+
+        # A patron borrows the book, and the checkout document tells us which
+        # formats the loan is really available in.
+        checkout = Checkout.model_validate_json(
+            overdrive_files_fixture.sample_data(
+                "checkout_response_no_format_locked_in_no_drm.json"
+            )
+        )
+        assert collection.id is not None
+        loan_info = OverdriveAPI.process_checkout_data(checkout, collection.id)
+        assert loan_info is not None
+        loan_info.create_or_update(db.patron(), license_pool=pool)
+
+        epub_adobe = (Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.ADOBE_DRM)
+        epub_no_drm = (Representation.EPUB_MEDIA_TYPE, DeliveryMechanism.NO_DRM)
+        after_loan = self._format_availability(db.session, pool)
+        # The loan inverted the import's guess about both EPUB mechanisms.
+        assert after_loan[epub_adobe] is False
+        assert after_loan[epub_no_drm] is True
+
+        # Import the title again. Its other details are unchanged, so the
+        # circulation branch runs, and it carries the policy because its formats
+        # came from the metadata record.
+        apply_circulation = Mock()
+        with patch.object(BibliographicData, "needs_apply", return_value=False):
+            importer._process_book(
+                book=book,
+                fetch_metadata=True,
+                policy=IMPORT_POLICY,
+                apply_bibliographic=Mock(),
+                apply_circulation=apply_circulation,
+            )
+        circulation = apply_circulation.call_args.args[0]
+        replace = apply_circulation.call_args.kwargs.get("replace")
+        assert replace is not None and replace.formats
+        circulation.apply(db.session, collection, replace)
+
+        # Nothing was deleted, and no availability was flipped back.
+        assert self._format_availability(db.session, pool) == after_loan
+
+    @staticmethod
+    def _format_availability(
+        session: Session, pool: LicensePool
+    ) -> dict[tuple[str | None, str | None], bool]:
+        """A pool's delivery mechanisms, keyed by content type and DRM scheme."""
+        session.flush()
+        session.expire(pool)
+        return {
+            (
+                lpdm.delivery_mechanism.content_type,
+                lpdm.delivery_mechanism.drm_scheme,
+            ): lpdm.available
+            for lpdm in pool.delivery_mechanisms
+        }
+
+    @pytest.mark.parametrize("fetch_metadata", [True, False])
+    def test_process_book_metadata_error_document_is_skipped(
+        self,
+        db: DatabaseTransactionFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
+        services_fixture: ServicesFixture,
+        caplog: pytest.LogCaptureFixture,
+        fetch_metadata: bool,
+    ) -> None:
+        """An Overdrive error document must not crash the import.
+
+        Overdrive reports an unrecognized identifier as an HTTP 200 whose body is an
+        error document rather than as an HTTP error, so ``book["metadata"]`` can be a
+        non-empty dict with no ``id`` in it. That passes the ``if book.get("metadata")``
+        guard but gives the extractor nothing to key on, and it returns None.
+
+        Both ingest paths are covered: ``fetch_metadata=True`` is the bulk path used for
+        main collections, where the error document is attached by the book-list fetch;
+        ``fetch_metadata=False`` is the lazy path used for advantage collections, where
+        it comes back from a per-title metadata lookup.
+        """
+        collection = overdrive_api_fixture.collection
+        registry = services_fixture.services.integration_registry.license_providers()
+
+        importer = OverdriveImporter(
+            db=db.session,
+            collection=collection,
+            registry=registry,
+            api=overdrive_api_fixture.api,
+        )
+
+        error_document = {
+            "errorCode": "NotFound",
+            "message": "The requested record was not found.",
+            "token": "a-token",
+        }
+
+        book_list_data = json.loads(
+            overdrive_files_fixture.sample_data("overdrive_book_list.json")
+        )
+        book = book_list_data["products"][0].copy()
+        book["availabilityV2"] = json.loads(
+            overdrive_files_fixture.sample_data(
+                "overdrive_availability_information.json"
+            )
+        )
+
+        if fetch_metadata:
+            # Bulk path: the error document is already attached to the book.
+            book["metadata"] = error_document
+            importer._api.metadata_lookup = Mock(
+                side_effect=AssertionError("Metadata lookup should not be called")
+            )
+        else:
+            # Lazy path: the error document comes back from the metadata lookup.
+            book.pop("metadata", None)
+            importer._api.metadata_lookup = Mock(
+                return_value=MetadataResponse.model_validate(error_document)
+            )
+
+        apply_bibliographic = Mock()
+        apply_circulation = Mock()
+
+        with caplog.at_level(logging.WARNING):
+            identifier, changed = importer._process_book(
+                book=book,
+                fetch_metadata=fetch_metadata,
+                policy=ReplacementPolicy(),
+                apply_bibliographic=apply_bibliographic,
+                apply_circulation=apply_circulation,
+            )
+
+        # The book is skipped rather than blowing up the whole import run.
+        assert isinstance(identifier, Identifier)
+        apply_bibliographic.assert_not_called()
+        assert (
+            "Could not extract bibliographic data from Overdrive metadata"
+            in caplog.text
+        )
+
+        # The circulation data is independent of the metadata record, so it is still
+        # applied -- availability must keep flowing even when the record is unusable.
+        apply_circulation.assert_called_once()
+        assert changed is True
+
+    def test_process_book_metadata_for_a_different_identifier_is_skipped(
+        self,
+        db: DatabaseTransactionFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
+        services_fixture: ServicesFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Metadata describing a different title must not be applied.
+
+        The identifier comes from the product list while the bibliographic data comes
+        from the separately fetched metadata record, so the two can disagree. Nothing
+        downstream would catch it: the apply task resolves the edition from the
+        record's own identifier, so its primary-identifier check compares the record
+        against itself and passes.
+
+        The importer therefore stops before the merge, which would otherwise graft
+        the wrong title's format list onto this title's availability snapshot and
+        apply it with authority to remove the formats it really has.
+        """
+        collection = overdrive_api_fixture.collection
+        registry = services_fixture.services.integration_registry.license_providers()
+
+        importer = OverdriveImporter(
+            db=db.session,
+            collection=collection,
+            registry=registry,
+            api=overdrive_api_fixture.api,
+        )
+
+        book_list_data = json.loads(
+            overdrive_files_fixture.sample_data("overdrive_book_list.json")
+        )
+        book = book_list_data["products"][0].copy()
+        metadata = json.loads(
+            overdrive_files_fixture.sample_data("overdrive_metadata.json")
+        )
+        # The fixtures describe two different titles, so leaving the ids as they are
+        # is exactly the mismatch we want to detect.
+        assert metadata["id"] != book["id"]
+        book["metadata"] = metadata
+        book["availabilityV2"] = json.loads(
+            overdrive_files_fixture.sample_data(
+                "overdrive_availability_information.json"
+            )
+        )
+
+        apply_bibliographic = Mock()
+        apply_circulation = Mock()
+
+        with caplog.at_level(logging.WARNING):
+            importer._process_book(
+                book=book,
+                fetch_metadata=True,
+                policy=IMPORT_POLICY,
+                apply_bibliographic=apply_bibliographic,
+                apply_circulation=apply_circulation,
+            )
+
+        apply_bibliographic.assert_not_called()
+        assert "reports a different identifier" in caplog.text
+
+        # The availability document still applies on its own -- that part is about
+        # this title and is worth doing. But it must carry none of the other title's
+        # formats, and no authority to remove this one's.
+        apply_circulation.assert_called_once()
+        assert apply_circulation.call_args.args[0].formats == []
+        assert apply_circulation.call_args.kwargs.get("replace") is None
+
+    def test_process_book_identifier_case_mismatch_is_tolerated(
+        self,
+        db: DatabaseTransactionFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
+        services_fixture: ServicesFixture,
+    ) -> None:
+        """Overdrive is inconsistent about id case; that alone is not a mismatch."""
+        collection = overdrive_api_fixture.collection
+        registry = services_fixture.services.integration_registry.license_providers()
+
+        importer = OverdriveImporter(
+            db=db.session,
+            collection=collection,
+            registry=registry,
+            api=overdrive_api_fixture.api,
+        )
+
+        book = self._book_with_both_documents(overdrive_files_fixture)
+        book["metadata"]["id"] = book["id"].upper()
+        assert book["metadata"]["id"] != book["id"]
+
+        apply_bibliographic = Mock()
+
+        importer._process_book(
+            book=book,
+            fetch_metadata=True,
+            policy=ReplacementPolicy(),
+            apply_bibliographic=apply_bibliographic,
+            apply_circulation=Mock(),
+        )
+
+        apply_bibliographic.assert_called_once()
+
+    def test_process_book_non_english_language_preserved(
+        self,
+        db: DatabaseTransactionFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        overdrive_files_fixture: OverdriveFilesFixture,
+        services_fixture: ServicesFixture,
+    ) -> None:
+        """A non-English book must not be miscatalogued as English."""
+        collection = overdrive_api_fixture.collection
+        registry = services_fixture.services.integration_registry.license_providers()
+
+        importer = OverdriveImporter(
+            db=db.session,
+            collection=collection,
+            registry=registry,
+            api=overdrive_api_fixture.api,
+        )
+
+        book = self._book_with_both_documents(overdrive_files_fixture)
+        book["metadata"]["languages"] = [{"code": "fr", "name": "French"}]
+
+        apply_bibliographic = Mock()
+
+        importer._process_book(
+            book=book,
+            fetch_metadata=True,
+            policy=ReplacementPolicy(),
+            apply_bibliographic=apply_bibliographic,
+            apply_circulation=Mock(),
+        )
+
+        apply_bibliographic.assert_called_once()
+        assert apply_bibliographic.call_args.args[0].language == "fre"
+
     def test_import_collection_basic(
         self,
         db: DatabaseTransactionFixture,
         overdrive_api_fixture: OverdriveAPIFixture,
         overdrive_files_fixture: OverdriveFilesFixture,
         services_fixture: ServicesFixture,
-    ):
+    ) -> None:
         """Test import_collection with basic book data."""
         collection = overdrive_api_fixture.collection
         registry = services_fixture.services.integration_registry.license_providers()
@@ -269,17 +911,9 @@ class TestOverdriveImporter:
             return_value=(mock_book_data, mock_next_endpoint)
         )
 
-        # Mock extractor methods
-        mock_bibliographic = Mock(spec=BibliographicData)
-        mock_bibliographic.needs_apply.return_value = True
-        mock_circulation = Mock(spec=CirculationData)
-        mock_circulation.needs_apply.return_value = True
-
-        importer._extractor.book_info_to_bibliographic = Mock(
-            return_value=mock_bibliographic
-        )
-        importer._extractor.book_info_to_circulation = Mock(
-            return_value=mock_circulation
+        mock_bibliographic, mock_circulation = self._mock_extractor(
+            importer,
+            mock_book_data[0]["id"],
         )
 
         # Run import
@@ -294,9 +928,10 @@ class TestOverdriveImporter:
         assert result.processed_count == 1
         assert result.next_page == mock_next_endpoint
 
-        # Verify apply functions were called
+        # Exactly one apply is dispatched per book. The bibliographic data changed,
+        # so it carries the circulation update with it rather than racing a second task.
         assert mock_apply_bib.call_count == 1
-        assert mock_apply_circ.call_count == 1
+        assert mock_apply_circ.call_count == 0
 
         # Verify identifier was created
         identifier, _ = Identifier.for_foreign_id(
@@ -311,7 +946,7 @@ class TestOverdriveImporter:
         db: DatabaseTransactionFixture,
         overdrive_api_fixture: OverdriveAPIFixture,
         services_fixture: ServicesFixture,
-    ):
+    ) -> None:
         """Test import_collection when endpoint is provided."""
         collection = overdrive_api_fixture.collection
         registry = services_fixture.services.integration_registry.license_providers()
@@ -349,7 +984,7 @@ class TestOverdriveImporter:
         db: DatabaseTransactionFixture,
         overdrive_api_fixture: OverdriveAPIFixture,
         services_fixture: ServicesFixture,
-    ):
+    ) -> None:
         """Test import_collection adds identifiers to identifier_set."""
         collection = overdrive_api_fixture.collection
         registry = services_fixture.services.integration_registry.license_providers()
@@ -379,17 +1014,9 @@ class TestOverdriveImporter:
             return_value=(mock_book_data, None)
         )
 
-        # Mock extractor
-        mock_bibliographic = Mock(spec=BibliographicData)
-        mock_bibliographic.needs_apply.return_value = True
-        mock_circulation = Mock(spec=CirculationData)
-        mock_circulation.needs_apply.return_value = True
-
-        importer._extractor.book_info_to_bibliographic = Mock(
-            return_value=mock_bibliographic
-        )
-        importer._extractor.book_info_to_circulation = Mock(
-            return_value=mock_circulation
+        mock_bibliographic, mock_circulation = self._mock_extractor(
+            importer,
+            "overdrive-id-1",
         )
 
         # Run import
@@ -407,7 +1034,7 @@ class TestOverdriveImporter:
         db: DatabaseTransactionFixture,
         overdrive_api_fixture: OverdriveAPIFixture,
         services_fixture: ServicesFixture,
-    ):
+    ) -> None:
         """Test import_collection skips unchanged bibliographic data."""
         collection = overdrive_api_fixture.collection
         registry = services_fixture.services.integration_registry.license_providers()
@@ -435,17 +1062,10 @@ class TestOverdriveImporter:
             return_value=(mock_book_data, None)
         )
 
-        # Mock extractor - bibliographic hasn't changed
-        mock_bibliographic = Mock(spec=BibliographicData)
-        mock_bibliographic.needs_apply.return_value = False  # Not changed
-        mock_circulation = Mock(spec=CirculationData)
-        mock_circulation.needs_apply.return_value = True
-
-        importer._extractor.book_info_to_bibliographic = Mock(
-            return_value=mock_bibliographic
-        )
-        importer._extractor.book_info_to_circulation = Mock(
-            return_value=mock_circulation
+        mock_bibliographic, mock_circulation = self._mock_extractor(
+            importer,
+            "overdrive-id-1",
+            bibliographic_changed=False,
         )
 
         # Run import
@@ -460,12 +1080,123 @@ class TestOverdriveImporter:
         # But circulation should still be applied
         assert mock_apply_circ.call_count == 1
 
+    def test_import_collection_skips_a_record_with_no_identifier(
+        self,
+        db: DatabaseTransactionFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        services_fixture: ServicesFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A converted record carrying no identifier cannot be matched, so it is
+        skipped rather than trusted."""
+        collection = overdrive_api_fixture.collection
+        registry = services_fixture.services.integration_registry.license_providers()
+        api = overdrive_api_fixture.api
+        importer = OverdriveImporter(
+            db=db.session, collection=collection, registry=registry, api=api
+        )
+        api.async_requests.fetch_book_info_list = AsyncMock(
+            return_value=(
+                [
+                    {
+                        "id": "overdrive-id-1",
+                        "metadata": {"title": "A Book"},
+                        "availabilityV2": {"copiesOwned": 1},
+                    }
+                ],
+                None,
+            )
+        )
+
+        mock_bibliographic, _ = self._mock_extractor(importer, "overdrive-id-1")
+        mock_bibliographic.primary_identifier_data = None
+
+        mock_apply_bib = Mock()
+        with caplog.at_level(logging.WARNING):
+            importer.import_collection(
+                apply_bibliographic=mock_apply_bib,
+                apply_circulation=Mock(),
+            )
+
+        mock_apply_bib.assert_not_called()
+        assert "reports a different identifier" in caplog.text
+
+    def test_import_collection_applies_nothing_when_nothing_changed(
+        self,
+        db: DatabaseTransactionFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        services_fixture: ServicesFixture,
+    ) -> None:
+        """Neither half changed, so the book costs no apply at all."""
+        collection = overdrive_api_fixture.collection
+        registry = services_fixture.services.integration_registry.license_providers()
+        api = overdrive_api_fixture.api
+        importer = OverdriveImporter(
+            db=db.session, collection=collection, registry=registry, api=api
+        )
+        api.async_requests.fetch_book_info_list = AsyncMock(
+            return_value=(
+                [
+                    {
+                        "id": "overdrive-id-1",
+                        "metadata": {"title": "Unchanged Book"},
+                        "availabilityV2": {"copiesOwned": 1},
+                    }
+                ],
+                None,
+            )
+        )
+
+        self._mock_extractor(
+            importer,
+            "overdrive-id-1",
+            bibliographic_changed=False,
+            circulation_changed=False,
+        )
+
+        mock_apply_bib = Mock()
+        mock_apply_circ = Mock()
+        importer.import_collection(
+            apply_bibliographic=mock_apply_bib,
+            apply_circulation=mock_apply_circ,
+        )
+
+        mock_apply_bib.assert_not_called()
+        mock_apply_circ.assert_not_called()
+
+    def test_import_collection_reports_elapsed_time_when_known(
+        self,
+        db: DatabaseTransactionFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        services_fixture: ServicesFixture,
+    ) -> None:
+        """A timestamp with both ends known contributes an elapsed time."""
+        collection = overdrive_api_fixture.collection
+        registry = services_fixture.services.integration_registry.license_providers()
+        api = overdrive_api_fixture.api
+        importer = OverdriveImporter(
+            db=db.session, collection=collection, registry=registry, api=api
+        )
+        timestamp = importer.get_timestamp()
+        timestamp.start = datetime_utc(2023, 1, 1, 0, 0, 0)
+        timestamp.finish = datetime_utc(2023, 1, 1, 0, 0, 30)
+        db.session.flush()
+
+        api.async_requests.fetch_book_info_list = AsyncMock(return_value=([], None))
+        importer.import_collection(
+            apply_bibliographic=Mock(),
+            apply_circulation=Mock(),
+        )
+
+        assert timestamp.achievements is not None
+        assert "Elapsed time: 30.00 seconds." in timestamp.achievements
+
     def test_import_collection_handles_missing_metadata(
         self,
         db: DatabaseTransactionFixture,
         overdrive_api_fixture: OverdriveAPIFixture,
         services_fixture: ServicesFixture,
-    ):
+    ) -> None:
         """Test import_collection handles books with missing metadata."""
         collection = overdrive_api_fixture.collection
         registry = services_fixture.services.integration_registry.license_providers()
@@ -520,7 +1251,7 @@ class TestOverdriveImporter:
         db: DatabaseTransactionFixture,
         overdrive_api_fixture: OverdriveAPIFixture,
         services_fixture: ServicesFixture,
-    ):
+    ) -> None:
         """Test import_collection without parent identifiers fetches metadata upfront."""
         collection = overdrive_api_fixture.collection
         registry = services_fixture.services.integration_registry.license_providers()
@@ -553,17 +1284,9 @@ class TestOverdriveImporter:
         api.metadata_lookup = Mock(
             return_value=MetadataResponse.model_validate({"title": "New Book"})
         )
-        # Mock extractor
-        mock_bibliographic = Mock(spec=BibliographicData)
-        mock_bibliographic.needs_apply.return_value = True
-        mock_circulation = Mock(spec=CirculationData)
-        mock_circulation.needs_apply.return_value = True
-
-        importer._extractor.book_info_to_bibliographic = Mock(
-            return_value=mock_bibliographic
-        )
-        importer._extractor.book_info_to_circulation = Mock(
-            return_value=mock_circulation
+        mock_bibliographic, mock_circulation = self._mock_extractor(
+            importer,
+            "overdrive-id-1",
         )
 
         # Run import
@@ -589,7 +1312,7 @@ class TestOverdriveImporter:
         db: DatabaseTransactionFixture,
         overdrive_api_fixture: OverdriveAPIFixture,
         services_fixture: ServicesFixture,
-    ):
+    ) -> None:
         """Test import_collection with parent identifiers skips fetching metadata for books in parent set."""
         collection = overdrive_api_fixture.collection
         registry = services_fixture.services.integration_registry.license_providers()
@@ -642,17 +1365,9 @@ class TestOverdriveImporter:
             return_value=MetadataResponse.model_validate({"title": "New Book"})
         )
 
-        # Mock extractor
-        mock_bibliographic = Mock(spec=BibliographicData)
-        mock_bibliographic.needs_apply.return_value = True
-        mock_circulation = Mock(spec=CirculationData)
-        mock_circulation.needs_apply.return_value = True
-
-        importer._extractor.book_info_to_bibliographic = Mock(
-            return_value=mock_bibliographic
-        )
-        importer._extractor.book_info_to_circulation = Mock(
-            return_value=mock_circulation
+        mock_bibliographic, mock_circulation = self._mock_extractor(
+            importer,
+            "overdrive-id-3",
         )
 
         # Run import
@@ -671,11 +1386,12 @@ class TestOverdriveImporter:
         # Verify metadata_lookup was called once for the book NOT in parent set
         assert api.metadata_lookup.call_count == 1
 
-        # Bibliographic should be applied once (only for the new book with metadata)
+        # One apply per book, never two. The book with metadata takes the
+        # bibliographic branch, which carries its circulation data along; the book
+        # already covered by the parent has no metadata, so it takes the circulation
+        # branch on its own.
         assert mock_apply_bib.call_count == 1
-
-        # Circulation should be applied for both books
-        assert mock_apply_circ.call_count == 2
+        assert mock_apply_circ.call_count == 1
 
         assert result.processed_count == 2
 
@@ -683,7 +1399,7 @@ class TestOverdriveImporter:
 class TestFeedImportResult:
     """Tests for the FeedImportResult dataclass."""
 
-    def test_feed_import_result_basic(self):
+    def test_feed_import_result_basic(self) -> None:
         """Test FeedImportResult creation with basic data."""
         current_page = BookInfoEndpoint(url="http://current.page")
         result = FeedImportResult(current_page=current_page)
@@ -692,7 +1408,7 @@ class TestFeedImportResult:
         assert result.next_page is None
         assert result.processed_count == 0
 
-    def test_feed_import_result_with_all_fields(self):
+    def test_feed_import_result_with_all_fields(self) -> None:
         """Test FeedImportResult with all fields populated."""
         current_page = BookInfoEndpoint(url="http://current.page")
         next_page = BookInfoEndpoint(url="http://next.page")
@@ -705,11 +1421,13 @@ class TestFeedImportResult:
         assert result.next_page == next_page
         assert result.processed_count == 42
 
-    def test_feed_import_result_frozen(self):
+    def test_feed_import_result_frozen(self) -> None:
         """Test that FeedImportResult is immutable (frozen)."""
         current_page = BookInfoEndpoint(url="http://current.page")
         result = FeedImportResult(current_page=current_page)
 
         # Should raise an error when trying to modify
         with pytest.raises(AttributeError):
-            result.processed_count = 100
+            # Assigning to a read-only property is exactly what this test is
+            # checking raises, so mypy's complaint about it is the point.
+            result.processed_count = 100  # type: ignore[misc]
