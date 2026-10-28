@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import html
 import re
-from collections.abc import Callable, Generator, Sequence
+from collections.abc import Generator, Sequence
 from datetime import timedelta
 from typing import Annotated, Unpack, cast
 
@@ -272,30 +272,30 @@ class BoundlessApi(
     _baker_taylor_base64_regex = re.compile(r"^[0-9a-zA-Z_-]+$")
     # RSA 2048 bit modulus is 256 bytes, which is ceil(256 * 4 / 3) = 342 characters when
     # base64 encoded without padding.
-    _baker_taylor_kdrm_modulus_validator: Callable[[str], None] = TypeAdapter(
+    _baker_taylor_kdrm_modulus_validator: TypeAdapter[str] = TypeAdapter(
         Annotated[
             str,
             StringConstraints(
                 min_length=342, max_length=342, pattern=_baker_taylor_base64_regex
             ),
         ]
-    ).validate_python
+    )
     # The exponent is typically 65537, which is 4 characters when base64 encoded without padding,
     # but this isn't guaranteed, so we just validate the proper base64 encoding.
-    _baker_taylor_kdrm_exponent_validator: Callable[[str], None] = TypeAdapter(
+    _baker_taylor_kdrm_exponent_validator: TypeAdapter[str] = TypeAdapter(
         Annotated[
             str,
             StringConstraints(pattern=_baker_taylor_base64_regex),
         ]
-    ).validate_python
+    )
 
     @classmethod
     def _validate_baker_taylor_kdrm_param(
-        cls, validation_func: Callable[[str], None], param_name: str, param: str
+        cls, validator: TypeAdapter[str], param_name: str, param: str
     ) -> None:
         """Validate the Baker & Taylor KDRM modulus parameter."""
         try:
-            validation_func(param)
+            validator.validate_python(param)
         except ValidationError as e:
             error = e.errors()[0]
             error_msg = error["msg"]
