@@ -1,6 +1,9 @@
 import html
 import json
 import logging
+import os
+import subprocess
+import sys
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
@@ -966,6 +969,47 @@ class TestSAMLSettings:
         assert all(expected_reason in warning for warning in warnings)
         # The form shows the description as HTML, so the reason is escaped.
         assert html.escape(expected_reason) in str(setting["description"])
+
+    @pytest.mark.parametrize(
+        "environment",
+        [
+            pytest.param(
+                {"PALACE_SAML_SP_METADATA": saml_strings.CORRECT_XML_WITH_ONE_SP},
+                id="metadata",
+            ),
+            pytest.param(
+                {"PALACE_SAML_SP_PRIVATE_KEY": saml_strings.PRIVATE_KEY},
+                id="private-key",
+            ),
+            pytest.param(
+                {
+                    "PALACE_SAML_SP_METADATA": "<invalid>xml</invalid>",
+                    "PALACE_SAML_SP_PRIVATE_KEY": "wrong-key",
+                },
+                id="invalid",
+            ),
+        ],
+    )
+    def test_module_imports_with_service_provider_environment(
+        self, environment: dict[str, str]
+    ) -> None:
+        """The module imports when the environment provides SP settings.
+
+        Building the class builds the settings' descriptions, which check the
+        environment. A fresh interpreter is used, because the module is already
+        imported here and the environment check is cached.
+        """
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import palace.manager.integration.patron_auth.saml.configuration.model",
+            ],
+            env={**os.environ, **environment},
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stderr
 
     def test_service_provider_environment_checked_once(
         self,
