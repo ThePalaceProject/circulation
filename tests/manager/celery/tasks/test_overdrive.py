@@ -1614,6 +1614,53 @@ class TestBackfillCollection:
         ] == [mine]
 
     @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
+    def test_backfill_keeps_repairs_made_before_a_mid_batch_failure(
+        self,
+        mock_api_class: MagicMock,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        overdrive_api_fixture: OverdriveAPIFixture,
+        redis_fixture: RedisFixture,
+    ) -> None:
+        """A failure part way through a batch does not discard what came before.
+
+        Each title costs a blocking Overdrive request, so losing a batch's worth of
+        completed repairs to one failure means paying for them all again. Committing
+        per title also means the retry, which restarts at the same offset, skips them:
+        a repaired pool no longer matches the damage query.
+        """
+        collection = overdrive_api_fixture.collection
+        pools = []
+        for _ in range(3):
+            pool = self._healthy_pool(db, collection)
+            # Symptom (c): a presentation edition with no publisher.
+            pool.presentation_edition.publisher = None
+            pools.append(pool)
+        db.session.flush()
+        assert overdrive.count_backfill_candidates(db.session, collection.id) == 3
+
+        def repair_then_fail(pool: LicensePool, *, force: bool = False) -> None:
+            if pool.id == pools[-1].id:
+                raise ValueError("Overdrive fell over")
+            pool.presentation_edition.publisher = "A Publisher"
+
+        mock_api_class.return_value.ensure_bibliographic_coverage.side_effect = (
+            repair_then_fail
+        )
+
+        with pytest.raises(ValueError, match="fell over"):
+            overdrive.backfill_collection.delay(collection.id).wait()
+        db.session.expire_all()
+
+        # The two repaired before the failure are committed and no longer selected.
+        assert [pool.presentation_edition.publisher for pool in pools] == [
+            "A Publisher",
+            "A Publisher",
+            None,
+        ]
+        assert overdrive.count_backfill_candidates(db.session, collection.id) == 1
+
+    @patch("palace.manager.celery.tasks.overdrive.OverdriveAPI")
     def test_backfill_replaces_when_full_batch(
         self,
         mock_api_class: MagicMock,

@@ -877,7 +877,9 @@ def backfill_collection(
         if not proceed:
             return
 
-        with task.transaction() as session:
+        # A session rather than a transaction, because each title is committed on its
+        # own below.
+        with task.session() as session:
             collection = load_from_id(session, Collection, collection_id)
             collection_name = collection.name
 
@@ -907,13 +909,21 @@ def backfill_collection(
                 return
 
             api = OverdriveAPI(session, collection)
+            new_offset = offset
+            processed_count = 0
             for pool in pools:
+                # Read the id before the commit below expires the instance.
+                pool_id = pool.id
                 # force=True: these records are wrong in ways the stored fingerprint
                 # cannot see, so an unforced apply could decide there is nothing to do.
                 api.ensure_bibliographic_coverage(pool, force=True)
-
-            new_offset = pools[-1].id
-            processed_count = len(pools)
+                # Commit each title on its own, so a failure part way through a batch
+                # keeps the repairs already paid for. A retry restarts at the same
+                # offset, but the committed titles no longer match the damage query,
+                # so they are skipped rather than fetched again.
+                session.commit()
+                new_offset = pool_id
+                processed_count += 1
 
         task.log.info(
             f"Overdrive backfill: processed {processed_count} pools for collection "
