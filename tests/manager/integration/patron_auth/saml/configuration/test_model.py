@@ -37,6 +37,10 @@ from palace.manager.integration.patron_auth.saml.configuration.promotion import 
 )
 from palace.manager.integration.patron_auth.saml.configuration.service_provider import (
     ACS_SELECTION_POLICY_ENV_VAR,
+    METADATA_ENV_VAR,
+    METADATA_FILE_ENV_VAR,
+    PRIVATE_KEY_ENV_VAR,
+    PRIVATE_KEY_FILE_ENV_VAR,
 )
 from palace.manager.integration.patron_auth.saml.metadata.federations import incommon
 from palace.manager.integration.patron_auth.saml.metadata.model import (
@@ -998,14 +1002,27 @@ class TestSAMLSettings:
         Building the class builds the settings' descriptions, which check the
         environment. A fresh interpreter is used, because the module is already
         imported here and the environment check is cached.
+
+        The SP variables from the outer environment are removed. Otherwise,
+        an inherited file variable alongside a case's inline value makes the
+        getters fail before the validators run, and the test passes anyway.
         """
+        sp_env_vars = {
+            METADATA_ENV_VAR,
+            METADATA_FILE_ENV_VAR,
+            PRIVATE_KEY_ENV_VAR,
+            PRIVATE_KEY_FILE_ENV_VAR,
+        }
+        inherited = {
+            name: value for name, value in os.environ.items() if name not in sp_env_vars
+        }
         result = subprocess.run(
             [
                 sys.executable,
                 "-c",
                 "import palace.manager.integration.patron_auth.saml.configuration.model",
             ],
-            env={**os.environ, **environment},
+            env={**inherited, **environment},
             capture_output=True,
             text=True,
         )
