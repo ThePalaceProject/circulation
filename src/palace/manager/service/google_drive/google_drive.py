@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import ssl
 from io import IOBase
-from typing import IO, TYPE_CHECKING, Any, Protocol, TypeVar, cast
+from typing import IO, TYPE_CHECKING, Any, Protocol, cast
 
 from google.auth.exceptions import TransportError
 from googleapiclient.errors import HttpError
@@ -73,8 +73,6 @@ UNREACHABLE_ERRORS: tuple[type[Exception], ...] = (
     TransportError,
 )
 
-T_co = TypeVar("T_co", covariant=True)
-
 
 class GoogleDriveUnavailable(BasePalaceException):
     """The Drive API failed in a way that is worth retrying later.
@@ -86,7 +84,7 @@ class GoogleDriveUnavailable(BasePalaceException):
     """
 
 
-class _ApiRequest(Protocol[T_co]):
+class _ApiRequest[T](Protocol):
     """The subset of googleapiclient's generated request objects that we call.
 
     The generated stubs give each Drive method its own request class (e.g.
@@ -94,7 +92,7 @@ class _ApiRequest(Protocol[T_co]):
     lets :meth:`GoogleDriveService._execute` stay typed across all of them.
     """
 
-    def execute(self, *, num_retries: int = ...) -> T_co: ...
+    def execute(self, *, num_retries: int = ...) -> T: ...
 
 
 def _is_retryable(error: HttpError) -> bool:
@@ -119,7 +117,7 @@ class GoogleDriveService(LoggerMixin):
     def __init__(self, api_client: DriveResource) -> None:
         self.api_client = api_client
 
-    def _execute(self, request: _ApiRequest[T_co], operation: str) -> T_co:
+    def _execute[T](self, request: _ApiRequest[T], operation: str) -> T:
         """Run a Drive API request, retrying and classifying transient failures.
 
         ``num_retries`` turns on googleapiclient's exponential backoff with
