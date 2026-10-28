@@ -27,6 +27,9 @@ from palace.manager.integration.license.overdrive.script import (
     ImportCollectionGroup,
 )
 from palace.manager.sqlalchemy.model.collection import Collection
+from palace.manager.sqlalchemy.model.datasource import DataSource
+from palace.manager.sqlalchemy.model.identifier import Identifier
+from palace.manager.sqlalchemy.model.licensing import LicensePool
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.overdrive import OverdriveAPIFixture
 
@@ -757,6 +760,55 @@ class TestBackfillCollection:
         mock_task.delay.assert_not_called()
         assert "5 damaged title(s)" in caplog.text
         assert "2 would be processed" in caplog.text
+
+    @patch(
+        "palace.manager.integration.license.overdrive.script.overdrive.backfill_collection"
+    )
+    @pytest.mark.parametrize("cap", [None, 5])
+    def test_dry_run_overlap_is_not_distorted_by_the_cap(
+        self,
+        mock_task: MagicMock,
+        cap: int | None,
+        script: BackfillCollection,
+        db: DatabaseTransactionFixture,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """The shared-title figure describes the data, not the cap.
+
+        The per-collection numbers are capped by --max-titles but the distinct title
+        count is not, so deriving the overlap from the capped ones reported a smaller
+        overlap than the catalogue has. It must come out the same either way.
+        """
+        caplog.set_level(LogLevel.info)
+        parent = db.collection(protocol=OverdriveAPI)
+        child = db.collection(protocol=OverdriveAPI)
+        child.parent = parent
+
+        # Four titles in both collections, two more in the parent alone: ten damaged
+        # pools, six distinct titles, an overlap of four.
+        for _ in range(4):
+            shared = db.identifier(identifier_type=Identifier.OVERDRIVE_ID)
+            for collection in (parent, child):
+                LicensePool.for_foreign_id(
+                    db.session,
+                    DataSource.OVERDRIVE,
+                    Identifier.OVERDRIVE_ID,
+                    shared.identifier,
+                    collection=collection,
+                )
+        for _ in range(2):
+            db.licensepool(db.edition(), collection=parent)
+        db.session.flush()
+
+        args = ["--all-collections", "--dry-run"]
+        if cap is not None:
+            args += ["--max-titles", str(cap)]
+        script.do_run(args)
+
+        mock_task.delay.assert_not_called()
+        assert "6 distinct title(s)" in caplog.text
+        assert "That is 4 fewer than the 10 pool(s) selected" in caplog.text
+        assert ("A cap of 5 per collection" in caplog.text) is (cap is not None)
 
     @patch(
         "palace.manager.integration.license.overdrive.script.overdrive.backfill_all_collections"

@@ -444,7 +444,7 @@ class BackfillCollection(Script):
             or_(clauses.unsearchable, clauses.incomplete),
             not_(clauses.unopenable),
         )
-        total = 0
+        selected_pools = 0
 
         for collection in collections:
             damaged = overdrive.count_backfill_candidates(
@@ -464,7 +464,10 @@ class BackfillCollection(Script):
             to_process = (
                 candidates if max_titles is None else min(candidates, max_titles)
             )
-            total += to_process
+            # Accumulated uncapped. The overlap below is a property of the catalogue,
+            # not of the cap, so mixing a capped sum with the uncapped distinct-title
+            # count would understate it.
+            selected_pools += candidates
 
             # Report the symptoms apart as well as together. "Unopenable" is expected
             # to cover nearly everything; the other two are worth keeping only if they
@@ -511,10 +514,10 @@ class BackfillCollection(Script):
             imported_since,
             include_suspected_magazines=include_suspected_magazines,
         )
-        shared = total - titles
+        shared = selected_pools - titles
         shared_note = (
-            f" That is {shared} fewer than the per-collection totals above, because"
-            f" a title in more than one collection is repaired once."
+            f" That is {shared} fewer than the {selected_pools} pool(s) selected,"
+            f" because a title in more than one collection is repaired once."
             if shared > 0
             else ""
         )
