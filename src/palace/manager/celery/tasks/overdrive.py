@@ -600,7 +600,7 @@ class BackfillClauses(NamedTuple):
     """A presentation edition missing a publisher or any contributions."""
 
 
-def _backfill_clauses() -> BackfillClauses:
+def backfill_clauses() -> BackfillClauses:
     """Build the filter identifying pools left damaged by the old Overdrive importer.
 
     Until it was fixed, the importer converted the product-list summary rather than
@@ -615,9 +615,12 @@ def _backfill_clauses() -> BackfillClauses:
     refreshing. They are combined with OR rather than queried separately so that a
     pool showing more than one symptom is still visited, and paid for, exactly once.
 
+    Public because the backfill script uses it too: :func:`_needs_backfill` ORs the
+    clauses together for a real run, while the script's dry run passes them in one at
+    a time to report what each selects on its own.
+
     :return: The three clauses, named. Each is suitable for a ``LicensePool`` query
         that has been outer-joined to ``Work`` and to the presentation ``Edition``.
-        :func:`_needs_backfill` ORs them together; the dry run counts them apart.
     """
     # (a) Nothing a patron could actually open.
     no_delivery_mechanism = ~exists().where(
@@ -701,7 +704,7 @@ def _needs_backfill() -> ColumnElement[Boolean]:
     ORed rather than queried separately so a pool showing more than one symptom is
     visited, and paid for, exactly once.
     """
-    return or_(*_backfill_clauses())
+    return or_(*backfill_clauses())
 
 
 def backfill_query(

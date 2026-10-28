@@ -439,7 +439,7 @@ class BackfillCollection(Script):
         blocking Overdrive requests, and nearly all of its rewritten hashes, on titles
         it cannot make openable.
         """
-        clauses = overdrive._backfill_clauses()
+        clauses = overdrive.backfill_clauses()
         found_only_by_the_others = and_(
             or_(clauses.unsearchable, clauses.incomplete),
             not_(clauses.unopenable),
