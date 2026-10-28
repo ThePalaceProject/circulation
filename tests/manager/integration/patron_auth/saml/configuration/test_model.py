@@ -1,7 +1,6 @@
 import html
 import json
 import logging
-import os
 import subprocess
 import sys
 from collections.abc import Callable
@@ -1062,7 +1061,10 @@ class TestSAMLSettings:
         ],
     )
     def test_module_imports_with_service_provider_environment(
-        self, environment: dict[str, str]
+        self,
+        monkeypatch_env: MonkeyPatchEnvFixture,
+        tmp_path: Path,
+        environment: dict[str, str],
     ) -> None:
         """The module imports when the environment provides SP settings.
 
@@ -1070,26 +1072,25 @@ class TestSAMLSettings:
         environment. A fresh interpreter is used, because the module is already
         imported here and the environment check is cached.
 
-        The SP variables from the outer environment are removed. Otherwise,
-        an inherited file variable alongside a case's inline value makes the
-        getters fail before the validators run, and the test passes anyway.
+        Only the case's SP variables are set, and the interpreter runs in an
+        empty directory, so no ``.env`` file is read. Otherwise, an inherited
+        file variable alongside a case's inline value makes the getters fail
+        before the validators run, and the test passes anyway.
         """
-        sp_env_vars = {
+        for name in (
             METADATA_ENV_VAR,
             METADATA_FILE_ENV_VAR,
             PRIVATE_KEY_ENV_VAR,
             PRIVATE_KEY_FILE_ENV_VAR,
-        }
-        inherited = {
-            name: value for name, value in os.environ.items() if name not in sp_env_vars
-        }
+        ):
+            monkeypatch_env(name, environment.get(name))
         result = subprocess.run(
             [
                 sys.executable,
                 "-c",
                 "import palace.manager.integration.patron_auth.saml.configuration.model",
             ],
-            env={**inherited, **environment},
+            cwd=tmp_path,
             capture_output=True,
             text=True,
         )
