@@ -5,8 +5,9 @@ from typing import Any, Literal, NamedTuple, TypedDict, TypeGuard
 from uuid import uuid4
 
 from celery import chain, chord, group, shared_task
-from sqlalchemy import and_, exists, func, or_, select
+from sqlalchemy import Boolean, and_, exists, func, or_, select
 from sqlalchemy.orm import Session
+from sqlalchemy.sql import ColumnElement, Select
 
 from palace.util.datetime_helpers import utc_now
 
@@ -589,13 +590,13 @@ class BackfillClauses(NamedTuple):
     already covers the others.
     """
 
-    unopenable: Any
+    unopenable: ColumnElement[Boolean]
     """No available delivery mechanism: nothing a patron could open."""
 
-    unsearchable: Any
+    unsearchable: ColumnElement[Boolean]
     """No work, or one that never became presentation-ready: cannot appear in search."""
 
-    incomplete: Any
+    incomplete: ColumnElement[Boolean]
     """A presentation edition missing a publisher or any contributions."""
 
 
@@ -663,7 +664,7 @@ def _backfill_clauses() -> BackfillClauses:
     )
 
 
-def looks_like_a_magazine() -> Any:
+def looks_like_a_magazine() -> ColumnElement[Boolean]:
     """Identify titles that are almost certainly magazine issues.
 
     Overdrive serves magazines under a format id we do not map, so converting one
@@ -690,10 +691,11 @@ def looks_like_a_magazine() -> Any:
             func.btrim(Edition.series) == func.btrim(Edition.title),
         ),
         False,
+        type_=Boolean,
     )
 
 
-def _needs_backfill() -> Any:
+def _needs_backfill() -> ColumnElement[Boolean]:
     """Any of the three symptoms is reason enough to refresh a pool.
 
     ORed rather than queried separately so a pool showing more than one symptom is
@@ -706,9 +708,9 @@ def backfill_query(
     collections: int | Sequence[int],
     imported_since: datetime.datetime | None = None,
     *,
-    clause: Any = None,
+    clause: ColumnElement[Boolean] | None = None,
     include_suspected_magazines: bool = False,
-) -> Any:
+) -> Select:
     """Build the query selecting a collection's damaged pools.
 
     Shared by :func:`backfill_collection` and :func:`count_backfill_candidates` so a
@@ -752,7 +754,7 @@ def count_backfill_candidates(
     collections: int | Sequence[int],
     imported_since: datetime.datetime | None = None,
     *,
-    clause: Any = None,
+    clause: ColumnElement[Boolean] | None = None,
     include_suspected_magazines: bool = False,
 ) -> int:
     """Count the damaged pools a backfill would select, without contacting Overdrive.
