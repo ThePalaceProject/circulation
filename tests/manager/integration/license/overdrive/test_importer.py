@@ -310,6 +310,46 @@ class TestOverdriveImporter:
         assert bibliographic.circulation is not None
         assert len(bibliographic.circulation.formats) == 4
 
+    @staticmethod
+    def _mock_extractor(
+        importer: OverdriveImporter,
+        identifier: str,
+        *,
+        bibliographic_changed: bool = True,
+        circulation_changed: bool = True,
+    ) -> tuple[Mock, Mock]:
+        """Replace the importer's extractor with mocks shaped like the real one.
+
+        Two details matter and are easy to leave out. The real extractor always
+        attaches a CirculationData carrying the metadata record's formats, which
+        ``_process_book`` folds into the availability snapshot; and it keys the
+        primary identifier off the record it was handed, which ``_process_book``
+        checks against the identifier the product list gave it. A mock missing
+        either one is not shaped like anything the importer actually receives.
+
+        :param importer: The importer whose ``_extractor`` is replaced.
+        :param identifier: The Overdrive id the metadata record reports.
+        :param bibliographic_changed: What ``BibliographicData.needs_apply`` returns.
+        :param circulation_changed: What ``CirculationData.needs_apply`` returns.
+        :return: The (bibliographic, circulation) mocks the extractor will return.
+        """
+        bibliographic = Mock(spec=BibliographicData)
+        bibliographic.circulation = Mock(spec=CirculationData)
+        bibliographic.circulation.formats = []
+        bibliographic.needs_apply.return_value = bibliographic_changed
+        bibliographic.primary_identifier_data = IdentifierData(
+            type=Identifier.OVERDRIVE_ID, identifier=identifier
+        )
+
+        circulation = Mock(spec=CirculationData)
+        circulation.needs_apply.return_value = circulation_changed
+
+        importer._extractor.book_info_to_bibliographic = Mock(
+            return_value=bibliographic
+        )
+        importer._extractor.book_info_to_circulation = Mock(return_value=circulation)
+        return bibliographic, circulation
+
     def _book_with_both_documents(
         self, overdrive_files_fixture: OverdriveFilesFixture
     ) -> dict[str, Any]:
@@ -871,27 +911,9 @@ class TestOverdriveImporter:
             return_value=(mock_book_data, mock_next_endpoint)
         )
 
-        # Mock extractor methods
-        mock_bibliographic = Mock(spec=BibliographicData)
-        # The real extractor always attaches a CirculationData carrying the
-        # metadata record's formats, which _process_book folds into the
-        # availability snapshot.
-        mock_bibliographic.circulation = Mock(spec=CirculationData)
-        mock_bibliographic.circulation.formats = []
-        mock_bibliographic.needs_apply.return_value = True
-        # The real extractor keys the primary identifier off the record it is
-        # given, so the mock has to report one too.
-        mock_bibliographic.primary_identifier_data = IdentifierData(
-            type=Identifier.OVERDRIVE_ID, identifier=mock_book_data[0]["id"]
-        )
-        mock_circulation = Mock(spec=CirculationData)
-        mock_circulation.needs_apply.return_value = True
-
-        importer._extractor.book_info_to_bibliographic = Mock(
-            return_value=mock_bibliographic
-        )
-        importer._extractor.book_info_to_circulation = Mock(
-            return_value=mock_circulation
+        mock_bibliographic, mock_circulation = self._mock_extractor(
+            importer,
+            mock_book_data[0]["id"],
         )
 
         # Run import
@@ -992,27 +1014,9 @@ class TestOverdriveImporter:
             return_value=(mock_book_data, None)
         )
 
-        # Mock extractor
-        mock_bibliographic = Mock(spec=BibliographicData)
-        # The real extractor always attaches a CirculationData carrying the
-        # metadata record's formats, which _process_book folds into the
-        # availability snapshot.
-        mock_bibliographic.circulation = Mock(spec=CirculationData)
-        mock_bibliographic.circulation.formats = []
-        mock_bibliographic.needs_apply.return_value = True
-        # The real extractor keys the primary identifier off the record it is
-        # given, so the mock has to report one too.
-        mock_bibliographic.primary_identifier_data = IdentifierData(
-            type=Identifier.OVERDRIVE_ID, identifier="overdrive-id-1"
-        )
-        mock_circulation = Mock(spec=CirculationData)
-        mock_circulation.needs_apply.return_value = True
-
-        importer._extractor.book_info_to_bibliographic = Mock(
-            return_value=mock_bibliographic
-        )
-        importer._extractor.book_info_to_circulation = Mock(
-            return_value=mock_circulation
+        mock_bibliographic, mock_circulation = self._mock_extractor(
+            importer,
+            "overdrive-id-1",
         )
 
         # Run import
@@ -1058,27 +1062,10 @@ class TestOverdriveImporter:
             return_value=(mock_book_data, None)
         )
 
-        # Mock extractor - bibliographic hasn't changed
-        mock_bibliographic = Mock(spec=BibliographicData)
-        # The real extractor always attaches a CirculationData carrying the
-        # metadata record's formats, which _process_book folds into the
-        # availability snapshot.
-        mock_bibliographic.circulation = Mock(spec=CirculationData)
-        mock_bibliographic.circulation.formats = []
-        mock_bibliographic.needs_apply.return_value = False  # Not changed
-        # The real extractor keys the primary identifier off the record it is
-        # given, so the mock has to report one too.
-        mock_bibliographic.primary_identifier_data = IdentifierData(
-            type=Identifier.OVERDRIVE_ID, identifier="overdrive-id-1"
-        )
-        mock_circulation = Mock(spec=CirculationData)
-        mock_circulation.needs_apply.return_value = True
-
-        importer._extractor.book_info_to_bibliographic = Mock(
-            return_value=mock_bibliographic
-        )
-        importer._extractor.book_info_to_circulation = Mock(
-            return_value=mock_circulation
+        mock_bibliographic, mock_circulation = self._mock_extractor(
+            importer,
+            "overdrive-id-1",
+            bibliographic_changed=False,
         )
 
         # Run import
@@ -1186,27 +1173,9 @@ class TestOverdriveImporter:
         api.metadata_lookup = Mock(
             return_value=MetadataResponse.model_validate({"title": "New Book"})
         )
-        # Mock extractor
-        mock_bibliographic = Mock(spec=BibliographicData)
-        # The real extractor always attaches a CirculationData carrying the
-        # metadata record's formats, which _process_book folds into the
-        # availability snapshot.
-        mock_bibliographic.circulation = Mock(spec=CirculationData)
-        mock_bibliographic.circulation.formats = []
-        mock_bibliographic.needs_apply.return_value = True
-        # The real extractor keys the primary identifier off the record it is
-        # given, so the mock has to report one too.
-        mock_bibliographic.primary_identifier_data = IdentifierData(
-            type=Identifier.OVERDRIVE_ID, identifier="overdrive-id-1"
-        )
-        mock_circulation = Mock(spec=CirculationData)
-        mock_circulation.needs_apply.return_value = True
-
-        importer._extractor.book_info_to_bibliographic = Mock(
-            return_value=mock_bibliographic
-        )
-        importer._extractor.book_info_to_circulation = Mock(
-            return_value=mock_circulation
+        mock_bibliographic, mock_circulation = self._mock_extractor(
+            importer,
+            "overdrive-id-1",
         )
 
         # Run import
@@ -1285,27 +1254,9 @@ class TestOverdriveImporter:
             return_value=MetadataResponse.model_validate({"title": "New Book"})
         )
 
-        # Mock extractor
-        mock_bibliographic = Mock(spec=BibliographicData)
-        # The real extractor always attaches a CirculationData carrying the
-        # metadata record's formats, which _process_book folds into the
-        # availability snapshot.
-        mock_bibliographic.circulation = Mock(spec=CirculationData)
-        mock_bibliographic.circulation.formats = []
-        mock_bibliographic.needs_apply.return_value = True
-        # The real extractor keys the primary identifier off the record it is
-        # given, so the mock has to report one too.
-        mock_bibliographic.primary_identifier_data = IdentifierData(
-            type=Identifier.OVERDRIVE_ID, identifier="overdrive-id-3"
-        )
-        mock_circulation = Mock(spec=CirculationData)
-        mock_circulation.needs_apply.return_value = True
-
-        importer._extractor.book_info_to_bibliographic = Mock(
-            return_value=mock_bibliographic
-        )
-        importer._extractor.book_info_to_circulation = Mock(
-            return_value=mock_circulation
+        mock_bibliographic, mock_circulation = self._mock_extractor(
+            importer,
+            "overdrive-id-3",
         )
 
         # Run import
