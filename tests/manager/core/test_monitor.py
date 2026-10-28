@@ -669,7 +669,7 @@ class TestSweepMonitor:
         # decorator attaches the controller as `.retry` at runtime, which mypy
         # can't see on the wrapped function.
         monkeypatch.setattr(
-            SweepMonitor.process_batch.retry,  # type: ignore[attr-defined]
+            SweepMonitor.process_batch.retry,
             "wait",
             wait_none(),
         )
