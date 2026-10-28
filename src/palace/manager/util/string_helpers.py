@@ -3,6 +3,7 @@
 # bytestrings.
 import secrets
 import string
+from collections.abc import Sequence
 
 
 def random_key(size: int) -> str:
@@ -12,3 +13,22 @@ def random_key(size: int) -> str:
     :return: A Unicode string.
     """
     return "".join(secrets.choice(string.printable) for i in range(size))
+
+
+def oxford_comma_join(items: Sequence[str], conjunction: str) -> str:
+    """Join items into a list with an Oxford comma.
+
+    The conjunction goes only between the last two items. For example, with
+    "or", ``["a", "b"]`` becomes "a or b" and ``["a", "b", "c"]`` becomes
+    "a, b, or c". With an empty conjunction, the items are only separated by commas.
+
+    :param items: The items to join.
+    :param conjunction: The word placed before the last item, or an empty string
+        for none.
+    :return: The joined items, or an empty string if there are none.
+    """
+    if not conjunction:
+        return ", ".join(items)
+    if len(items) <= 2:
+        return f" {conjunction} ".join(items)
+    return f"{', '.join(items[:-1])}, {conjunction} {items[-1]}"
