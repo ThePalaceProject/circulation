@@ -3,7 +3,6 @@ from typing import Any
 import flask
 from flask import Response
 
-from palace.manager.api.admin.controller.base import AdminPermissionsControllerMixin
 from palace.manager.api.admin.controller.integration_settings import (
     IntegrationSettingsSelfTestsController,
 )
@@ -21,7 +20,6 @@ from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailExcep
 
 class MetadataServicesController(
     IntegrationSettingsSelfTestsController[MetadataServiceType],
-    AdminPermissionsControllerMixin,
 ):
     def create_new_service(self, name: str, protocol: str) -> IntegrationConfiguration:
         impl_cls = self.registry[protocol]

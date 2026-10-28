@@ -16,6 +16,18 @@ from palace.manager.sqlalchemy.model.patron import Patron
 from palace.manager.sqlalchemy.util import get_one_or_create
 from tests.fixtures.database import DatabaseTransactionFixture
 
+# Every admin role except system admin, as (role, library_scoped) parameters for
+# pytest.mark.parametrize. A library-scoped role applies to one library, and the
+# others apply to all libraries.
+NON_SYSTEM_ADMIN_ROLES = (
+    pytest.param(
+        AdminRole.SITEWIDE_LIBRARY_MANAGER, False, id="sitewide-library-manager"
+    ),
+    pytest.param(AdminRole.LIBRARY_MANAGER, True, id="library-manager"),
+    pytest.param(AdminRole.SITEWIDE_LIBRARIAN, False, id="sitewide-librarian"),
+    pytest.param(AdminRole.LIBRARIAN, True, id="librarian"),
+)
+
 
 class FlaskAppFixture:
     def __init__(self, db: DatabaseTransactionFixture) -> None:

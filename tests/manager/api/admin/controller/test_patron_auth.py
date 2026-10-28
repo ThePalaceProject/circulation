@@ -71,7 +71,7 @@ from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
-from tests.fixtures.flask import FlaskAppFixture
+from tests.fixtures.flask import NON_SYSTEM_ADMIN_ROLES, FlaskAppFixture
 from tests.fixtures.services import ServicesFixture
 from tests.mocks.saml_strings import CORRECT_XML_WITH_ONE_SP
 
@@ -1046,11 +1046,65 @@ class TestPatronAuth:
         )
         assert service is None
 
+    @pytest.mark.parametrize(
+        "role, library_scoped",
+        [pytest.param(None, False, id="no-admin"), *NON_SYSTEM_ADMIN_ROLES],
+    )
+    @pytest.mark.parametrize("method", ["GET", "POST"])
+    @pytest.mark.parametrize(
+        "use_real_id",
+        [
+            pytest.param(True, id="real-id"),
+            pytest.param(False, id="unknown-id"),
+        ],
+    )
+    def test_patron_auth_self_tests_requires_system_admin(
+        self,
+        controller_fixture: ControllerFixture,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+        default_library: Library,
+        monkeypatch: MonkeyPatch,
+        role: str | None,
+        library_scoped: bool,
+        method: str,
+        use_real_id: bool,
+    ) -> None:
+        """
+        Only a system admin can view or run patron auth self tests. Other admins, and
+        requests with no admin, get an authorization error, and no self test runs.
+        """
+        mock_run_self_tests = MagicMock()
+        monkeypatch.setattr(HasSelfTests, "run_self_tests", mock_run_self_tests)
+        auth_service = db.simple_auth_integration(library=default_library)
+        identifier = auth_service.id if use_real_id else -1
+        admin = (
+            flask_app_fixture.admin_user(
+                email="admin@example.org",
+                role=role,
+                library=default_library if library_scoped else None,
+            )
+            if role
+            else None
+        )
+
+        # The role check runs before the lookup, so an unknown ID also gets an
+        # authorization error and the response does not show which IDs exist.
+        with flask_app_fixture.test_request_context("/", method=method, admin=admin):
+            with pytest.raises(AdminNotAuthorized):
+                controller_fixture.controller.process_patron_auth_service_self_tests(
+                    identifier
+                )
+        mock_run_self_tests.assert_not_called()
+
     def test_patron_auth_self_tests_with_no_identifier(
-        self, controller_fixture: ControllerFixture
+        self,
+        controller_fixture: ControllerFixture,
+        flask_app_fixture: FlaskAppFixture,
     ):
         controller = controller_fixture.controller
-        response = controller.process_patron_auth_service_self_tests(None)
+        with flask_app_fixture.test_request_context_system_admin("/"):
+            response = controller.process_patron_auth_service_self_tests(None)
         assert isinstance(response, ProblemDetail)
         assert response.title == MISSING_IDENTIFIER.title
         assert response.detail == MISSING_IDENTIFIER.detail
@@ -1062,7 +1116,7 @@ class TestPatronAuth:
         flask_app_fixture: FlaskAppFixture,
     ):
         controller = controller_fixture.controller
-        with flask_app_fixture.test_request_context("/"):
+        with flask_app_fixture.test_request_context_system_admin("/"):
             response = controller.process_patron_auth_service_self_tests(-1)
         assert isinstance(response, ProblemDetail)
         assert response == MISSING_SERVICE
@@ -1076,7 +1130,7 @@ class TestPatronAuth:
     ):
         controller = controller_fixture.controller
         auth_service = db.simple_auth_integration()
-        with flask_app_fixture.test_request_context("/"):
+        with flask_app_fixture.test_request_context_system_admin("/"):
             response_obj = controller.process_patron_auth_service_self_tests(
                 auth_service.id
             )
@@ -1101,7 +1155,7 @@ class TestPatronAuth:
         auth_service = db.simple_auth_integration(library=default_library)
 
         # Make sure that we return the correct response when there are no results
-        with flask_app_fixture.test_request_context("/"):
+        with flask_app_fixture.test_request_context_system_admin("/"):
             response_obj = controller.process_patron_auth_service_self_tests(
                 auth_service.id
             )
@@ -1136,7 +1190,7 @@ class TestPatronAuth:
 
         # Make sure that HasSelfTest.prior_test_results() was called and that
         # it is in the response's self tests object.
-        with flask_app_fixture.test_request_context("/"):
+        with flask_app_fixture.test_request_context_system_admin("/"):
             response_obj = controller.process_patron_auth_service_self_tests(
                 auth_service.id
             )
@@ -1152,6 +1206,44 @@ class TestPatronAuth:
         assert response_auth_service.get("goal") == auth_service.goal.value
         assert response_auth_service.get("self_test_results") == expected_results
 
+        # The response never includes the integration's settings, which can
+        # hold credentials.
+        assert set(response_auth_service) == {
+            "id",
+            "name",
+            "protocol",
+            "goal",
+            "self_test_results",
+        }
+
+    def test_patron_auth_self_tests_get_no_service_info(
+        self,
+        controller_fixture: ControllerFixture,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+        default_library: Library,
+        monkeypatch: MonkeyPatch,
+    ) -> None:
+        """
+        When configured_service_info() returns None, the response holds None in
+        self_test_results.
+        """
+        controller = controller_fixture.controller
+        auth_service = db.simple_auth_integration(library=default_library)
+        monkeypatch.setattr(
+            PatronAuthServicesController,
+            "configured_service_info",
+            MagicMock(return_value=None),
+        )
+
+        with flask_app_fixture.test_request_context_system_admin("/"):
+            response_obj = controller.process_patron_auth_service_self_tests(
+                auth_service.id
+            )
+        assert isinstance(response_obj, Response)
+        assert response_obj.status_code == 200
+        assert response_obj.json == {"self_test_results": None}
+
     def test_patron_auth_self_tests_post_with_no_libraries(
         self,
         controller_fixture: ControllerFixture,
@@ -1160,7 +1252,7 @@ class TestPatronAuth:
     ):
         controller = controller_fixture.controller
         auth_service = db.simple_auth_integration()
-        with flask_app_fixture.test_request_context("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             response = controller.process_patron_auth_service_self_tests(
                 auth_service.id,
             )
@@ -1184,7 +1276,7 @@ class TestPatronAuth:
         library = db.default_library()
         auth_service = db.simple_auth_integration(library=library)
 
-        with flask_app_fixture.test_request_context("/", method="POST"):
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
             response = controller.process_patron_auth_service_self_tests(
                 auth_service.id
             )
