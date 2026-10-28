@@ -755,13 +755,19 @@ def count_backfill_candidates(
     clause: Any = None,
     include_suspected_magazines: bool = False,
 ) -> int:
-    """Count the titles a backfill would process, without contacting Overdrive.
+    """Count the damaged pools a backfill would select, without contacting Overdrive.
+
+    Pools, not titles: a title held by more than one collection is counted once per
+    collection. :func:`count_backfill_titles` is the one that answers how many
+    Overdrive requests a run actually costs.
 
     :param session: An active database session.
     :param collections: The Overdrive collection to search, or several of them.
     :param imported_since: See :func:`backfill_query`.
-    :return: The number of damaged *pools*. A title held by more than one collection
-        is counted once per collection; see :func:`count_backfill_titles`.
+    :param clause: See :func:`backfill_query`. A dry run passes one symptom at a time
+        here to report what each selects on its own.
+    :param include_suspected_magazines: See :func:`backfill_query`.
+    :return: The number of damaged pools.
     """
     count = session.scalar(
         select(func.count()).select_from(
