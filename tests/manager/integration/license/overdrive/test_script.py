@@ -643,7 +643,10 @@ class TestBackfillCollection:
         self._magazine_and_real_book(db, collection)
 
         script.do_run(["--collection-name", collection.name, "--dry-run"])
-        assert "2 damaged title(s), of which 1 suspected magazine(s)" in caplog.text
+        assert (
+            "2 damaged title(s) in this collection, of which 1 suspected magazine(s)"
+            in caplog.text
+        )
         assert "skipped by default" in caplog.text
         assert "1 would be processed" in caplog.text
 
@@ -656,7 +659,10 @@ class TestBackfillCollection:
                 "--include-suspected-magazines",
             ]
         )
-        assert "2 damaged title(s), of which 1 suspected magazine(s)" in caplog.text
+        assert (
+            "2 damaged title(s) in this collection, of which 1 suspected magazine(s)"
+            in caplog.text
+        )
         assert "included" in caplog.text
         assert "2 would be processed" in caplog.text
         mock_task.delay.assert_not_called()
@@ -807,7 +813,7 @@ class TestBackfillCollection:
 
         mock_task.delay.assert_not_called()
         assert "6 distinct title(s)" in caplog.text
-        assert "That is 4 fewer than the 10 pool(s) selected" in caplog.text
+        assert "That is 4 fewer than the 10 counted across" in caplog.text
         assert ("A cap of 5 per collection" in caplog.text) is (cap is not None)
 
     @patch(

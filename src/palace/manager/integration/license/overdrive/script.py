@@ -335,10 +335,11 @@ class BackfillCollection(Script):
             "--dry-run",
             action="store_true",
             help=(
-                "Report how many titles would be processed and exit. Queues nothing "
-                "and makes no Overdrive requests. Each title in a real run costs one "
-                "blocking Overdrive request, so this is the cheap way to size a run "
-                "first."
+                "Report what would be processed and exit. Queues nothing and "
+                "makes no Overdrive requests. The per-collection numbers count a "
+                "shared title once for each collection holding it; the grand total "
+                "counts distinct titles, which is what a run actually costs, one "
+                "blocking Overdrive request each."
             ),
         )
         return parser
@@ -494,7 +495,8 @@ class BackfillCollection(Script):
             )
             self.log.info(
                 f"[dry run] '{collection.name}' (id={collection.id}): "
-                f"{damaged} damaged title(s), of which {suspected_magazines} "
+                f"{damaged} damaged title(s) in this collection, of which "
+                f"{suspected_magazines} "
                 f"suspected magazine(s) ({disposition}). "
                 f"{to_process} would be processed "
                 f"({unopenable} unopenable; {only_others} found only by the other "
@@ -516,8 +518,9 @@ class BackfillCollection(Script):
         )
         shared = selected_pools - titles
         shared_note = (
-            f" That is {shared} fewer than the {selected_pools} pool(s) selected,"
-            f" because a title in more than one collection is repaired once."
+            f" That is {shared} fewer than the {selected_pools} counted across"
+            f" those collections, because a title in more than one collection is"
+            f" counted once for each but repaired once."
             if shared > 0
             else ""
         )
