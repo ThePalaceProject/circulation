@@ -11,6 +11,7 @@ from sqlalchemy import (
     Integer,
     Unicode,
     cast,
+    literal,
     select,
     update,
 )
@@ -95,7 +96,10 @@ class IntegrationConfiguration(Base):
             .where(IntegrationConfiguration.id == self.id)
             .values(
                 context=IntegrationConfiguration.context.op("||")(
-                    cast(new_context, JSONB)
+                    # cast() coerces a raw dict into a bound parameter itself, but
+                    # its type stub only accepts a ClauseElement, so we do the
+                    # coercion explicitly with literal().
+                    cast(literal(new_context, JSONB), JSONB)
                 )
             )
         )
