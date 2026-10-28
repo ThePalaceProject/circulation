@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import csv
+import sys
 from datetime import date, datetime, timedelta, timezone
 from io import IOBase, StringIO
 from typing import Any, Literal
 from unittest.mock import DEFAULT, create_autospec
 
 import pytest
+from celery.utils.time import get_exponential_backoff_interval
 from sqlalchemy.sql.expression import and_, null
 
 from palace.util.datetime_helpers import previous_months, utc_now
@@ -14,6 +16,7 @@ from palace.util.datetime_helpers import previous_months, utc_now
 from palace.manager.api.circulation.settings import BaseCirculationApiSettings
 from palace.manager.api.model.time_tracking import PlaytimeTimeEntry
 from palace.manager.celery.tasks.playtime_entries import (
+    DRIVE_MAX_RETRIES,
     REPORT_DATE_FORMAT,
     _fetch_distinct_eligible_data_source_names,
     generate_playtime_report,
@@ -26,7 +29,10 @@ from palace.manager.integration.license.opds.for_distributors.api import (
 )
 from palace.manager.integration.license.opds.odl.api import OPDS2WithODLApi
 from palace.manager.integration.license.opds.opds2.api import OPDS2API
-from palace.manager.service.google_drive.google_drive import GoogleDriveService
+from palace.manager.service.google_drive.google_drive import (
+    GoogleDriveService,
+    GoogleDriveUnavailable,
+)
 from palace.manager.service.integration_registry.license_providers import (
     LicenseProvidersRegistry,
 )
@@ -760,6 +766,8 @@ class TestGeneratePlaytimeReport:
 
         mock_google_drive_service = create_autospec(GoogleDriveService)
         mock_google_drive_service.create_file.side_effect = mock_create_file
+        # An empty Drive: no report has been uploaded yet, so nothing is skipped.
+        mock_google_drive_service.get_file.return_value = None
         drive_container = services_fixture.services.google_drive()
         drive_container.config.from_dict({"parent_folder_id": parent_folder_id})
         drive_container.service.override(mock_google_drive_service)
@@ -801,9 +809,9 @@ class TestGeneratePlaytimeReport:
             "loan count",
         ]
 
-        assert (
-            f"{cutoff.strftime(REPORT_DATE_FORMAT)}-{until.strftime(REPORT_DATE_FORMAT)}-playtime-summary-test_cm-ds_a-"
-            in ds_a_filename
+        assert ds_a_filename == (
+            f"{cutoff.strftime(REPORT_DATE_FORMAT)}-{until.strftime(REPORT_DATE_FORMAT)}"
+            f"-playtime-summary-test_cm-ds_a.csv"
         )
 
         assert ds_a_data == [
@@ -860,9 +868,9 @@ class TestGeneratePlaytimeReport:
             ],
         ]
 
-        assert (
-            f"{cutoff.strftime(REPORT_DATE_FORMAT)}-{until.strftime(REPORT_DATE_FORMAT)}-playtime-summary-test_cm-ds_b-"
-            in ds_b_filename
+        assert ds_b_filename == (
+            f"{cutoff.strftime(REPORT_DATE_FORMAT)}-{until.strftime(REPORT_DATE_FORMAT)}"
+            f"-playtime-summary-test_cm-ds_b.csv"
         )
 
         assert ds_b_data == [
@@ -899,9 +907,9 @@ class TestGeneratePlaytimeReport:
             ],  # Identifier with edition
         ]
 
-        assert (
-            f"{cutoff.strftime(REPORT_DATE_FORMAT)}-{until.strftime(REPORT_DATE_FORMAT)}-playtime-summary-test_cm-ds_c-"
-            in ds_c_filename
+        assert ds_c_filename == (
+            f"{cutoff.strftime(REPORT_DATE_FORMAT)}-{until.strftime(REPORT_DATE_FORMAT)}"
+            f"-playtime-summary-test_cm-ds_c.csv"
         )
 
         assert ds_c_data == [
@@ -976,6 +984,8 @@ class TestGeneratePlaytimeReport:
         )
 
         mock_google_drive_service = create_autospec(GoogleDriveService)
+        # An empty Drive: no report has been uploaded yet, so nothing is skipped.
+        mock_google_drive_service.get_file.return_value = None
         drive_container = services_fixture.services.google_drive()
         drive_container.config.from_dict({"parent_folder_id": parent_folder_id})
         drive_container.service.override(mock_google_drive_service)
@@ -1163,3 +1173,228 @@ class TestGeneratePlaytimeReport:
         # references it (PlaytimeSummary records are not used as a fallback).
         result = _fetch_distinct_eligible_data_source_names(db.session, registry)
         assert result == []
+
+    def _setup_single_collection_report(
+        self,
+        db: DatabaseTransactionFixture,
+        services_fixture: ServicesFixture,
+        monkeypatch: pytest.MonkeyPatch,
+        reporting_name: str = "test cm",
+        parent_folder_id: str = "palace-test",
+    ) -> Any:
+        """Build the smallest possible eligible report and mock out Drive.
+
+        Returns the mock GoogleDriveService, configured as an empty Drive.
+        """
+        collection = db.collection(
+            "collection a",
+            protocol=OPDS2API,
+            settings=db.opds2_settings(
+                data_source="ds_a", generate_playtime_report=True
+            ),
+        )
+        playtime(
+            db.session,
+            db.identifier(),
+            collection,
+            db.default_library(),
+            dt1m(3),
+            10,
+            "loan_id:1",
+        )
+
+        mock_google_drive_service = create_autospec(GoogleDriveService)
+        mock_google_drive_service.get_file.return_value = None
+        drive_container = services_fixture.services.google_drive()
+        drive_container.config.from_dict({"parent_folder_id": parent_folder_id})
+        drive_container.service.override(mock_google_drive_service)
+        monkeypatch.setenv(
+            Configuration.REPORTING_NAME_ENVIRONMENT_VARIABLE, reporting_name
+        )
+        monkeypatch.setattr(
+            "palace.manager.celery.tasks.playtime_entries.FOLDER_CREATION_JITTER_MAX",
+            0,
+        )
+        return mock_google_drive_service
+
+    def test_generate_playtime_report_retry_schedule(self):
+        """The retry delays are the fixed ones the constants document.
+
+        Celery's ``retry_jitter`` defaults to True, which would draw each delay
+        at random from between zero and the figures below -- reaching about half
+        as far on average, and allowing the first retry almost immediately. The
+        task turns it off, so this pins the total as well as the one-minute
+        floor, which is also what gives Drive's list API time to catch up with
+        the previous attempt's writes before the skip check reads them.
+        """
+        assert generate_playtime_report.retry_jitter is False
+
+        delays = [
+            get_exponential_backoff_interval(
+                factor=generate_playtime_report.retry_backoff,
+                retries=retry,
+                maximum=sys.maxsize,
+                full_jitter=generate_playtime_report.retry_jitter,
+            )
+            for retry in range(generate_playtime_report.max_retries)
+        ]
+
+        assert delays == [60, 120, 240, 480]
+        assert sum(delays) == 15 * 60
+
+    def test_generate_playtime_report_names_the_report_in_drive_failures(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        services_fixture: ServicesFixture,
+        redis_fixture: RedisFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        """A run that gives up says which report it failed to store.
+
+        The task uploads one report per data source, and the exception ending
+        the run is all the operator gets to tell them which one was left
+        unwritten. Drive's own error knows the call that failed but not the
+        report it belonged to, so the path has to be added by the task.
+        """
+        mock_drive = self._setup_single_collection_report(
+            db, services_fixture, monkeypatch
+        )
+        mock_drive.create_file.side_effect = GoogleDriveUnavailable(
+            "Could not reach Google Drive while uploading 'report.csv': boom"
+        )
+        start, until = previous_months(number_of_months=1)
+
+        with celery_fixture.patch_retry_backoff():
+            result = generate_playtime_report.delay().get(propagate=False)
+
+        assert isinstance(result, GoogleDriveUnavailable)
+        message = str(result)
+        # The whole path, so the report is identifiable without guessing which
+        # folder it landed in.
+        assert f"ds_a/Usage Reports/test cm/{start.year}/" in message
+        assert (
+            f"{start.strftime(REPORT_DATE_FORMAT)}-{until.strftime(REPORT_DATE_FORMAT)}"
+            f"-playtime-summary-test_cm-ds_a.csv" in message
+        )
+        # ... without losing what Drive actually said.
+        assert "Could not reach Google Drive while uploading" in message
+
+    def test_generate_playtime_report_file_name_is_stable_across_runs(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        services_fixture: ServicesFixture,
+        redis_fixture: RedisFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        """Two runs of the same report upload under the same file name.
+
+        The skip-if-present check is only worth anything if the name a retry
+        computes matches the name the failed attempt used, so guard the loop
+        against going back to a per-invocation random id.
+        """
+        mock_drive = self._setup_single_collection_report(
+            db, services_fixture, monkeypatch
+        )
+
+        generate_playtime_report.delay().wait()
+        generate_playtime_report.delay().wait()
+
+        assert mock_drive.create_file.call_count == 2
+        first, second = mock_drive.create_file.call_args_list
+        assert first.kwargs["file_name"] == second.kwargs["file_name"]
+
+    def test_generate_playtime_report_skips_existing_report(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        services_fixture: ServicesFixture,
+        redis_fixture: RedisFixture,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """A report already in Drive is not uploaded a second time.
+
+        This is what keeps a retry from duplicating the reports that an earlier,
+        partially-successful attempt had already stored.
+        """
+        mock_drive = self._setup_single_collection_report(
+            db, services_fixture, monkeypatch
+        )
+        # Drive reports the file is already there.
+        mock_drive.get_file.return_value = {"id": "existing-file-id"}
+
+        with caplog.at_level("INFO"):
+            generate_playtime_report.delay().wait()
+
+        mock_drive.create_file.assert_not_called()
+        assert any("already exists" in record.message for record in caplog.records)
+
+    def test_generate_playtime_report_tolerates_upload_race(
+        self,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        services_fixture: ServicesFixture,
+        redis_fixture: RedisFixture,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        """Losing the existence check to Drive's list lag is not a failure.
+
+        get_file can miss a file written moments earlier, in which case
+        create_file raises FileExistsError. The report is stored either way, so
+        the task treats that as success rather than failing the whole run.
+        """
+        mock_drive = self._setup_single_collection_report(
+            db, services_fixture, monkeypatch
+        )
+        mock_drive.create_file.side_effect = FileExistsError("already there")
+
+        with caplog.at_level("INFO"):
+            generate_playtime_report.delay().wait()
+
+        # The task completed instead of raising.
+        assert any("already present" in record.message for record in caplog.records)
+
+    @pytest.mark.parametrize(
+        "error,expected_attempts",
+        [
+            pytest.param(
+                GoogleDriveUnavailable("Drive returned a retryable error"),
+                DRIVE_MAX_RETRIES + 1,
+                id="drive-unavailable-is-retried",
+            ),
+            pytest.param(
+                ValueError("something is actually wrong"),
+                1,
+                id="other-errors-fail-fast",
+            ),
+        ],
+    )
+    def test_generate_playtime_report_retry_behaviour(
+        self,
+        error: Exception,
+        expected_attempts: int,
+        db: DatabaseTransactionFixture,
+        celery_fixture: CeleryFixture,
+        services_fixture: ServicesFixture,
+        redis_fixture: RedisFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        """Only a Drive outage re-runs the task.
+
+        GoogleDriveService spends its own retries within a single call in about
+        30 seconds; retrying the task is what covers an outage lasting longer
+        than that. Anything else is a real failure and must not be retried for a
+        quarter of an hour before surfacing.
+        """
+        mock_drive = self._setup_single_collection_report(
+            db, services_fixture, monkeypatch
+        )
+        mock_drive.create_file.side_effect = error
+
+        with celery_fixture.patch_retry_backoff():
+            generate_playtime_report.delay().get(propagate=False)
+
+        assert mock_drive.create_file.call_count == expected_attempts
