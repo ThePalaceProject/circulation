@@ -1280,16 +1280,16 @@ wheels = [
 
 [[package]]
 name = "html-sanitizer"
-version = "2.6.0"
+version = "2.7.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "beautifulsoup4" },
     { name = "lxml" },
     { name = "lxml-html-clean" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/87/c8/1c8d770748ba26d6168c763a212c8311f6052dc1763b3678c7bfaeef0f7f/html_sanitizer-2.6.0.tar.gz", hash = "sha256:e20bbc92df161d16c04aace70b2f69f482bd1e60d40aaa8b3209a2aeb94cd524", size = 17843, upload-time = "2025-06-30T12:30:51.057Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/65/bf/0a31c65a3ff6d43e1cb2947341d00d2b3b2f17a18b63d342a97c1400c44e/html_sanitizer-2.7.0.tar.gz", hash = "sha256:ac53fe6d5297b66c736cb24102b77406fc9c58098ce70fdcb23bdbae5ae06ccb", size = 19391, upload-time = "2026-10-25T08:11:17.826Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c5/98/c882de495366081c290f6fcbdf8f5ee1a378715d5c09c5275c0f0fe8c372/html_sanitizer-2.6.0-py3-none-any.whl", hash = "sha256:44c8ef924358a092f13d7c63f6385b05994e5a328b0f11d1db421d88980b7c3f", size = 15564, upload-time = "2025-06-30T12:30:52.376Z" },
+    { url = "https://files.pythonhosted.org/packages/00/f0/c8a51d42ce5cf56d2530a3026a0036e3383584c8a693b4590161ed7d1c5e/html_sanitizer-2.7.0-py3-none-any.whl", hash = "sha256:d5ab846157bae7e3b723e49726695bda7f97f2882aa4a40d4a0bd401f37d84a3", size = 16715, upload-time = "2026-10-25T08:11:16.298Z" },
 ]
 
 [[package]]
