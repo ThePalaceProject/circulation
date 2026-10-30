@@ -152,6 +152,32 @@ def test_reset_undeliverable_works(
     assert work.presentation_ready is expected_ready
 
 
+def test_reset_undeliverable_works_pages_through_batches(
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+) -> None:
+    """One work per batch still reaches every candidate, and leaves a
+    deliverable work alone."""
+    undeliverable = []
+    for _ in range(2):
+        work: Work = db.work(with_license_pool=True)
+        for lpdm in work.license_pools[0].delivery_mechanisms:
+            db.session.delete(lpdm)
+        work.presentation_ready = True
+        undeliverable.append(work)
+
+    deliverable: Work = db.work(with_license_pool=True)
+    deliverable.presentation_ready = True
+    db.session.commit()
+
+    work_tasks.reset_undeliverable_works.delay(batch_size=1).wait()
+    for work in [*undeliverable, deliverable]:
+        db.session.refresh(work)
+
+    assert [work.presentation_ready for work in undeliverable] == [False, False]
+    assert deliverable.presentation_ready is True
+
+
 def test_reset_undeliverable_works_queues_indexing_after_commit(
     db: DatabaseTransactionFixture,
     celery_fixture: CeleryFixture,
