@@ -169,6 +169,55 @@ class TestCirculationData:
         [pdf] = pool.delivery_mechanisms
         assert Representation.PDF_MEDIA_TYPE == pdf.delivery_mechanism.content_type
 
+    @pytest.mark.parametrize(
+        "formats,expected_ready",
+        [
+            pytest.param(True, True, id="format_restores_the_work"),
+            pytest.param(False, False, id="no_format_leaves_it_hidden"),
+        ],
+    )
+    def test_apply_recomputes_presentation_ready_when_formats_change(
+        self,
+        db: DatabaseTransactionFixture,
+        formats: bool,
+        expected_ready: bool,
+    ) -> None:
+        # A work that lost its last delivery mechanism is hidden. When an import
+        # gives it one back, it becomes visible again.
+        edition, pool = db.edition(with_license_pool=True)
+        work = db.work(presentation_edition=edition)
+        for lpdm in pool.delivery_mechanisms:
+            db.session.delete(lpdm)
+        db.session.flush()
+        db.session.expire_all()
+
+        work.set_presentation_ready_based_on_content()
+        assert work.presentation_ready is False
+
+        circulation_data = CirculationData(
+            data_source_name=edition.data_source.name,
+            primary_identifier_data=IdentifierData.from_identifier(
+                edition.primary_identifier
+            ),
+            formats=(
+                [
+                    FormatData(
+                        content_type=Representation.EPUB_MEDIA_TYPE,
+                        drm_scheme=DeliveryMechanism.ADOBE_DRM,
+                    )
+                ]
+                if formats
+                else []
+            ),
+        )
+        circulation_data.apply(
+            db.session,
+            pool.collection,
+            replace=ReplacementPolicy(even_if_not_apparently_updated=True),
+        )
+
+        assert work.presentation_ready is expected_ready
+
     def test_apply_removes_old_formats_based_on_replacement_policy(
         self, db: DatabaseTransactionFixture
     ):
