@@ -136,7 +136,7 @@ def test_reset_undeliverable_works(
     celery_fixture: CeleryFixture,
     has_delivery_mechanism: bool,
     expected_ready: bool,
-):
+) -> None:
     """reset_undeliverable_works clears presentation readiness for works whose
     license pools have no delivery mechanism, and leaves the rest alone."""
     work: Work = db.work(with_license_pool=True)
