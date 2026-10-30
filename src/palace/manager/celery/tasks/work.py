@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from celery import shared_task
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from palace.manager.celery.task import Task
 from palace.manager.core.classifier.bisac import BISACClassifier
@@ -152,10 +152,8 @@ def reset_undeliverable_works(task: Task, batch_size: int = 500) -> None:
             if not work_ids:
                 break
             last_id = work_ids[-1]
-            for work_id in work_ids:
-                work = session.get(Work, work_id)
-                if work is not None:
-                    work.set_presentation_ready_based_on_content()
+            for work in _load_works(session, work_ids):
+                work.set_presentation_ready_based_on_content()
             session.commit()
             # Clearing the flag queues each work as it goes, before this batch
             # commits. An indexing worker that picks one up in that window
@@ -192,3 +190,19 @@ def _undeliverable_work_ids(
     if after_id is not None:
         query = query.where(Work.id > after_id)
     return list(session.scalars(query))
+
+
+def _load_works(session: Session, work_ids: list[int]) -> list[Work]:
+    """Load a batch of works with everything the readiness check reads."""
+    return list(
+        session.scalars(
+            select(Work)
+            .where(Work.id.in_(work_ids))
+            .options(
+                selectinload(Work.presentation_edition),
+                selectinload(Work.license_pools).selectinload(
+                    LicensePool.delivery_mechanisms
+                ),
+            )
+        )
+    )
