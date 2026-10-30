@@ -157,6 +157,12 @@ def reset_undeliverable_works(task: Task, batch_size: int = 500) -> None:
                 if work is not None:
                     work.set_presentation_ready_based_on_content()
             session.commit()
+            # Clearing the flag queues each work as it goes, before this batch
+            # commits. An indexing worker that picks one up in that window
+            # still reads the old value and writes it to search, and the id is
+            # gone from the queue. Queue them again now the new value is saved.
+            for work_id in work_ids:
+                Work.queue_indexing(work_id)
 
 
 def _undeliverable_work_ids(

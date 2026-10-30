@@ -1,6 +1,7 @@
 from unittest.mock import patch
 
 import pytest
+from sqlalchemy.orm import Session
 
 from palace.manager.celery.tasks import work as work_tasks
 from palace.manager.sqlalchemy.model.classification import Subject
@@ -149,6 +150,39 @@ def test_reset_undeliverable_works(
     db.session.refresh(work)
 
     assert work.presentation_ready is expected_ready
+
+
+def test_reset_undeliverable_works_queues_indexing_after_commit(
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+) -> None:
+    """The work is queued for indexing after its batch commits, so an indexing
+    worker cannot consume the id while the database still shows the old flag."""
+    work: Work = db.work(with_license_pool=True)
+    for lpdm in work.license_pools[0].delivery_mechanisms:
+        db.session.delete(lpdm)
+    work.presentation_ready = True
+    db.session.commit()
+    work_id = work.id
+
+    events: list[str] = []
+    real_commit = Session.commit
+
+    def tracked_commit(self: Session) -> None:
+        events.append("commit")
+        real_commit(self)
+
+    def tracked_queue(queued_id: int | None, **kwargs: object) -> None:
+        events.append(f"queue:{queued_id}")
+
+    with (
+        patch.object(Session, "commit", tracked_commit),
+        patch.object(Work, "queue_indexing", staticmethod(tracked_queue)),
+    ):
+        work_tasks.reset_undeliverable_works.delay().wait()
+
+    assert events[-1] == f"queue:{work_id}"
+    assert "commit" in events
 
 
 @pytest.mark.parametrize(
