@@ -583,7 +583,7 @@ class TestWork:
         db: DatabaseTransactionFixture,
         pools_with_delivery_mechanism: list[bool],
         expected_ready: bool,
-    ):
+    ) -> None:
         # A work needs at least one license pool with a delivery mechanism.
         # Without one there is no way to hand the book to a patron, so the
         # work is not presentation ready.
@@ -610,7 +610,7 @@ class TestWork:
         self,
         db: DatabaseTransactionFixture,
         has_delivery_mechanism: bool,
-    ):
+    ) -> None:
         # The search index and the feed layer apply the delivery-mechanism rule
         # in two places: presentation readiness decides what gets indexed, and
         # restrict_to_ready_deliverable_works decides what the database hands
