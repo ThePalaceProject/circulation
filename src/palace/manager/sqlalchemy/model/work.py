@@ -1330,10 +1330,16 @@ class Work(Base, LoggerMixin):
         The absolute minimum data necessary is a title, a language,
         and a medium. We don't need a cover or an author -- we can
         fill in that info later if it exists.
+
+        A work also needs at least one license pool with a delivery
+        mechanism. Without one there is no way to hand the book to a
+        patron, so the record is incomplete rather than merely
+        unavailable.
         """
         if (
             not self.presentation_edition
             or not self.license_pools
+            or not any(pool.delivery_mechanisms for pool in self.license_pools)
             or not self.title
             or not self.language
             or not self.presentation_edition.medium
