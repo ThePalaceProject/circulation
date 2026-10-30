@@ -1,3 +1,4 @@
+import logging
 import random
 from dataclasses import dataclass, fields
 from typing import cast
@@ -673,7 +674,9 @@ class TestWorkList:
         # return value of works_for_hits().
         assert ["some", "results"] == results
 
-    def test_works_for_resultsets(self, db: DatabaseTransactionFixture):
+    def test_works_for_resultsets(
+        self, db: DatabaseTransactionFixture, caplog: pytest.LogCaptureFixture
+    ):
         # Verify that WorkList.works_for_resultsets turns lists of
         # (mocked) Hit objects into lists of Work objects
 
@@ -713,10 +716,13 @@ class TestWorkList:
         # we don't get it.
         assert [[]] == m(db.session, [[MockHit(-100)]])
 
-        # Finally, test that undeliverable works are filtered out.
+        # Finally, test that undeliverable works are filtered out, and that
+        # dropping them is logged rather than passing silently.
         for lpdm in w2.license_pools[0].delivery_mechanisms:
             db.session.delete(lpdm)
-            assert [[]] == m(db.session, [[hit2]])
+            with caplog.at_level(logging.WARNING):
+                assert [[]] == m(db.session, [[hit2]])
+            assert "1 of 1 search results were dropped" in caplog.text
 
     def test_search_target(self):
         # A WorkList can be searched - it is its own search target.

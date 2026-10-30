@@ -124,6 +124,34 @@ def test_reclassify_null_audience_works(
 
 
 @pytest.mark.parametrize(
+    "has_delivery_mechanism,expected_ready",
+    [
+        pytest.param(True, True, id="deliverable_work_untouched"),
+        pytest.param(False, False, id="undeliverable_work_reset"),
+    ],
+)
+def test_reset_undeliverable_works(
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+    has_delivery_mechanism: bool,
+    expected_ready: bool,
+):
+    """reset_undeliverable_works clears presentation readiness for works whose
+    license pools have no delivery mechanism, and leaves the rest alone."""
+    work: Work = db.work(with_license_pool=True)
+    if not has_delivery_mechanism:
+        for lpdm in work.license_pools[0].delivery_mechanisms:
+            db.session.delete(lpdm)
+    work.presentation_ready = True
+    db.session.commit()
+
+    work_tasks.reset_undeliverable_works.delay().wait()
+    db.session.refresh(work)
+
+    assert work.presentation_ready is expected_ready
+
+
+@pytest.mark.parametrize(
     "identifier,name",
     [
         pytest.param("INFEN000", "English literature", id="language_category"),

@@ -13,6 +13,7 @@ from palace.util.datetime_helpers import datetime_utc, from_timestamp, utc_now
 from palace.util.exceptions import BasePalaceException
 from palace.util.log import LogLevel
 
+from palace.manager.celery.tasks.search import get_presentation_ready_work_ids
 from palace.manager.core.classifier import Classifier, Fantasy, Romance, Science_Fiction
 from palace.manager.core.exceptions import InconsistentLicensePoolState
 from palace.manager.data_layer.policy.presentation import (
@@ -21,6 +22,7 @@ from palace.manager.data_layer.policy.presentation import (
 from palace.manager.service.redis.exception import TRANSIENT_REDIS_ERRORS
 from palace.manager.service.redis.models.search import WaitingForIndexing
 from palace.manager.sqlalchemy.model.classification import Genre, Subject
+from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.customlist import CustomList
 from palace.manager.sqlalchemy.model.datasource import DataSource
@@ -566,6 +568,71 @@ class TestWork:
         work.fiction = None
         work.set_presentation_ready_based_on_content()
         assert True == work.presentation_ready
+
+    @pytest.mark.parametrize(
+        "pools_with_delivery_mechanism,expected_ready",
+        [
+            pytest.param([True], True, id="sole_pool_deliverable"),
+            pytest.param([False], False, id="sole_pool_undeliverable"),
+            pytest.param([False, True], True, id="one_of_two_pools_deliverable"),
+            pytest.param([False, False], False, id="neither_pool_deliverable"),
+        ],
+    )
+    def test_set_presentation_ready_based_on_content_delivery_mechanisms(
+        self,
+        db: DatabaseTransactionFixture,
+        pools_with_delivery_mechanism: list[bool],
+        expected_ready: bool,
+    ):
+        # A work needs at least one license pool with a delivery mechanism.
+        # Without one there is no way to hand the book to a patron, so the
+        # work is not presentation ready.
+        work = db.work(with_license_pool=True)
+        pools = list(work.license_pools)
+        for _ in pools_with_delivery_mechanism[1:]:
+            pools.append(db.licensepool(db.edition(), work=work))
+
+        for pool, has_delivery_mechanism in zip(pools, pools_with_delivery_mechanism):
+            if not has_delivery_mechanism:
+                for lpdm in pool.delivery_mechanisms:
+                    db.session.delete(lpdm)
+        db.session.flush()
+        db.session.expire_all()
+
+        work.set_presentation_ready_based_on_content()
+        assert work.presentation_ready is expected_ready
+
+    @pytest.mark.parametrize(
+        "has_delivery_mechanism",
+        [pytest.param(True, id="deliverable"), pytest.param(False, id="undeliverable")],
+    )
+    def test_presentation_ready_agrees_with_deliverable_filter(
+        self,
+        db: DatabaseTransactionFixture,
+        has_delivery_mechanism: bool,
+    ):
+        # The search index and the feed layer apply the delivery-mechanism rule
+        # in two places: presentation readiness decides what gets indexed, and
+        # restrict_to_ready_deliverable_works decides what the database hands
+        # back. They have to agree, or search results get dropped after
+        # pagination and pages come back short.
+        work = db.work(with_license_pool=True)
+        if not has_delivery_mechanism:
+            for lpdm in work.license_pools[0].delivery_mechanisms:
+                db.session.delete(lpdm)
+        db.session.flush()
+        db.session.expire_all()
+
+        work.set_presentation_ready_based_on_content()
+        db.session.flush()
+
+        indexed = get_presentation_ready_work_ids(db.session, batch_size=100, offset=0)
+        deliverable = Collection.restrict_to_ready_deliverable_works(
+            db.session.query(Work).join(Work.license_pools)
+        ).all()
+
+        assert (work.id in indexed) is has_delivery_mechanism
+        assert (work in deliverable) is has_delivery_mechanism
 
     def test_assign_genres_from_weights(self, db: DatabaseTransactionFixture):
         work = db.work()

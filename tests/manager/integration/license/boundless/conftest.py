@@ -7,6 +7,7 @@ from palace.util.datetime_helpers import datetime_utc
 from palace.manager.data_layer.bibliographic import BibliographicData
 from palace.manager.data_layer.circulation import CirculationData
 from palace.manager.data_layer.contributor import ContributorData
+from palace.manager.data_layer.format import FormatData
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.data_layer.subject import SubjectData
 from palace.manager.integration.license.boundless.api import BoundlessApi
@@ -16,6 +17,8 @@ from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
+from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
+from palace.manager.sqlalchemy.model.resource import Representation
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import BoundlessFilesFixture
 from tests.fixtures.http import MockHttpClientFixture
@@ -36,6 +39,12 @@ class BoundlessFixture:
         licenses_reserved=0,
         patrons_in_hold_queue=0,
         updated_at=datetime_utc(2015, 5, 20, 2, 9, 8),
+        formats=[
+            FormatData(
+                content_type=Representation.EPUB_MEDIA_TYPE,
+                drm_scheme=DeliveryMechanism.BAKER_TAYLOR_KDRM_DRM,
+            )
+        ],
     )
 
     BIBLIOGRAPHIC_DATA = BibliographicData(
