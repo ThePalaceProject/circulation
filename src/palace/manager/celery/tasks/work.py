@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from celery import shared_task
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.orm import Session, selectinload
 
 from palace.manager.celery.task import Task
 from palace.manager.core.classifier.bisac import BISACClassifier
@@ -9,7 +10,10 @@ from palace.manager.data_layer.policy.presentation import PresentationCalculatio
 from palace.manager.service.celery.celery import QueueNames
 from palace.manager.sqlalchemy.model.classification import Classification, Subject
 from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.sqlalchemy.model.licensing import LicensePool
+from palace.manager.sqlalchemy.model.licensing import (
+    LicensePool,
+    LicensePoolDeliveryMechanism,
+)
 from palace.manager.sqlalchemy.model.work import Work
 
 
@@ -125,3 +129,80 @@ def _work_ids_with_unchecked_subjects(session: Session) -> list[int]:
         .all()
     )
     return [row[0] for row in rows]
+
+
+@shared_task(queue=QueueNames.default, bind=True)
+def reset_undeliverable_works(task: Task, batch_size: int = 500) -> None:
+    """Recompute presentation readiness for works that cannot be delivered.
+
+    A work whose license pools have no delivery mechanism was still marked
+    presentation ready, so the search index matched it and the feed layer then
+    dropped it, leaving pages short or empty. Calling
+    set_presentation_ready_based_on_content() clears the flag and queues the
+    work for reindexing; it is a no-op on anything already correct.
+
+    TODO: Remove this task and its startup task
+    (startup_tasks/2026_10_30_reset_undeliverable_works.py) once the startup
+    task has been run on all deployments.
+    """
+    with task.session() as session:
+        last_id: int | None = None
+        while True:
+            work_ids = _undeliverable_work_ids(session, last_id, batch_size)
+            if not work_ids:
+                break
+            last_id = work_ids[-1]
+            for work in _load_works(session, work_ids):
+                work.set_presentation_ready_based_on_content()
+            session.commit()
+            # Clearing the flag queues each work as it goes, before this batch
+            # commits. An indexing worker that picks one up in that window
+            # still reads the old value and writes it to search, and the id is
+            # gone from the queue. Queue them again now the new value is saved.
+            for work_id in work_ids:
+                Work.queue_indexing(work_id)
+
+
+def _undeliverable_work_ids(
+    session: Session, after_id: int | None, batch_size: int
+) -> list[int]:
+    """Return ids of presentation-ready works with no delivery mechanism, in id order."""
+    LPDM = LicensePoolDeliveryMechanism
+    delivery_mechanism_exists = (
+        select(LPDM.id)
+        .where(
+            LPDM.data_source_id == LicensePool.data_source_id,
+            LPDM.identifier_id == LicensePool.identifier_id,
+        )
+        .exists()
+    )
+    deliverable_pool_exists = (
+        select(LicensePool.id)
+        .where(LicensePool.work_id == Work.id, delivery_mechanism_exists)
+        .exists()
+    )
+    query = (
+        select(Work.id)
+        .where(Work.presentation_ready == True, ~deliverable_pool_exists)
+        .order_by(Work.id)
+        .limit(batch_size)
+    )
+    if after_id is not None:
+        query = query.where(Work.id > after_id)
+    return list(session.scalars(query))
+
+
+def _load_works(session: Session, work_ids: list[int]) -> list[Work]:
+    """Load a batch of works with everything the readiness check reads."""
+    return list(
+        session.scalars(
+            select(Work)
+            .where(Work.id.in_(work_ids))
+            .options(
+                selectinload(Work.presentation_edition),
+                selectinload(Work.license_pools).selectinload(
+                    LicensePool.delivery_mechanisms
+                ),
+            )
+        )
+    )

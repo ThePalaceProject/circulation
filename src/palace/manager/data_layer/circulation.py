@@ -377,8 +377,12 @@ class CirculationData(BaseMutableData):
         if pool and not pool.work:
             work, work_changed = pool.calculate_work()
             if work:
-                work.set_presentation_ready()
+                work.set_presentation_ready_based_on_content()
                 work_changed = True
+        elif pool and pool.work and set(old_lpdms) != set(new_lpdms):
+            # Gaining or losing the last delivery mechanism changes whether the
+            # title can be opened at all, which decides whether patrons see it.
+            pool.work.set_presentation_ready_based_on_content()
 
         made_changes = (
             made_changes

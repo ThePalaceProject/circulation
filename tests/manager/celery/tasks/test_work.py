@@ -1,6 +1,7 @@
 from unittest.mock import patch
 
 import pytest
+from sqlalchemy.orm import Session
 
 from palace.manager.celery.tasks import work as work_tasks
 from palace.manager.sqlalchemy.model.classification import Subject
@@ -121,6 +122,93 @@ def test_reclassify_null_audience_works(
         policy = call_obj[1]["policy"]
         assert policy.classify is True
         assert policy.choose_edition is False
+
+
+@pytest.mark.parametrize(
+    "has_delivery_mechanism,expected_ready",
+    [
+        pytest.param(True, True, id="deliverable_work_untouched"),
+        pytest.param(False, False, id="undeliverable_work_reset"),
+    ],
+)
+def test_reset_undeliverable_works(
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+    has_delivery_mechanism: bool,
+    expected_ready: bool,
+) -> None:
+    """reset_undeliverable_works clears presentation readiness for works whose
+    license pools have no delivery mechanism, and leaves the rest alone."""
+    work: Work = db.work(with_license_pool=True)
+    if not has_delivery_mechanism:
+        for lpdm in work.license_pools[0].delivery_mechanisms:
+            db.session.delete(lpdm)
+    work.presentation_ready = True
+    db.session.commit()
+
+    work_tasks.reset_undeliverable_works.delay().wait()
+    db.session.refresh(work)
+
+    assert work.presentation_ready is expected_ready
+
+
+def test_reset_undeliverable_works_pages_through_batches(
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+) -> None:
+    """One work per batch still reaches every candidate, and leaves a
+    deliverable work alone."""
+    undeliverable = []
+    for _ in range(2):
+        work: Work = db.work(with_license_pool=True)
+        for lpdm in work.license_pools[0].delivery_mechanisms:
+            db.session.delete(lpdm)
+        work.presentation_ready = True
+        undeliverable.append(work)
+
+    deliverable: Work = db.work(with_license_pool=True)
+    deliverable.presentation_ready = True
+    db.session.commit()
+
+    work_tasks.reset_undeliverable_works.delay(batch_size=1).wait()
+    for work in [*undeliverable, deliverable]:
+        db.session.refresh(work)
+
+    assert [work.presentation_ready for work in undeliverable] == [False, False]
+    assert deliverable.presentation_ready is True
+
+
+def test_reset_undeliverable_works_queues_indexing_after_commit(
+    db: DatabaseTransactionFixture,
+    celery_fixture: CeleryFixture,
+) -> None:
+    """The work is queued for indexing after its batch commits, so an indexing
+    worker cannot consume the id while the database still shows the old flag."""
+    work: Work = db.work(with_license_pool=True)
+    for lpdm in work.license_pools[0].delivery_mechanisms:
+        db.session.delete(lpdm)
+    work.presentation_ready = True
+    db.session.commit()
+    work_id = work.id
+
+    events: list[str] = []
+    real_commit = Session.commit
+
+    def tracked_commit(self: Session) -> None:
+        events.append("commit")
+        real_commit(self)
+
+    def tracked_queue(queued_id: int | None, **kwargs: object) -> None:
+        events.append(f"queue:{queued_id}")
+
+    with (
+        patch.object(Session, "commit", tracked_commit),
+        patch.object(Work, "queue_indexing", staticmethod(tracked_queue)),
+    ):
+        work_tasks.reset_undeliverable_works.delay().wait()
+
+    assert events[-1] == f"queue:{work_id}"
+    assert "commit" in events
 
 
 @pytest.mark.parametrize(

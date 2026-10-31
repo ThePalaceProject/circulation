@@ -666,6 +666,20 @@ class WorkList:
 
         b = time.time()
         logging.info("Obtained %sxWork in %.2fsec", len(all_works), b - a)
+
+        # The search index and the database apply slightly different rules about
+        # which works a patron may see. When they disagree, search results drop
+        # out here and the page silently comes back short, so say when it happens.
+        missing = work_ids - set(work_by_id)
+        if missing:
+            logging.warning(
+                "%s of %s search results were dropped because the database did not "
+                "return them: %s",
+                len(missing),
+                len(work_ids),
+                sorted(missing),
+            )
+
         return work_lists
 
     @property

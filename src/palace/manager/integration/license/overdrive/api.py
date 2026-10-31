@@ -1351,7 +1351,7 @@ class OverdriveAPI(
         if not license_pool.work or not license_pool.work.presentation_ready:
             work, _ = license_pool.calculate_work()
             if work:
-                work.set_presentation_ready()
+                work.set_presentation_ready_based_on_content()
 
     def update_licensepool_with_book_info(
         self,
