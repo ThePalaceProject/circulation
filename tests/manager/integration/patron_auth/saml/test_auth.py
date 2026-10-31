@@ -7,13 +7,16 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from freezegun import freeze_time
+from onelogin.saml2.errors import OneLogin_Saml2_Error
 from onelogin.saml2.utils import OneLogin_Saml2_Utils, OneLogin_Saml2_XML
 from onelogin.saml2.xmlparser import fromstring
 
 from palace.util.datetime_helpers import datetime_utc
 
 from palace.manager.integration.patron_auth.saml.auth import (
+    SAML_GENERIC_ERROR,
     SAML_INCORRECT_RESPONSE,
+    SAML_UNKNOWN_IDENTITY_PROVIDER,
     SAMLAuthenticationManager,
     SAMLAuthenticationManagerFactory,
 )
@@ -322,6 +325,74 @@ class TestSAMLAuthenticationManager:
         )
 
         return SAMLAuthenticationManager(onelogin_configuration, SAMLSubjectParser())
+
+    def test_start_authentication_unknown_identity_provider(
+        self,
+        controller_fixture: ControllerFixture,
+        create_mock_onelogin_configuration: Callable[..., SAMLOneLoginConfiguration],
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """An entity ID that is not configured gets a 400, logged as a warning."""
+        caplog.set_level(logging.WARNING)
+        unknown_entity_id = "urn:mace:incommon:unknown.edu"
+        onelogin_configuration = create_mock_onelogin_configuration(
+            SERVICE_PROVIDER_WITH_UNSIGNED_REQUESTS, IDENTITY_PROVIDERS
+        )
+        authentication_manager = SAMLAuthenticationManager(
+            onelogin_configuration, SAMLSubjectParser()
+        )
+
+        with controller_fixture.app.test_request_context("/"):
+            result = authentication_manager.start_authentication(
+                controller_fixture.db.session, unknown_entity_id, ""
+            )
+
+        assert isinstance(result, ProblemDetail)
+        assert result.uri == SAML_UNKNOWN_IDENTITY_PROVIDER.uri
+        assert result.status_code == 400
+        assert result.detail == SAML_UNKNOWN_IDENTITY_PROVIDER.detail
+        assert unknown_entity_id not in str(result.detail)
+
+        [record] = [r for r in caplog.records if unknown_entity_id in r.getMessage()]
+        assert record.levelno == logging.WARNING
+        assert record.exc_info is None
+
+    def test_start_authentication_onelogin_error(
+        self,
+        controller_fixture: ControllerFixture,
+        create_mock_onelogin_configuration: Callable[..., SAMLOneLoginConfiguration],
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A OneLogin error is logged in full, but the client gets only the fixed detail."""
+        caplog.set_level(logging.ERROR)
+        error_text = "Invalid dict settings: sp_cert_not_found_and_required"
+        onelogin_configuration = create_mock_onelogin_configuration(
+            SERVICE_PROVIDER_WITH_UNSIGNED_REQUESTS, IDENTITY_PROVIDERS
+        )
+        authentication_manager = SAMLAuthenticationManager(
+            onelogin_configuration, SAMLSubjectParser()
+        )
+
+        with (
+            controller_fixture.app.test_request_context("/"),
+            patch.object(
+                authentication_manager,
+                "_get_auth_object",
+                side_effect=OneLogin_Saml2_Error(error_text),
+            ),
+        ):
+            result = authentication_manager.start_authentication(
+                controller_fixture.db.session, saml_strings.IDP_1_ENTITY_ID, ""
+            )
+
+        assert isinstance(result, ProblemDetail)
+        assert result.uri == SAML_GENERIC_ERROR.uri
+        assert result.detail == SAML_GENERIC_ERROR.detail
+        assert error_text not in str(result.detail)
+
+        [record] = caplog.records
+        assert record.exc_info is not None
+        assert error_text in str(record.exc_info[1])
 
     @pytest.mark.parametrize(
         "service_provider",
