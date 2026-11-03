@@ -379,10 +379,14 @@ class CirculationData(BaseMutableData):
             if work:
                 work.set_presentation_ready_based_on_content()
                 work_changed = True
-        elif pool and pool.work and set(old_lpdms) != set(new_lpdms):
-            # Gaining or losing the last delivery mechanism changes whether the
-            # title can be opened at all, which decides whether patrons see it.
-            pool.work.set_presentation_ready_based_on_content()
+        elif pool and pool.work:
+            # Readiness only turns on whether the pool has any delivery mechanism.
+            # An availability-only apply carries no formats and deletes nothing, so
+            # it must not count as a change.
+            had_mechanisms = bool(old_lpdms)
+            has_mechanisms = bool(new_lpdms) or (not replace.formats and had_mechanisms)
+            if had_mechanisms != has_mechanisms:
+                pool.work.set_presentation_ready_based_on_content()
 
         made_changes = (
             made_changes

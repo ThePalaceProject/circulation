@@ -1,5 +1,6 @@
 import datetime
 from copy import deepcopy
+from unittest.mock import patch
 
 import pytest
 
@@ -25,6 +26,7 @@ from palace.manager.sqlalchemy.model.licensing import (
     RightsStatus,
 )
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
+from palace.manager.sqlalchemy.model.work import Work
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
@@ -217,6 +219,65 @@ class TestCirculationData:
         )
 
         assert work.presentation_ready is expected_ready
+
+    @pytest.mark.parametrize(
+        "send_format,replace_formats,expected_recompute",
+        [
+            pytest.param(False, False, False, id="availability_only_apply"),
+            pytest.param(True, False, False, id="same_format_sent_again"),
+            pytest.param(False, True, True, id="authoritative_empty_format_list"),
+        ],
+    )
+    def test_apply_only_recomputes_readiness_when_deliverability_changes(
+        self,
+        db: DatabaseTransactionFixture,
+        send_format: bool,
+        replace_formats: bool,
+        expected_recompute: bool,
+    ) -> None:
+        # Recomputing readiness queues the work for reindexing, so an apply that
+        # leaves the pool's delivery mechanisms alone must not do it.
+        edition, pool = db.edition(with_license_pool=True)
+        work = db.work(presentation_edition=edition)
+        for lpdm in pool.delivery_mechanisms:
+            db.session.delete(lpdm)
+        db.session.flush()
+        db.session.expire_all()
+        pool.set_delivery_mechanism(
+            Representation.EPUB_MEDIA_TYPE,
+            DeliveryMechanism.ADOBE_DRM,
+            RightsStatus.IN_COPYRIGHT,
+            None,
+        )
+        db.session.flush()
+        assert pool.work is work
+
+        circulation_data = CirculationData(
+            data_source_name=edition.data_source.name,
+            primary_identifier_data=IdentifierData.from_identifier(
+                edition.primary_identifier
+            ),
+            formats=(
+                [
+                    FormatData(
+                        content_type=Representation.EPUB_MEDIA_TYPE,
+                        drm_scheme=DeliveryMechanism.ADOBE_DRM,
+                    )
+                ]
+                if send_format
+                else []
+            ),
+        )
+        with patch.object(Work, "set_presentation_ready_based_on_content") as recompute:
+            circulation_data.apply(
+                db.session,
+                pool.collection,
+                replace=ReplacementPolicy(
+                    even_if_not_apparently_updated=True, formats=replace_formats
+                ),
+            )
+
+        assert recompute.called is expected_recompute
 
     def test_apply_removes_old_formats_based_on_replacement_policy(
         self, db: DatabaseTransactionFixture
