@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime
 import json
+import time
 from unittest.mock import MagicMock, Mock, call, patch
 from uuid import uuid4
 
@@ -38,6 +39,23 @@ from tests.fixtures.files import OverdriveFilesFixture
 from tests.fixtures.overdrive import OverdriveAPIFixture
 from tests.fixtures.redis import RedisFixture
 from tests.mocks.mock import MockRequestsResponse
+
+
+def _wait_for_log(
+    caplog: pytest.LogCaptureFixture, text: str, timeout: float = 10.0
+) -> None:
+    """Block until ``text`` has been logged, or fail the test after ``timeout``.
+
+    A chain's error callback runs on a worker thread, after the task that queued the
+    chain has already returned. Waiting on that task therefore says nothing about
+    whether the callback has run yet.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if text in caplog.text:
+            return
+        time.sleep(0.05)
+    pytest.fail(f"{text!r} was not logged within {timeout} seconds.")
 
 
 class SeededOverdriveAPI(OverdriveAPI):
@@ -2175,7 +2193,9 @@ class TestBackfillCollection:
         # through the error callback rather than here.
         overdrive.backfill_all_collections.delay().wait()
 
-        assert "Overdrive backfill stopped" in caplog.text
+        # The callback writes all of this in one message, so once the first part has
+        # landed the rest is there too.
+        _wait_for_log(caplog, "Overdrive backfill stopped")
         assert f"collection '{first.name}'" in caplog.text
         assert f"'{second.name}'" in caplog.text
         assert "Re-running the backfill is safe" in caplog.text
