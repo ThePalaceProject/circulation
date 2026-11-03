@@ -1,6 +1,11 @@
+from collections.abc import Iterator
+from contextlib import contextmanager
+from typing import Any
 from unittest.mock import patch
 
 import pytest
+from sqlalchemy import event
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from palace.manager.celery.tasks import work as work_tasks
@@ -301,3 +306,36 @@ def test_reset_non_bisac_nonfiction_subjects_is_idempotent(
     work_tasks.reset_non_bisac_nonfiction_subjects.delay().wait()
     db.session.expire_all()
     assert subject.checked is False
+
+
+@contextmanager
+def _assert_no_queries() -> Iterator[None]:
+    """Fail if any SQL runs inside the block."""
+    statements: list[str] = []
+
+    def record(conn: Any, cursor: Any, statement: str, *args: Any) -> None:
+        statements.append(statement)
+
+    event.listen(Engine, "before_cursor_execute", record)
+    try:
+        yield
+    finally:
+        event.remove(Engine, "before_cursor_execute", record)
+    assert statements == []
+
+
+def test_load_works_eager_loads_what_clearing_a_work_reads(
+    db: DatabaseTransactionFixture,
+) -> None:
+    """Clearing a work also logs its repr, which lists genre names, so the batch
+    has to bring those along too."""
+    work: Work = db.work(with_license_pool=True, genre="Fantasy")
+    for lpdm in work.license_pools[0].delivery_mechanisms:
+        db.session.delete(lpdm)
+    db.session.commit()
+    db.session.expire_all()
+
+    [loaded] = work_tasks._load_works(db.session, [work.id])
+
+    with _assert_no_queries():
+        loaded.set_presentation_ready_based_on_content()

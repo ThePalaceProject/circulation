@@ -14,7 +14,7 @@ from palace.manager.sqlalchemy.model.licensing import (
     LicensePool,
     LicensePoolDeliveryMechanism,
 )
-from palace.manager.sqlalchemy.model.work import Work
+from palace.manager.sqlalchemy.model.work import Work, WorkGenre
 
 
 @shared_task(queue=QueueNames.default, bind=True)
@@ -193,7 +193,11 @@ def _undeliverable_work_ids(
 
 
 def _load_works(session: Session, work_ids: list[int]) -> list[Work]:
-    """Load a batch of works with everything the readiness check reads."""
+    """Load a batch of works with everything that is read while clearing them.
+
+    Genres are not part of the readiness check, but every work here ends up in its
+    "not presentation ready" log line, and Work.__repr__ lists the genre names.
+    """
     return list(
         session.scalars(
             select(Work)
@@ -203,6 +207,7 @@ def _load_works(session: Session, work_ids: list[int]) -> list[Work]:
                 selectinload(Work.license_pools).selectinload(
                     LicensePool.delivery_mechanisms
                 ),
+                selectinload(Work.work_genres).selectinload(WorkGenre.genre),
             )
         )
     )
