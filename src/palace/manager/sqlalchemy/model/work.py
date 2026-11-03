@@ -26,7 +26,13 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import INT4RANGE
 from sqlalchemy.ext.associationproxy import association_proxy
-from sqlalchemy.orm import Mapped, contains_eager, joinedload, relationship
+from sqlalchemy.orm import (
+    Mapped,
+    contains_eager,
+    joinedload,
+    relationship,
+    selectinload,
+)
 from sqlalchemy.orm.base import NO_VALUE
 from sqlalchemy.orm.session import Session
 from sqlalchemy.sql.expression import and_, case, literal_column, select
@@ -1523,6 +1529,11 @@ class Work(Base, LoggerMixin):
             joinedload(Work.suppressed_for),
             joinedload(Work.work_genres).joinedload(WorkGenre.genre),
             joinedload(Work.custom_list_entries),
+            # Loaded separately so the delivery mechanisms checked below don't
+            # cost a query per pool.
+            selectinload(Work.license_pools).selectinload(
+                LicensePool.delivery_mechanisms
+            ),
         )
 
         rows: list[Work] = qu.all()
@@ -1664,6 +1675,11 @@ class Work(Base, LoggerMixin):
             ],
             "contribution": ["role"],
             "contributor": ["display_name", "sort_name", "family_name", "lc", "viaf"],
+            # TODO: nothing reads "type", "unlimited_type",
+            # "metered_or_equivalent_type" or "active_status" back out of the
+            # search index -- the only status a query looks at is "status".
+            # They can be dropped once we are sure nothing outside this
+            # repository relies on them.
             "licensepools": [
                 "data_source_id",
                 "collection_id",
@@ -1772,6 +1788,10 @@ class Work(Base, LoggerMixin):
                     license_pool.metered_or_equivalent_type
                     or license_pool.unlimited_non_open_access_type
                 )
+                # A pool with no delivery mechanism cannot be handed to a patron.
+                # Filter.universal_nested_filters leaves those pools out of search
+                # results, so the feed is not asked to render them.
+                lc["has_delivery_mechanism"] = bool(license_pool.delivery_mechanisms)
                 if doc.presentation_edition:
                     lc["medium"] = doc.presentation_edition.medium
                 lc["licensepool_id"] = license_pool.id

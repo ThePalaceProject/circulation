@@ -655,6 +655,16 @@ class WorkList:
         for w in all_works:
             work_by_id[w.id] = w
 
+        missing = work_ids - work_by_id.keys()
+        if missing:
+            # Search and the database apply the same availability rules, so this
+            # should not happen. When it does the page just comes back short.
+            logging.warning(
+                "Dropped %d search result(s) the database did not return: %s",
+                len(missing),
+                ", ".join(str(work_id) for work_id in sorted(missing)),
+            )
+
         work_lists = []
         for resultset in resultsets:
             works = []

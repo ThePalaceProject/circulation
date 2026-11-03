@@ -27,7 +27,10 @@ from palace.manager.sqlalchemy.model.integration import (
 )
 from palace.manager.sqlalchemy.model.lane import Lane, LaneGenre
 from palace.manager.sqlalchemy.model.library import Library
-from palace.manager.sqlalchemy.model.licensing import LicensePool
+from palace.manager.sqlalchemy.model.licensing import (
+    LicensePool,
+    LicensePoolDeliveryMechanism,
+)
 from palace.manager.sqlalchemy.model.work import (
     Work,
     add_work_to_customlists_for_collection,
@@ -140,6 +143,23 @@ def licensepool_deleted(session: Session, instance: LicensePool) -> None:
     work = instance.work
     if work:
         work.external_index_needs_updating()
+
+
+@Listener.before_flush(LicensePoolDeliveryMechanism, ListenerState.new)
+@Listener.before_flush(LicensePoolDeliveryMechanism, ListenerState.deleted)
+def licensepool_delivery_mechanism_change(
+    session: Session, instance: LicensePoolDeliveryMechanism
+) -> None:
+    """A Work's search document records whether each of its license pools has a
+    delivery mechanism, and search leaves out the pools that have none. Gaining or
+    losing one therefore makes the document wrong until the Work is indexed again.
+
+    Only creation and deletion are listened for. Editing a delivery mechanism in
+    place leaves the pool holding one either way.
+    """
+    for pool in instance.license_pools:
+        if pool.work:
+            pool.work.external_index_needs_updating()
 
 
 @event.listens_for(LicensePool.collection_id, "set")

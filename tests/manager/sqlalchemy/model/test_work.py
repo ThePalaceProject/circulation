@@ -1493,6 +1493,29 @@ class TestWork:
         assert result["title"] is None
         assert result["target_age"]["lower"] is None
 
+    def test_to_search_documents_records_delivery_mechanisms(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        """Each pool records whether it has a delivery mechanism."""
+        work = db.work(with_license_pool=True)
+        # The second pool needs its own identifier, since delivery mechanisms are
+        # shared by every pool with the same data source and identifier.
+        work.license_pools.append(db.licensepool(db.edition()))
+        deliverable, undeliverable = work.license_pools
+
+        for lpdm in undeliverable.delivery_mechanisms:
+            db.session.delete(lpdm)
+        db.session.flush()
+        expected = {deliverable.id: True, undeliverable.id: False}
+        # Forget what is held in memory, so the pools are read back from the database.
+        db.session.expire_all()
+
+        [doc] = Work.to_search_documents(db.session, [work.id])
+        assert expected == {
+            pool["licensepool_id"]: pool["has_delivery_mechanism"]
+            for pool in doc["licensepools"]
+        }
+
     def test_age_appropriate_for_patron(self, db: DatabaseTransactionFixture):
         work = db.work()
         work.audience = Classifier.AUDIENCE_YOUNG_ADULT

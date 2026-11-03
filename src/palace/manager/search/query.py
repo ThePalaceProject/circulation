@@ -267,13 +267,23 @@ class Query(LoggerMixin):
 
         # Now we can convert any nested filters (universal or
         # otherwise) into nested queries.
+        #
+        # Conditions on a path in SINGLE_SUBDOCUMENT_PATHS share one nested query,
+        # so a single subdocument has to satisfy all of them. Asking separately
+        # would let a work through on the strength of two different license pools,
+        # one in the right collection and another that is deliverable, when the
+        # database requires a single pool to be both. The remaining paths keep a
+        # query per condition, since each of those is an independent restriction.
         for path, subfilters in list(nested_filters.items()):
-            for subfilter in subfilters:
-                # This ensures that the filter logic is executed in
-                # filter context rather than query context.
-                subquery = Bool(filter=subfilter)
+            if path in Filter.SINGLE_SUBDOCUMENT_PATHS:
+                groups = [subfilters]
+            else:
+                groups = [[subfilter] for subfilter in subfilters]
+            for group in groups:
+                # Bool(filter=...) runs the conditions in filter context rather
+                # than query context.
                 search = search.filter(
-                    name_or_query="nested", path=path, query=subquery
+                    name_or_query="nested", path=path, query=Bool(filter=group)
                 )
 
         if self.filter:
