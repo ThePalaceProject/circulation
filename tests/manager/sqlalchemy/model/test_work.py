@@ -1503,10 +1503,17 @@ class TestWork:
         work.license_pools.append(db.licensepool(db.edition()))
         deliverable, undeliverable = work.license_pools
 
+        # A third pool, in another collection, shares the first pool's data source
+        # and identifier, so it shares its delivery mechanisms as well.
+        shared = db.licensepool(
+            deliverable.presentation_edition, collection=db.collection()
+        )
+        work.license_pools.append(shared)
+
         for lpdm in undeliverable.delivery_mechanisms:
             db.session.delete(lpdm)
         db.session.flush()
-        expected = {deliverable.id: True, undeliverable.id: False}
+        expected = {deliverable.id: True, undeliverable.id: False, shared.id: True}
         # Forget what is held in memory, so the pools are read back from the database.
         db.session.expire_all()
 
@@ -1515,6 +1522,21 @@ class TestWork:
             pool["licensepool_id"]: pool["has_delivery_mechanism"]
             for pool in doc["licensepools"]
         }
+
+    def test_to_search_documents_reads_delivery_mechanisms_from_the_database(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        """The flag does not trust a stale list held by the session."""
+        work = db.work(with_license_pool=True)
+        [pool] = work.license_pools
+        # Read the delivery mechanisms, so the session is holding the list, then
+        # delete the rows behind it without flushing.
+        assert pool.delivery_mechanisms
+        for lpdm in pool.delivery_mechanisms:
+            db.session.delete(lpdm)
+
+        [doc] = Work.to_search_documents(db.session, [work.id])
+        assert doc["licensepools"][0]["has_delivery_mechanism"] is False
 
     def test_age_appropriate_for_patron(self, db: DatabaseTransactionFixture):
         work = db.work()
