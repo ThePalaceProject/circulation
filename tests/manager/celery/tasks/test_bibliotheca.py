@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, call, patch
 from uuid import uuid4
@@ -40,7 +39,7 @@ from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.util.http.exception import BadResponseException
-from tests.fixtures.celery import CeleryFixture
+from tests.fixtures.celery import CeleryFixture, wait_until
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.redis import RedisFixture
 from tests.mocks.bibliotheca import MockBibliothecaAPI
@@ -1100,21 +1099,21 @@ class TestImportPurchaseRecordsByCollection:
                 collection_id=collection.id
             ).wait()
 
-            # Poll until the Timestamp has advanced at least 3 days past the stored
-            # finish, or we hit the 10-second timeout.
-            deadline = utc_now() + timedelta(seconds=10)
-            while utc_now() < deadline:
+            def timestamp_advanced() -> bool:
                 db.session.expire_all()
                 ts = (
                     bibliotheca_purchase_record_task_fixture.get_purchase_record_timestamp()
                 )
-                if (
+                return (
                     ts is not None
                     and ts.finish is not None
                     and ts.finish >= stored_finish + timedelta(days=3)
-                ):
-                    break
-                time.sleep(0.1)
+                )
+
+            wait_until(
+                timestamp_advanced,
+                "The timestamp did not advance 3 days past the stored finish",
+            )
 
         ts = bibliotheca_purchase_record_task_fixture.get_purchase_record_timestamp()
         assert ts is not None

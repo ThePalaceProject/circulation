@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import datetime
-import time
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -19,7 +18,7 @@ from palace.manager.celery.tasks.custom_lists import (
 )
 from palace.manager.search.query import QueryParseException
 from palace.manager.sqlalchemy.model.customlist import CustomList, CustomListEntry
-from tests.fixtures.celery import CeleryFixture
+from tests.fixtures.celery import CeleryFixture, wait_until
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.redis import RedisFixture
 from tests.fixtures.services import ServicesFixture
@@ -45,22 +44,13 @@ def _make_auto_updating_list(
     return custom_list
 
 
-def _wait_for_sweep_lock_release(
-    redis_fixture: RedisFixture, timeout: float = 10.0
-) -> None:
-    """Block until the sweep lock is free, or fail the test after ``timeout``.
-
-    The chord body (or its error callback) releases the lock on a worker thread,
-    after the sweep task that queued it has already returned.
-    """
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        lock = _sweep_lock(redis_fixture.client, str(uuid4()))
-        if lock.acquire() is not False:
-            lock.release()
-            return
-        time.sleep(0.05)
-    pytest.fail(f"Sweep lock was not released within {timeout} seconds.")
+def _sweep_lock_is_free(redis_fixture: RedisFixture) -> bool:
+    """Whether the sweep lock can be taken right now."""
+    lock = _sweep_lock(redis_fixture.client, str(uuid4()))
+    if lock.acquire() is False:
+        return False
+    lock.release()
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -197,7 +187,10 @@ class TestUpdateCustomListEntriesSweep:
 
             # The chord header and its error callback run asynchronously, after the
             # sweep task itself has returned. Poll until the lock comes back.
-            _wait_for_sweep_lock_release(redis_fixture)
+            wait_until(
+                lambda: _sweep_lock_is_free(redis_fixture),
+                "Sweep lock was not released",
+            )
 
     def test_sweep_lock_prevents_concurrent_sweeps(
         self,

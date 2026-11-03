@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Generator, Mapping, Sequence
+import time
+from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any, Self
@@ -33,6 +34,26 @@ from palace.manager.sqlalchemy.util import get_one
 from tests.fixtures.database import DatabaseTransactionFixture, MockSessionMaker
 from tests.fixtures.http import MockHttpClientFixture
 from tests.fixtures.services import ServicesFixture
+
+
+def wait_until(
+    condition: Callable[[], bool], description: str, timeout: float = 10.0
+) -> None:
+    """Block until ``condition`` is true, or fail the test after ``timeout``.
+
+    A chain's body, and its error callback, run on a worker thread after the task
+    that queued them has already returned. Waiting on that task therefore says
+    nothing about whether the rest of the work has happened yet.
+
+    :param description: What was being waited for. It is read straight into the
+        failure message, so phrase it like "The lock was not released".
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if condition():
+            return
+        time.sleep(0.05)
+    pytest.fail(f"{description} within {timeout} seconds.")
 
 
 @pytest.fixture(scope="session")
