@@ -425,14 +425,14 @@ class TestWhereAreMyBooksScript:
         db: DatabaseTransactionFixture,
         end_to_end_search_fixture: EndToEndSearchFixture,
     ):
-        # This work has a license pool, but no delivery mechanisms.
+        # This work has a license pool, but no delivery mechanisms, so search
+        # leaves it out the same way it leaves out a suppressed or exhausted one.
         work = db.work(with_license_pool=True)
         for lpdm in work.license_pools[0].delivery_mechanisms:
             db.session.delete(lpdm)
         end_to_end_search_fixture.populate_search_index()
         self.check_explanation(
             no_delivery_mechanisms=1,
-            in_search_index=1,
             db=db,
             end_to_end_search_fixture=end_to_end_search_fixture,
         )

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Container, Sequence
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from functools import cache
@@ -29,7 +29,7 @@ from sqlalchemy.ext.associationproxy import association_proxy
 from sqlalchemy.orm import Mapped, contains_eager, joinedload, relationship
 from sqlalchemy.orm.base import NO_VALUE
 from sqlalchemy.orm.session import Session
-from sqlalchemy.sql.expression import and_, case, literal_column, select
+from sqlalchemy.sql.expression import and_, case, exists, literal_column, select
 from sqlalchemy.sql.functions import func
 
 from palace.util.datetime_helpers import utc_now
@@ -61,7 +61,10 @@ from palace.manager.sqlalchemy.model.identifier import (
     Identifier,
     RecursiveEquivalencyCache,
 )
-from palace.manager.sqlalchemy.model.licensing import LicensePool
+from palace.manager.sqlalchemy.model.licensing import (
+    LicensePool,
+    LicensePoolDeliveryMechanism,
+)
 from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.sqlalchemy.util import (
     flush,
@@ -1527,6 +1530,31 @@ class Work(Base, LoggerMixin):
 
         rows: list[Work] = qu.all()
 
+        # Which of these works' license pools have a delivery mechanism.
+        #
+        # Asked as its own query rather than by reading each pool's
+        # delivery_mechanisms. That relationship matches on data source and
+        # identifier alone, so its rows are shared by every pool with the same
+        # pair and a single pool can have tens of thousands of them. Loading them
+        # to ask whether there is at least one has run a batch out of memory.
+        deliverable_pool_ids = {
+            pool_id
+            for (pool_id,) in session.execute(
+                select(LicensePool.id)
+                .where(LicensePool.work_id.in_(work_ids))
+                .where(
+                    exists().where(
+                        and_(
+                            LicensePoolDeliveryMechanism.data_source_id
+                            == LicensePool.data_source_id,
+                            LicensePoolDeliveryMechanism.identifier_id
+                            == LicensePool.identifier_id,
+                        )
+                    )
+                )
+            )
+        }
+
         ## IDENTIFIERS START
         ## Identifiers is a house of cards, it comes crashing down if anything is changed here
         ## We need a WITH statement selecting the procedural function on works_alias
@@ -1628,7 +1656,9 @@ class Work(Base, LoggerMixin):
             )
 
             try:
-                search_doc = cls.search_doc_as_dict(cast(Self, item))
+                search_doc = cls.search_doc_as_dict(
+                    cast(Self, item), deliverable_pool_ids
+                )
                 results.append(search_doc)
             except:
                 cls.logger().exception(f"Could not create search document for {item}")
@@ -1636,7 +1666,9 @@ class Work(Base, LoggerMixin):
         return results
 
     @classmethod
-    def search_doc_as_dict(cls, doc: Self) -> dict[str, Any]:
+    def search_doc_as_dict(
+        cls, doc: Self, deliverable_pool_ids: Container[int]
+    ) -> dict[str, Any]:
         columns = {
             "work": [
                 "fiction",
@@ -1772,6 +1804,10 @@ class Work(Base, LoggerMixin):
                     license_pool.metered_or_equivalent_type
                     or license_pool.unlimited_non_open_access_type
                 )
+                # A pool with no delivery mechanism cannot be handed to a patron.
+                # Filter.universal_nested_filters leaves those pools out of search
+                # results, so the feed is not asked to render them.
+                lc["has_delivery_mechanism"] = license_pool.id in deliverable_pool_ids
                 if doc.presentation_edition:
                     lc["medium"] = doc.presentation_edition.medium
                 lc["licensepool_id"] = license_pool.id

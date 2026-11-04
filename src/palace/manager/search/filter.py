@@ -553,17 +553,21 @@ class Filter:
 
         return base_filter
 
+    #: Nested paths whose conditions all describe the same subdocument, so one
+    #: subdocument has to satisfy every one of them. A license pool is the only
+    #: such path: the database looks for a single pool that is in the collection,
+    #: unsuppressed, active and deliverable, and search has to ask the same way.
+    #: Conditions on the other paths stand alone, because each one is an
+    #: independent restriction -- two custom list restrictions, for instance, are
+    #: meant to be satisfied by two different list entries.
+    SINGLE_SUBDOCUMENT_PATHS: Final[frozenset[str]] = frozenset({"licensepools"})
+
     @classmethod
     def universal_nested_filters(cls):
         """Build a set of restrictions on subdocuments that are
         always applied, even in the absence of other filters.
         """
         nested_filters = defaultdict(list)
-
-        # TODO: It would be great to be able to filter out
-        # LicensePools that have no delivery mechanisms. That's the
-        # only part of Collection.restrict_to_ready_deliverable_works
-        # not already implemented in this class.
 
         # We don't want to consider license pools that have been
         # suppressed, or of which there are currently no licensed
@@ -578,6 +582,18 @@ class Filter:
 
         active_status = Term(**{"licensepools.status": LicensePoolStatus.ACTIVE})
         nested_filters["licensepools"].append(active_status)
+
+        # A license pool with no delivery mechanism cannot be handed to a patron, so
+        # the feed drops it when it turns search results back into works. Leaving it
+        # out here too keeps a page from coming back short.
+        #
+        # This is phrased as "not false" rather than "true" on purpose. Documents
+        # written before this field existed do not carry it, and a positive match
+        # would exclude every one of them until a reindex had caught up.
+        has_delivery_mechanism = Bool(
+            must_not=[Term(**{"licensepools.has_delivery_mechanism": False})]
+        )
+        nested_filters["licensepools"].append(has_delivery_mechanism)
 
         return nested_filters
 

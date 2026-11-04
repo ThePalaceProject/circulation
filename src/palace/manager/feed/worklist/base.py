@@ -655,6 +655,18 @@ class WorkList:
         for w in all_works:
             work_by_id[w.id] = w
 
+        missing = work_ids - work_by_id.keys()
+        if missing:
+            # The index is a snapshot, the database is live, so the two can
+            # disagree. A work changed since its last reindex is one case; for a
+            # library that does not allow holds, a title whose last copy has just
+            # been borrowed is another. The page comes back short either way.
+            logging.info(
+                "Dropped %d search result(s) the database did not return: %s",
+                len(missing),
+                ", ".join(str(work_id) for work_id in sorted(missing)),
+            )
+
         work_lists = []
         for resultset in resultsets:
             works = []
