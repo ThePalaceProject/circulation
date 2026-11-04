@@ -1115,10 +1115,6 @@ class TestImportPurchaseRecordsByCollection:
                 "The timestamp did not advance 3 days past the stored finish",
             )
 
-        ts = bibliotheca_purchase_record_task_fixture.get_purchase_record_timestamp()
-        assert ts is not None
-        assert ts.finish is not None
-        assert ts.finish >= stored_finish + timedelta(days=3)
         # At least one marc_request call per day of backlog.
         assert mock_api_cls.return_value.marc_request.call_count >= 3
 

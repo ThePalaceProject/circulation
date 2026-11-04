@@ -41,12 +41,15 @@ def wait_until(
 ) -> None:
     """Block until ``condition`` is true, or fail the test after ``timeout``.
 
-    A chain's body, and its error callback, run on a worker thread after the task
-    that queued them has already returned. Waiting on that task therefore says
-    nothing about whether the rest of the work has happened yet.
+    A chain's later tasks, a chord's body, and an error callback all run on a
+    worker thread after the task that queued them has already returned. Waiting
+    on that task therefore says nothing about whether the rest of the work has
+    happened yet.
 
+    :param condition: Checked repeatedly until it returns true.
     :param description: What was being waited for. It is read straight into the
         failure message, so phrase it like "The lock was not released".
+    :param timeout: How many seconds to wait before giving up.
     """
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
