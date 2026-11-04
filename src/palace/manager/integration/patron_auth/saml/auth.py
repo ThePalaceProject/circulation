@@ -17,6 +17,7 @@ from onelogin.saml2.xmlparser import fromstring
 from palace.manager.integration.patron_auth.saml.configuration.model import (
     SAMLConfigurationError,
     SAMLOneLoginConfiguration,
+    SAMLUnknownIdentityProviderError,
 )
 from palace.manager.integration.patron_auth.saml.configuration.service_provider import (
     SamlServiceProviderConfiguration,
@@ -42,6 +43,16 @@ SAML_GENERIC_ERROR = pd(
     status_code=500,
     title=_("SAML error."),
     detail=_("SAML error."),
+)
+
+SAML_UNKNOWN_IDENTITY_PROVIDER = pd(
+    "http://palaceproject.io/terms/problem/auth/unrecoverable/saml/unknown-identity-provider",
+    status_code=400,
+    title=_("Unknown SAML identity provider."),
+    detail=_(
+        "This sign-in option is no longer available. Removing and re-adding this "
+        "library may resolve the issue."
+    ),
 )
 
 SAML_INCORRECT_RESPONSE = pd(
@@ -320,12 +331,24 @@ class SAMLAuthenticationManager:
             )
 
             return redirect_url
-        except OneLogin_Saml2_Error as exception:
+        except SAMLUnknownIdentityProviderError:
+            # The client asked for an identity provider that our configuration does
+            # not have. Either side may be out of date or wrong, and we cannot tell
+            # which from here. Give the patron a fixed message they can act on, and
+            # log the entity ID so we can find the mismatch.
+            self._logger.warning(
+                "Unable to start authentication: there is no identity provider "
+                f"with entityID = {idp_entity_id}"
+            )
+            return SAML_UNKNOWN_IDENTITY_PROVIDER
+        except OneLogin_Saml2_Error:
+            # The exception text describes our configuration, so it goes only to
+            # the log. The patron gets the fixed detail.
             self._logger.exception(
                 "Unexpected exception occurred while initiating authentication workflow"
             )
 
-            return SAML_GENERIC_ERROR.detailed(str(exception))
+            return SAML_GENERIC_ERROR
 
     def finish_authentication(self, db, idp_entity_id):
         """Finish the SAML authentication workflow by validating AuthnResponse and extracting a SAML assertion from it.

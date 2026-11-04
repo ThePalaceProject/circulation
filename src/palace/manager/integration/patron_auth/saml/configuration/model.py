@@ -82,6 +82,14 @@ class SAMLConfigurationError(BasePalaceException):
     """Raised in the case of any configuration errors."""
 
 
+class SAMLUnknownIdentityProviderError(SAMLConfigurationError):
+    """Raised when no configured identity provider has the requested entity ID.
+
+    This is a mismatch between a client and us. The client's configuration may be
+    old or incorrect, or ours may be missing (removed or never added) or incorrect.
+    """
+
+
 class FederatedIdentityProviderOptions:
     """Provides the options key for the federated identity provider select input."""
 
@@ -1381,7 +1389,7 @@ class SAMLOneLoginConfiguration(LoggerMixin):
         ]
 
         if not identity_providers:
-            raise SAMLConfigurationError(
+            raise SAMLUnknownIdentityProviderError(
                 _(
                     "There is no identity provider with entityID = {}".format(
                         idp_entity_id

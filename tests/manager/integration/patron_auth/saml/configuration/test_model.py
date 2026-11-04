@@ -22,7 +22,9 @@ from palace.manager.integration.patron_auth.saml.configuration.model import (
     ACS_SELECTION_POLICY_LABELS,
     SAMLAuthnContextClass,
     SAMLAuthnContextComparison,
+    SAMLConfigurationError,
     SAMLOneLoginConfiguration,
+    SAMLUnknownIdentityProviderError,
     SAMLWebSSOAuthSettings,
     sp_environment_check,
 )
@@ -1643,6 +1645,50 @@ class TestSAMLOneLoginConfiguration:
         # Assert
         assert result == expected_result
         onelogin_configuration.get_identity_providers.assert_called_once_with(db)
+
+    @pytest.mark.parametrize(
+        "identity_providers, entity_id, expected_error, expected_message",
+        [
+            pytest.param(
+                IDENTITY_PROVIDERS,
+                "urn:mace:incommon:unknown.edu",
+                SAMLUnknownIdentityProviderError,
+                "There is no identity provider with entityID",
+                id="unknown-entity-id",
+            ),
+            pytest.param(
+                [IDENTITY_PROVIDERS[0], IDENTITY_PROVIDERS[0]],
+                IDENTITY_PROVIDERS[0].entity_id,
+                SAMLConfigurationError,
+                "There are multiple identity providers with entityID",
+                id="duplicate-entity-id",
+            ),
+        ],
+    )
+    def test_get_identity_provider_settings_raises_for_bad_entity_id(
+        self,
+        identity_providers: list[SAMLIdentityProviderMetadata],
+        entity_id: str,
+        expected_error: type[SAMLConfigurationError],
+        expected_message: str,
+    ) -> None:
+        """Each bad entity ID raises its own exact exception class.
+
+        An unknown entity ID is a mismatch between a client and us, so it raises
+        ``SAMLUnknownIdentityProviderError``. A duplicate entity ID is not a
+        mismatch, so it raises ``SAMLConfigurationError`` itself, not the subclass.
+        """
+        configuration = create_autospec(spec=SAMLWebSSOAuthSettings)
+        onelogin_configuration = SAMLOneLoginConfiguration(configuration)
+        onelogin_configuration.get_identity_providers = MagicMock(
+            return_value=identity_providers
+        )
+        db = create_autospec(spec=sqlalchemy.orm.session.Session)
+
+        with pytest.raises(expected_error, match=expected_message) as excinfo:
+            onelogin_configuration.get_identity_provider_settings(db, entity_id)
+
+        assert type(excinfo.value) is expected_error
 
     @pytest.mark.parametrize(
         "service_provider,expected_result",

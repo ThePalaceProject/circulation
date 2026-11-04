@@ -28,6 +28,7 @@ from palace.manager.integration.patron_auth.constants import LOGOUT_REDIRECT_QUE
 from palace.manager.integration.patron_auth.saml.auth import (
     SAML_GENERIC_ERROR,
     SAML_INCORRECT_RESPONSE,
+    SAML_UNKNOWN_IDENTITY_PROVIDER,
     SAMLAuthenticationManager,
 )
 from palace.manager.integration.patron_auth.saml.configuration.model import (
@@ -435,6 +436,70 @@ class TestSAMLController:
                     ]
                     == expected_force_authn
                 )
+
+    @pytest.mark.parametrize(
+        "problem_detail",
+        [
+            pytest.param(
+                SAML_UNKNOWN_IDENTITY_PROVIDER, id="unknown-identity-provider"
+            ),
+            pytest.param(SAML_GENERIC_ERROR, id="generic-error"),
+        ],
+    )
+    def test_saml_authentication_redirect_start_authentication_error(
+        self,
+        controller_fixture: ControllerFixture,
+        problem_detail: ProblemDetail,
+    ) -> None:
+        """An error from start_authentication redirects back to the client with the error."""
+        client_redirect_uri = "https://client.example.com/callback"
+        authentication_manager = create_autospec(spec=SAMLAuthenticationManager)
+        authentication_manager.start_authentication = MagicMock(
+            return_value=problem_detail
+        )
+        provider = create_autospec(spec=SAMLWebSSOAuthenticationProvider)
+        provider.label = MagicMock(
+            return_value=SAMLWebSSOAuthenticationProvider.label()
+        )
+        provider.get_authentication_manager = MagicMock(
+            return_value=authentication_manager
+        )
+        provider.library = MagicMock(
+            return_value=controller_fixture.db.default_library()
+        )
+        authenticator = Authenticator(
+            controller_fixture.db.session,
+            controller_fixture.db.session.query(Library),
+        )
+        authenticator.library_authenticators["default"].register_saml_provider(provider)
+        controller = SAMLController(controller_fixture.app.manager, authenticator)
+        query = urlencode(
+            {
+                SAMLController.PROVIDER_NAME: SAMLWebSSOAuthenticationProvider.label(),
+                SAMLController.IDP_ENTITY_ID: "urn:example:idp",
+                SAMLController.REDIRECT_URI: client_redirect_uri,
+            }
+        )
+
+        with controller_fixture.app.test_request_context("/saml_authenticate?" + query):
+            request.library = controller_fixture.db.default_library()  # type: ignore[attr-defined]
+            result = controller.saml_authentication_redirect(
+                request.args, controller_fixture.db.session
+            )
+
+        assert isinstance(result, wkResponse)
+        assert result.status_code == 302
+        location = result.headers.get("Location")
+        assert location is not None
+        location_parts = urlsplit(location)
+        assert (
+            f"{location_parts.scheme}://{location_parts.netloc}{location_parts.path}"
+            == client_redirect_uri
+        )
+        error = json.loads(parse_qs(location_parts.query)[SAMLController.ERROR][0])
+        assert error["type"] == problem_detail.uri
+        assert error["status"] == problem_detail.status_code
+        assert error["detail"] == problem_detail.detail
 
     @pytest.mark.parametrize(
         "relay_state, default_url, expected_location",

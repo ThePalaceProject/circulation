@@ -726,13 +726,13 @@ class SAMLController:
                 self.IDP_ENTITY_ID: idp_entity_id,
             },
         )
-        redirect_uri = authentication_manager.start_authentication(
+        idp_redirect_uri = authentication_manager.start_authentication(
             db, idp_entity_id, relay_state, force_authn=force_authn_requested
         )
-        if isinstance(redirect_uri, ProblemDetail):
-            return redirect_uri
+        if isinstance(idp_redirect_uri, ProblemDetail):
+            return self._redirect_with_error(redirect_uri, idp_redirect_uri)
 
-        return redirect(redirect_uri)
+        return redirect(idp_redirect_uri)
 
     def saml_authentication_callback(
         self, request: Request, db: sqlalchemy.orm.session.Session
