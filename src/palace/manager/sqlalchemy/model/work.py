@@ -1696,11 +1696,6 @@ class Work(Base, LoggerMixin):
             ],
             "contribution": ["role"],
             "contributor": ["display_name", "sort_name", "family_name", "lc", "viaf"],
-            # TODO: nothing reads "type", "unlimited_type",
-            # "metered_or_equivalent_type" or "active_status" back out of the
-            # search index -- the only status a query looks at is "status".
-            # They can be dropped once we are sure nothing outside this
-            # repository relies on them.
             "licensepools": [
                 "data_source_id",
                 "collection_id",
