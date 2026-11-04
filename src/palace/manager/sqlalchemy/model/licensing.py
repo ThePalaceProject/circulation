@@ -1568,6 +1568,11 @@ class LicensePoolDeliveryMechanism(Base):
                 # of all LicensePools for that DataSource/Identifier.
                 pool.set_open_access_status()
 
+                # Search leaves out pools with no delivery mechanism, so the
+                # Work's document is wrong until it is indexed again.
+                if pool.work:
+                    pool.work.external_index_needs_updating()
+
         return lpdm
 
     @property
@@ -1630,6 +1635,11 @@ class LicensePoolDeliveryMechanism(Base):
             # The deletion of a LicensePoolDeliveryMechanism might affect
             # the open-access status of its associated LicensePools.
             pool.set_open_access_status()
+
+            # Search leaves out pools with no delivery mechanism, so the
+            # Work's document is wrong until it is indexed again.
+            if pool.work:
+                pool.work.external_index_needs_updating()
 
     def set_rights_status(self, uri: str | None) -> RightsStatus:
         _db = Session.object_session(self)

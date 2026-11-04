@@ -34,6 +34,7 @@ from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.sqlalchemy.util import create
 from palace.manager.util import first_or_default
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.search import WorkQueueIndexingFixture
 
 
 class TestDeliveryMechanismFixture:
@@ -2023,3 +2024,43 @@ class TestLicensePoolDeliveryMechanism:
         # NOTE: we are not interested in the result returned by repr,
         # we just want to make sure that repr doesn't throw any unexpected exceptions
         repr(license_delivery_mechanism_mock)
+
+    @pytest.mark.parametrize(
+        "change,reindexed",
+        [
+            pytest.param("add", True, id="delivery mechanism added"),
+            pytest.param("remove", True, id="delivery mechanism removed"),
+            pytest.param("edit", False, id="delivery mechanism edited"),
+        ],
+    )
+    def test_lpdm_change_queues_reindex(
+        self,
+        db: DatabaseTransactionFixture,
+        work_queue_indexing: WorkQueueIndexingFixture,
+        change: str,
+        reindexed: bool,
+    ) -> None:
+        """Search leaves out pools with no delivery mechanism, so gaining or losing
+        one makes the Work's document wrong. Editing one leaves the pool holding a
+        mechanism either way, so there is nothing for search to catch up with."""
+        work = db.work(with_license_pool=True)
+        [pool] = work.license_pools
+        work_queue_indexing.clear()
+
+        if change == "add":
+            LicensePoolDeliveryMechanism.set(
+                pool.data_source,
+                pool.identifier,
+                "application/pdf",
+                DeliveryMechanism.ADOBE_DRM,
+                RightsStatus.IN_COPYRIGHT,
+            )
+        elif change == "remove":
+            for lpdm in list(pool.delivery_mechanisms):
+                lpdm.delete()
+        else:
+            [lpdm] = pool.delivery_mechanisms
+            lpdm.available = not lpdm.available
+        db.session.flush()
+
+        assert work_queue_indexing.is_queued(work, clear=True) is reindexed

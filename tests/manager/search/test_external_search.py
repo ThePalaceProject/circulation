@@ -8,6 +8,7 @@ from psycopg2.extras import NumericRange
 
 from palace.util.datetime_helpers import datetime_utc
 
+from palace.manager.celery.tasks.search import get_presentation_ready_work_ids
 from palace.manager.core.classifier import Classifier
 from palace.manager.feed.facets.feed import Facets
 from palace.manager.feed.facets.search import SearchFacets
@@ -1038,6 +1039,103 @@ class TestBulkUpdate:
             )
         )
         assert [] == failures
+
+
+class TestSearchAvailability:
+    """Search and the feed have to agree about which books a patron can borrow.
+    If search returns a book the feed then throws away, the page comes back
+    short and nothing explains why."""
+
+    @pytest.mark.parametrize(
+        "damage",
+        [
+            pytest.param("delivery mechanisms", id="no delivery mechanism"),
+            pytest.param("suppressed", id="suppressed"),
+            pytest.param("status", id="not active"),
+        ],
+    )
+    def test_search_returns_nothing_the_feed_discards(
+        self,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+        db: DatabaseTransactionFixture,
+        damage: str,
+    ) -> None:
+        fixture = end_to_end_search_fixture
+        healthy = fixture.external_search.default_work(title="Healthy")
+        damaged = fixture.external_search.default_work(title="Damaged")
+        pool = damaged.license_pools[0]
+
+        match damage:
+            case "delivery mechanisms":
+                for lpdm in pool.delivery_mechanisms:
+                    db.session.delete(lpdm)
+            case "suppressed":
+                pool.suppressed = True
+            case "status":
+                pool.status = LicensePoolStatus.REMOVED
+        db.session.flush()
+        db.session.expire_all()
+
+        fixture.populate_search_index()
+
+        work_list = WorkList()
+        work_list.initialize(db.default_library())
+        hits = fixture.external_search_index.query_works(None, Filter(), None)
+        works = work_list.works_for_hits(db.session, hits)
+
+        # Search leaves the damaged work out, so the feed has nothing to drop.
+        assert [healthy.id] == [hit.work_id for hit in hits]
+        assert [healthy.id] == [work.id for work in works]
+
+    def test_search_keeps_documents_without_the_field(
+        self,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+        db: DatabaseTransactionFixture,
+    ) -> None:
+        # Everything indexed before this change carries no has_delivery_mechanism
+        # at all. The filter matches on "not false", so those books keep showing
+        # up until a reindex fills the field in.
+        fixture = end_to_end_search_fixture
+        work = fixture.external_search.default_work(title="Older document")
+
+        work_ids = get_presentation_ready_work_ids(db.session, 1000, 0)
+        documents = Work.to_search_documents(db.session, work_ids)
+        for document in documents:
+            for pool in document["licensepools"]:
+                del pool["has_delivery_mechanism"]
+        fixture.external_search_index.add_documents(documents)
+        fixture.external_search.write_client.indices.refresh()
+
+        hits = fixture.external_search_index.query_works(None, Filter(), None)
+        assert [work.id] == [hit.work_id for hit in hits]
+
+    def test_search_requires_one_pool_to_pass_every_check(
+        self,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+        db: DatabaseTransactionFixture,
+    ) -> None:
+        # The database looks for a single license pool that is deliverable, not
+        # suppressed and active. Search has to ask the same way. A work whose pools
+        # each pass a different check is one the feed would throw away.
+        fixture = end_to_end_search_fixture
+        work = fixture.external_search.default_work(title="Split across pools")
+
+        # The pool the work came with can be delivered, but is suppressed.
+        [suppressed] = work.license_pools
+        suppressed.suppressed = True
+
+        # The second pool is not suppressed, but has nothing to deliver.
+        undeliverable = db.licensepool(db.edition())
+        work.license_pools.append(undeliverable)
+        for lpdm in undeliverable.delivery_mechanisms:
+            db.session.delete(lpdm)
+
+        db.session.flush()
+        db.session.expire_all()
+        fixture.populate_search_index()
+
+        hits = fixture.external_search_index.query_works(None, Filter(), None)
+        assert [] == [hit.work_id for hit in hits]
 
 
 class TestSearchErrors:

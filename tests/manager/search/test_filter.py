@@ -1230,7 +1230,9 @@ class TestFilter:
 
         # Currently all nested filters operate on the 'licensepools'
         # subdocument.
-        [not_suppressed, active_status] = nested.pop("licensepools")
+        [not_suppressed, active_status, has_delivery_mechanism] = nested.pop(
+            "licensepools"
+        )
         assert {} == nested
 
         # Let's look at those filters.
@@ -1242,6 +1244,14 @@ class TestFilter:
         # For the second one, the licensepool must be active status
         assert (
             Term(**{"licensepools.status": LicensePoolStatus.ACTIVE}) == active_status
+        )
+
+        # The third one excludes pools known to have no delivery mechanism. It
+        # matches on "not false" so that documents written before the field
+        # existed are kept.
+        assert (
+            Bool(must_not=[Term(**{"licensepools.has_delivery_mechanism": False})])
+            == has_delivery_mechanism
         )
 
     def _mock_chain(self, filters, new_filter):
