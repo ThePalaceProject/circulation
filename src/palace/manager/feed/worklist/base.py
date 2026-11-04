@@ -657,9 +657,11 @@ class WorkList:
 
         missing = work_ids - work_by_id.keys()
         if missing:
-            # Search and the database apply the same availability rules, so this
-            # should not happen. When it does the page just comes back short.
-            logging.warning(
+            # The index is a snapshot, the database is live, so the two can
+            # disagree. A work changed since its last reindex is one case; for a
+            # library that does not allow holds, a title whose last copy has just
+            # been borrowed is another. The page comes back short either way.
+            logging.info(
                 "Dropped %d search result(s) the database did not return: %s",
                 len(missing),
                 ", ".join(str(work_id) for work_id in sorted(missing)),

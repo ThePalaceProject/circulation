@@ -722,7 +722,7 @@ class TestWorkList:
             db.session.delete(lpdm)
         db.session.flush()
 
-        with caplog.at_level(logging.WARNING):
+        with caplog.at_level(logging.INFO):
             assert [[]] == m(db.session, [[hit2]])
         assert (
             f"Dropped 1 search result(s) the database did not return: {w2.id}"
