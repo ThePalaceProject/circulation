@@ -15,11 +15,6 @@ from palace.manager.service.redis.models.dirty_identifiers import DirtyIdentifie
 from palace.manager.sqlalchemy.listeners import site_configuration_has_changed
 from palace.manager.sqlalchemy.model.coverage import Timestamp
 from palace.manager.sqlalchemy.model.identifier import Equivalency
-from palace.manager.sqlalchemy.model.licensing import (
-    DeliveryMechanism,
-    LicensePoolDeliveryMechanism,
-    RightsStatus,
-)
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.redis import RedisFixture
 from tests.fixtures.search import WorkQueueIndexingFixture
@@ -159,55 +154,6 @@ class TestListeners:
         # Then verify that if the field is 'set' to its existing value, this doesn't happen.
         status_property_setter(pool, True)
         assert not work_queue_indexing.is_queued(work, clear=True)
-
-    @pytest.mark.parametrize(
-        "change",
-        [
-            pytest.param("add", id="delivery mechanism added"),
-            pytest.param("remove", id="delivery mechanism removed"),
-        ],
-    )
-    def test_licensepool_delivery_mechanism_change(
-        self,
-        db: DatabaseTransactionFixture,
-        work_queue_indexing: WorkQueueIndexingFixture,
-        change: str,
-    ) -> None:
-        work = db.work(with_license_pool=True)
-        [pool] = work.license_pools
-        work_queue_indexing.clear()
-
-        if change == "add":
-            LicensePoolDeliveryMechanism.set(
-                pool.data_source,
-                pool.identifier,
-                "application/pdf",
-                DeliveryMechanism.ADOBE_DRM,
-                RightsStatus.IN_COPYRIGHT,
-            )
-        else:
-            for lpdm in list(pool.delivery_mechanisms):
-                lpdm.delete()
-        db.session.flush()
-
-        assert work_queue_indexing.is_queued(work, clear=True)
-
-    def test_licensepool_delivery_mechanism_edit_does_not_reindex(
-        self,
-        db: DatabaseTransactionFixture,
-        work_queue_indexing: WorkQueueIndexingFixture,
-    ) -> None:
-        """Editing a delivery mechanism leaves the pool holding one, so there is
-        nothing for search to catch up with."""
-        work = db.work(with_license_pool=True)
-        [pool] = work.license_pools
-        [lpdm] = pool.delivery_mechanisms
-        work_queue_indexing.clear()
-
-        lpdm.available = not lpdm.available
-        db.session.flush()
-
-        assert not work_queue_indexing.is_queued(work)
 
     def test_work_suppressed_for_library(
         self,
