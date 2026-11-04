@@ -27,9 +27,7 @@ from palace.manager.sqlalchemy.model.integration import (
 )
 from palace.manager.sqlalchemy.model.lane import Lane, LaneGenre
 from palace.manager.sqlalchemy.model.library import Library
-from palace.manager.sqlalchemy.model.licensing import (
-    LicensePool,
-)
+from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.work import (
     Work,
     add_work_to_customlists_for_collection,
