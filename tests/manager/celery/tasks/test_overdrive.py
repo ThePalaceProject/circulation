@@ -32,7 +32,7 @@ from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.util.http.exception import BadResponseException
-from tests.fixtures.celery import ApplyTaskFixture, CeleryFixture
+from tests.fixtures.celery import ApplyTaskFixture, CeleryFixture, wait_until
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.files import OverdriveFilesFixture
 from tests.fixtures.overdrive import OverdriveAPIFixture
@@ -2175,7 +2175,12 @@ class TestBackfillCollection:
         # through the error callback rather than here.
         overdrive.backfill_all_collections.delay().wait()
 
-        assert "Overdrive backfill stopped" in caplog.text
+        # The callback writes all of this in one message, so once the first part has
+        # landed the rest is there too.
+        wait_until(
+            lambda: "Overdrive backfill stopped" in caplog.text,
+            "The backfill callback did not log",
+        )
         assert f"collection '{first.name}'" in caplog.text
         assert f"'{second.name}'" in caplog.text
         assert "Re-running the backfill is safe" in caplog.text
