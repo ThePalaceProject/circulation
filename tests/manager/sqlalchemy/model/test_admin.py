@@ -1,10 +1,12 @@
 from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import timedelta
+from typing import Any
 
 import pytest
 from freezegun import freeze_time
 from sqlalchemy import event
+from sqlalchemy.engine import Connection
 
 from palace.util.datetime_helpers import utc_now
 
@@ -156,6 +158,52 @@ class TestAdmin:
         assert True == admin.is_librarian(library)
         assert True == admin.is_librarian(other_library)
 
+    def test_role_checks_without_a_library(self, admin_fixture: AdminFixture) -> None:
+        """A library-specific role never answers a question about no library.
+
+        `None` stands for a sitewide role, so only the sitewide roles can
+        satisfy it; holding `manager` or `librarian` for some particular
+        library must not.
+        """
+        admin = admin_fixture.admin
+        library = admin_fixture.db.default_library()
+
+        admin.add_role(AdminRole.LIBRARY_MANAGER, library)
+        assert admin.is_library_manager(library) is True
+        assert admin.is_library_manager(None) is False
+        assert admin.is_librarian(None) is False
+        admin.remove_role(AdminRole.LIBRARY_MANAGER, library)
+
+        admin.add_role(AdminRole.LIBRARIAN, library)
+        assert admin.is_librarian(library) is True
+        assert admin.is_library_manager(None) is False
+        assert admin.is_librarian(None) is False
+        admin.remove_role(AdminRole.LIBRARIAN, library)
+
+        # The sitewide roles do satisfy it.
+        admin.add_role(AdminRole.SITEWIDE_LIBRARIAN)
+        assert admin.is_librarian(None) is True
+        assert admin.is_library_manager(None) is False
+        admin.remove_role(AdminRole.SITEWIDE_LIBRARIAN)
+
+        admin.add_role(AdminRole.SITEWIDE_LIBRARY_MANAGER)
+        assert admin.is_library_manager(None) is True
+        assert admin.is_librarian(None) is True
+
+    def test_remove_role_not_held(self, admin_fixture: AdminFixture) -> None:
+        # Removing a role the admin does not hold does nothing and does not raise.
+        admin = admin_fixture.admin
+        library = admin_fixture.db.default_library()
+        admin.add_role(AdminRole.LIBRARIAN, library)
+
+        admin.remove_role(AdminRole.SYSTEM_ADMIN)
+        admin.remove_role(AdminRole.LIBRARY_MANAGER, library)
+        admin.remove_role(AdminRole.LIBRARIAN, admin_fixture.db.library())
+
+        # The role the admin does hold is untouched.
+        assert [role.role for role in admin.roles] == [AdminRole.LIBRARIAN]
+        assert admin.is_librarian(library) is True
+
     def test_can_see_collection(self, admin_fixture: AdminFixture):
         # This collection is only visible to system admins since it has no libraries.
         c1 = admin_fixture.db.collection()
@@ -289,7 +337,7 @@ class TestAdmin:
         ):
             assert admin.authorized_libraries() == [l1, l2]
 
-    def test_role_checks_read_roles_once(self, admin_fixture: AdminFixture):
+    def test_role_checks_read_roles_once(self, admin_fixture: AdminFixture) -> None:
         # A permission check reads the admin's roles, which SQLAlchemy loads in
         # one query and keeps for the session. Asking about one library after
         # another costs no further queries.
@@ -307,7 +355,14 @@ class TestAdmin:
 
         statements: list[str] = []
 
-        def record(conn, cursor, statement, parameters, context, executemany):
+        def record(
+            conn: Connection,
+            cursor: Any,
+            statement: str,
+            parameters: Any,
+            context: Any,
+            executemany: bool,
+        ) -> None:
             statements.append(statement)
 
         bind = db.session.get_bind()

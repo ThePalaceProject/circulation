@@ -200,8 +200,7 @@ class Admin(Base, HasSessionCache):
             # above read the `roles` collection, and SQLAlchemy does not prune a
             # loaded collection when a member is deleted, so a role left in it
             # would keep granting access for the rest of the session.
-            if admin_role in self.roles:
-                self.roles.remove(admin_role)
+            self.roles.remove(admin_role)
             _db.delete(admin_role)
 
     def generate_reset_password_token(self, secret_key: str) -> str:
@@ -248,7 +247,7 @@ class Admin(Base, HasSessionCache):
         return "<Admin: email=%s>" % self.email
 
 
-class AdminRole(Base, HasSessionCache):
+class AdminRole(Base):
     __tablename__ = "adminroles"
 
     id: Mapped[int] = Column(Integer, primary_key=True)
@@ -280,9 +279,6 @@ class AdminRole(Base, HasSessionCache):
     LESS_THAN = -1
     EQUAL = 0
     GREATER_THAN = 1
-
-    def cache_key(self) -> tuple[int, int | None, str]:
-        return (self.admin_id, self.library_id, self.role)
 
     def to_dict(self) -> dict[str, str]:
         if self.library:

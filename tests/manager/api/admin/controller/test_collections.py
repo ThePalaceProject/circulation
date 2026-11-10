@@ -7,6 +7,7 @@ import pytest
 from flask import Response
 from pytest import MonkeyPatch
 from sqlalchemy import event
+from sqlalchemy.engine import Connection
 from werkzeug.datastructures import ImmutableMultiDict
 
 from palace.manager.api.admin.controller.collection_settings import (
@@ -326,7 +327,14 @@ class TestCollectionSettings:
 
         statements: list[str] = []
 
-        def record(conn, cursor, statement, parameters, context, executemany):
+        def record(
+            conn: Connection,
+            cursor: Any,
+            statement: str,
+            parameters: Any,
+            context: Any,
+            executemany: bool,
+        ) -> None:
             statements.append(statement)
 
         bind = db.session.get_bind()
