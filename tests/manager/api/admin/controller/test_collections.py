@@ -6,6 +6,7 @@ import flask
 import pytest
 from flask import Response
 from pytest import MonkeyPatch
+from sqlalchemy import event
 from werkzeug.datastructures import ImmutableMultiDict
 
 from palace.manager.api.admin.controller.collection_settings import (
@@ -298,6 +299,47 @@ class TestCollectionSettings:
             "libraries": [{"short_name": "L1"}],
         }
         assert all("settings" not in c for c in collections)
+
+    def test_collections_get_checks_roles_once_for_non_system_admins(
+        self,
+        controller: CollectionSettingsController,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+    ) -> None:
+        """The listing reads the admin's roles once, however many libraries it sees.
+
+        A consortium manager associates its collections with every member
+        library, and the listing asks whether the admin may see each one. When
+        that question went to the database per library, the endpoint issued
+        enough queries to time out for any admin who wasn't a system admin,
+        who alone is answered without a per-library check.
+        """
+        library = db.library(short_name="L1")
+        collection = db.collection(
+            name="Consortium Collection", protocol=OverdriveAPI, library=library
+        )
+        collection.associated_libraries += [db.library() for _ in range(10)]
+        admin = flask_app_fixture.admin_user(
+            email="librarian@example.org", role=AdminRole.LIBRARIAN, library=library
+        )
+        db.session.flush()
+
+        statements: list[str] = []
+
+        def record(conn, cursor, statement, parameters, context, executemany):
+            statements.append(statement)
+
+        bind = db.session.get_bind()
+        event.listen(bind, "before_cursor_execute", record)
+        try:
+            with flask_app_fixture.test_request_context("/", admin=admin):
+                response = controller.process_get()
+        finally:
+            event.remove(bind, "before_cursor_execute", record)
+
+        assert response.status_code == 200
+        role_queries = [s for s in statements if "adminroles" in s]
+        assert len(role_queries) <= 1
 
     @pytest.mark.parametrize(
         "post_data,expected,detailed",

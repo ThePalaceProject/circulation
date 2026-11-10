@@ -4,6 +4,7 @@ from datetime import timedelta
 
 import pytest
 from freezegun import freeze_time
+from sqlalchemy import event
 
 from palace.util.datetime_helpers import utc_now
 
@@ -287,3 +288,37 @@ class TestAdmin:
             admin, (AdminRole.LIBRARY_MANAGER, l1), (AdminRole.LIBRARIAN, l2)
         ):
             assert admin.authorized_libraries() == [l1, l2]
+
+    def test_role_checks_read_roles_once(self, admin_fixture: AdminFixture):
+        # A permission check reads the admin's roles, which SQLAlchemy loads in
+        # one query and keeps for the session. Asking about one library after
+        # another costs no further queries.
+        #
+        # This is what keeps the admin API usable on a manager that hosts a lot
+        # of libraries: the collections listing asks whether the admin is a
+        # librarian once per collection/library pair, and a check that queried
+        # the database every time was enough to time the request out.
+        db = admin_fixture.db
+        admin = admin_fixture.admin
+        libraries = [db.library() for _ in range(10)]
+        admin.add_role(AdminRole.LIBRARIAN, libraries[0])
+        db.session.flush()
+        db.session.expire(admin)
+
+        statements: list[str] = []
+
+        def record(conn, cursor, statement, parameters, context, executemany):
+            statements.append(statement)
+
+        bind = db.session.get_bind()
+        event.listen(bind, "before_cursor_execute", record)
+        try:
+            assert admin.is_librarian(libraries[0]) is True
+            # The admin holds no role for any of the others.
+            assert not any(admin.is_librarian(l) for l in libraries[1:])
+        finally:
+            event.remove(bind, "before_cursor_execute", record)
+
+        # Loading the admin row and its roles is all it takes. Without this,
+        # each library the admin has no role for cost several queries of its own.
+        assert len(statements) <= 2

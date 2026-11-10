@@ -101,62 +101,41 @@ class Admin(Base, HasSessionCache):
         """Get Admins that have a password."""
         return _db.query(Admin).filter(Admin.password_hashed != None)  # noqa: E711
 
-    def is_system_admin(self) -> bool:
-        _db = Session.object_session(self)
+    def _has_role(self, role: str, library: Library | None = None) -> bool:
+        """Does this admin hold `role`?
 
-        def lookup_hook() -> tuple[AdminRole | None, bool]:
-            return (
-                get_one(_db, AdminRole, admin=self, role=AdminRole.SYSTEM_ADMIN),
-                False,
-            )
+        :param role: One of the roles in `AdminRole.ROLES`.
+        :param library: For a library-specific role, the library the role must
+            be held for. Sitewide roles pass None, which matches the role
+            whatever library it is attached to.
+        :return: Whether the admin holds the role.
 
-        role, _ = AdminRole.by_cache_key(
-            _db, (self.id, None, AdminRole.SYSTEM_ADMIN), lookup_hook
+        Answered from the `roles` relationship, which SQLAlchemy loads in a
+        single query and keeps for the life of the session, rather than with a
+        lookup per role. The permission checks below ask about one library at a
+        time, and a manager that hosts a lot of libraries asks about a great
+        many of them in a single request.
+        """
+        return any(
+            admin_role.role == role
+            and (library is None or admin_role.library_id == library.id)
+            for admin_role in self.roles
         )
-        if role:
-            return True
-        return False
+
+    def is_system_admin(self) -> bool:
+        return self._has_role(AdminRole.SYSTEM_ADMIN)
 
     def is_sitewide_library_manager(self) -> bool:
-        _db = Session.object_session(self)
         if self.is_system_admin():
             return True
-
-        def lookup_hook() -> tuple[AdminRole | None, bool]:
-            return (
-                get_one(
-                    _db, AdminRole, admin=self, role=AdminRole.SITEWIDE_LIBRARY_MANAGER
-                ),
-                False,
-            )
-
-        role, _ = AdminRole.by_cache_key(
-            _db, (self.id, None, AdminRole.SITEWIDE_LIBRARY_MANAGER), lookup_hook
-        )
-        if role:
-            return True
-        return False
+        return self._has_role(AdminRole.SITEWIDE_LIBRARY_MANAGER)
 
     def is_sitewide_librarian(self) -> bool:
-        _db = Session.object_session(self)
         if self.is_sitewide_library_manager():
             return True
-
-        def lookup_hook() -> tuple[AdminRole | None, bool]:
-            return (
-                get_one(_db, AdminRole, admin=self, role=AdminRole.SITEWIDE_LIBRARIAN),
-                False,
-            )
-
-        role, _ = AdminRole.by_cache_key(
-            _db, (self.id, None, AdminRole.SITEWIDE_LIBRARIAN), lookup_hook
-        )
-        if role:
-            return True
-        return False
+        return self._has_role(AdminRole.SITEWIDE_LIBRARIAN)
 
     def is_library_manager(self, library: Library | None) -> bool:
-        _db = Session.object_session(self)
         # First check if the admin is a manager of _all_ libraries.
         if self.is_sitewide_library_manager():
             return True
@@ -166,27 +145,9 @@ class Admin(Base, HasSessionCache):
             return False
 
         # If not, they could still be a manager of _this_ library.
-        def lookup_hook() -> tuple[AdminRole | None, bool]:
-            return (
-                get_one(
-                    _db,
-                    AdminRole,
-                    admin=self,
-                    library=library,
-                    role=AdminRole.LIBRARY_MANAGER,
-                ),
-                False,
-            )
-
-        role, _ = AdminRole.by_cache_key(
-            _db, (self.id, library.id, AdminRole.LIBRARY_MANAGER), lookup_hook
-        )
-        if role:
-            return True
-        return False
+        return self._has_role(AdminRole.LIBRARY_MANAGER, library)
 
     def is_librarian(self, library: Library | None) -> bool:
-        _db = Session.object_session(self)
         # If the admin is a library manager, they can do everything a librarian can do.
         if self.is_library_manager(library):
             return True
@@ -199,24 +160,7 @@ class Admin(Base, HasSessionCache):
             return False
 
         # If not, they might be a librarian of _this_ library.
-        def lookup_hook() -> tuple[AdminRole | None, bool]:
-            return (
-                get_one(
-                    _db,
-                    AdminRole,
-                    admin=self,
-                    library=library,
-                    role=AdminRole.LIBRARIAN,
-                ),
-                False,
-            )
-
-        role, _ = AdminRole.by_cache_key(
-            _db, (self.id, library.id, AdminRole.LIBRARIAN), lookup_hook
-        )
-        if role:
-            return True
-        return False
+        return self._has_role(AdminRole.LIBRARIAN, library)
 
     def can_see_collection(self, collection: Collection) -> bool:
         if self.is_system_admin():
@@ -252,6 +196,12 @@ class Admin(Base, HasSessionCache):
         _db = Session.object_session(self)
         admin_role = get_one(_db, AdminRole, admin=self, role=role, library=library)
         if admin_role:
+            # Detach the role as well as deleting the row. The permission checks
+            # above read the `roles` collection, and SQLAlchemy does not prune a
+            # loaded collection when a member is deleted, so a role left in it
+            # would keep granting access for the rest of the session.
+            if admin_role in self.roles:
+                self.roles.remove(admin_role)
             _db.delete(admin_role)
 
     def generate_reset_password_token(self, secret_key: str) -> str:
