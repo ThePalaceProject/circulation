@@ -6,8 +6,6 @@ import flask
 import pytest
 from flask import Response
 from pytest import MonkeyPatch
-from sqlalchemy import event
-from sqlalchemy.engine import Connection
 from werkzeug.datastructures import ImmutableMultiDict
 
 from palace.manager.api.admin.controller.collection_settings import (
@@ -325,25 +323,9 @@ class TestCollectionSettings:
         )
         db.session.flush()
 
-        statements: list[str] = []
-
-        def record(
-            conn: Connection,
-            cursor: Any,
-            statement: str,
-            parameters: Any,
-            context: Any,
-            executemany: bool,
-        ) -> None:
-            statements.append(statement)
-
-        bind = db.session.get_bind()
-        event.listen(bind, "before_cursor_execute", record)
-        try:
+        with db.record_statements() as statements:
             with flask_app_fixture.test_request_context("/", admin=admin):
                 response = controller.process_get()
-        finally:
-            event.remove(bind, "before_cursor_execute", record)
 
         assert response.status_code == 200
         role_queries = [s for s in statements if "adminroles" in s]

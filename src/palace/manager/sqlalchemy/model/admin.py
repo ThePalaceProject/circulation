@@ -193,15 +193,24 @@ class Admin(Base, HasSessionCache):
         return admin_role
 
     def remove_role(self, role: str, library: Library | None = None) -> None:
-        _db = Session.object_session(self)
-        admin_role = get_one(_db, AdminRole, admin=self, role=role, library=library)
+        # Find the role in the `roles` collection rather than querying for it.
+        # That collection is the source of truth for the permission checks
+        # above, and it has to be loaded to be pruned in any case.
+        library_id = library.id if library else None
+        admin_role = next(
+            (
+                candidate
+                for candidate in self.roles
+                if candidate.role == role and candidate.library_id == library_id
+            ),
+            None,
+        )
         if admin_role:
-            # Detach the role as well as deleting the row. The permission checks
-            # above read the `roles` collection, and SQLAlchemy does not prune a
-            # loaded collection when a member is deleted, so a role left in it
-            # would keep granting access for the rest of the session.
+            # Detach the role as well as deleting the row. SQLAlchemy does not
+            # prune a loaded collection when a member is deleted, so a role left
+            # in it would keep granting access for the rest of the session.
             self.roles.remove(admin_role)
-            _db.delete(admin_role)
+            Session.object_session(self).delete(admin_role)
 
     def generate_reset_password_token(self, secret_key: str) -> str:
         serializer = URLSafeTimedSerializer(secret_key)

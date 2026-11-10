@@ -1,12 +1,9 @@
 from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import timedelta
-from typing import Any
 
 import pytest
 from freezegun import freeze_time
-from sqlalchemy import event
-from sqlalchemy.engine import Connection
 
 from palace.util.datetime_helpers import utc_now
 
@@ -353,26 +350,10 @@ class TestAdmin:
         db.session.flush()
         db.session.expire(admin)
 
-        statements: list[str] = []
-
-        def record(
-            conn: Connection,
-            cursor: Any,
-            statement: str,
-            parameters: Any,
-            context: Any,
-            executemany: bool,
-        ) -> None:
-            statements.append(statement)
-
-        bind = db.session.get_bind()
-        event.listen(bind, "before_cursor_execute", record)
-        try:
+        with db.record_statements() as statements:
             assert admin.is_librarian(libraries[0]) is True
             # The admin holds no role for any of the others.
             assert not any(admin.is_librarian(l) for l in libraries[1:])
-        finally:
-            event.remove(bind, "before_cursor_execute", record)
 
         # Loading the admin row and its roles is all it takes. Without this,
         # each library the admin has no role for cost several queries of its own.

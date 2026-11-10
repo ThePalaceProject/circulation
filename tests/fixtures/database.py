@@ -528,6 +528,39 @@ class DatabaseTransactionFixture:
         self._default_collection = collection
         self._default_inactive_collection = inactive_collection
 
+    @contextmanager
+    def record_statements(self) -> Generator[list[str]]:
+        """Collect the SQL statements emitted inside this block.
+
+        Useful for pinning down a query count, so that an N+1 that has been
+        removed cannot quietly come back::
+
+            with db.record_statements() as statements:
+                do_the_thing()
+            assert len(statements) <= 2
+
+        :return: A list that is appended to as statements are executed. It is
+            complete once the block exits.
+        """
+        statements: list[str] = []
+
+        def record(
+            conn: Connection,
+            cursor: Any,
+            statement: str,
+            parameters: Any,
+            context: Any,
+            executemany: bool,
+        ) -> None:
+            statements.append(statement)
+
+        bind = self.session.get_bind()
+        event.listen(bind, "before_cursor_execute", record)
+        try:
+            yield statements
+        finally:
+            event.remove(bind, "before_cursor_execute", record)
+
     @classmethod
     @contextmanager
     def fixture(
