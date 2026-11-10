@@ -2,13 +2,20 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any
+from typing import Any, NamedTuple
 
 import pytest
 from sqlalchemy import event
 from sqlalchemy.orm import Session
 
 from tests.fixtures.database import DatabaseTransactionFixture
+
+
+class ExecutedQuery(NamedTuple):
+    statement: str
+    #: The parameters as the driver received them, so that a test can check
+    #: which rows a query asked for, not just that it ran.
+    parameters: Any
 
 
 class QueryCounterFixture:
@@ -21,7 +28,7 @@ class QueryCounterFixture:
 
     def __init__(self, session: Session) -> None:
         self.session = session
-        self._statements: list[str] = []
+        self._statements: list[ExecutedQuery] = []
 
     def _record(
         self,
@@ -32,10 +39,10 @@ class QueryCounterFixture:
         context: Any,
         executemany: bool,
     ) -> None:
-        self._statements.append(statement)
+        self._statements.append(ExecutedQuery(statement, parameters))
 
     @contextmanager
-    def record(self) -> Iterator[list[str]]:
+    def record(self) -> Iterator[list[ExecutedQuery]]:
         """Record the statements run inside the block, into the yielded list.
 
         Pending changes are flushed and the identity map expired first, so that
@@ -43,7 +50,7 @@ class QueryCounterFixture:
         """
         self.session.flush()
         self.session.expire_all()
-        statements: list[str] = []
+        statements: list[ExecutedQuery] = []
         self._statements = statements
         bind = self.session.get_bind()
         event.listen(bind, "before_cursor_execute", self._record)
@@ -53,9 +60,17 @@ class QueryCounterFixture:
             event.remove(bind, "before_cursor_execute", self._record)
 
     @staticmethod
-    def touching(statements: list[str], table: str) -> list[str]:
-        """The recorded statements that name ``table``."""
-        return [statement for statement in statements if table in statement]
+    def touching(queries: list[ExecutedQuery], table: str) -> list[ExecutedQuery]:
+        """The recorded queries whose statement names ``table``."""
+        return [query for query in queries if table in query.statement]
+
+    @staticmethod
+    def parameter_values(query: ExecutedQuery) -> set[Any]:
+        """The values a query was executed with, whatever the driver named them."""
+        parameters = query.parameters
+        if isinstance(parameters, dict):
+            return set(parameters.values())
+        return set(parameters or ())
 
 
 @pytest.fixture

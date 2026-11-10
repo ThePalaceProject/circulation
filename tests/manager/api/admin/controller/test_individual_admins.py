@@ -344,11 +344,11 @@ class TestIndividualAdmins:
         # listed admin's roles. Neither grows with the number of admins.
         role_queries = query_counter.touching(statements, "adminroles")
         assert len(role_queries) == 2
-        assert len([q for q in role_queries if "admin_id IN " in q]) == 1
+        assert len([q for q in role_queries if "admin_id IN " in q.statement]) == 1
         library_queries = [
-            statement
-            for statement in query_counter.touching(statements, "FROM libraries")
-            if "adminroles" not in statement
+            query
+            for query in query_counter.touching(statements, "FROM libraries")
+            if "adminroles" not in query.statement
         ]
         assert len(library_queries) == 1
 

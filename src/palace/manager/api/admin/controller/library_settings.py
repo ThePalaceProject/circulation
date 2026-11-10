@@ -13,7 +13,7 @@ from flask_babel import lazy_gettext as _
 from PIL import Image, UnidentifiedImageError
 from PIL.Image import DecompressionBombError, Resampling
 from pydantic import BaseModel, ValidationError
-from sqlalchemy.orm import selectinload
+from sqlalchemy import select
 from werkzeug.datastructures import FileStorage
 
 from palace.manager.api.admin.announcement_list_validator import (
@@ -73,30 +73,38 @@ class LibrarySettingsController(AdminPermissionsControllerMixin):
 
     def process_get(self) -> Response:
         libraries_response = []
-        # The logo is loaded up front because it is read for every library
-        # below; left lazy it would be a query per library.
-        libraries = (
-            self._db.query(Library)
-            .options(selectinload(Library.logo))
-            .order_by(Library.name)
-            .all()
-        )
+        libraries = self._db.query(Library).order_by(Library.name).all()
         admin = get_request_admin(default=None)
 
         # Only include libraries this admin has librarian access to.
         visible_libraries = [
             library for library in libraries if admin and admin.is_librarian(library)
         ]
+        visible_library_ids = [library.id for library in visible_libraries]
 
-        # Fetch every visible library's announcements in a single query, rather
-        # than one query per library.
+        # The announcements and the logo are both reported for every visible
+        # library below. Fetch each in a single query, rather than one query
+        # per library.
+        #
+        # Both queries are keyed to the visible libraries rather than eager
+        # loaded on the query above, so that an admin who can see a handful of
+        # a consortium's libraries doesn't pull the whole consortium's rows --
+        # LibraryLogo in particular is a table of its own precisely so that its
+        # images aren't loaded when they aren't needed.
         announcements_by_library: dict[int, list[Announcement]] = defaultdict(list)
         for announcement in self._db.scalars(
-            Announcement.announcements_for_libraries(
-                [library.id for library in visible_libraries]
-            )
+            Announcement.announcements_for_libraries(visible_library_ids)
         ):
             announcements_by_library[announcement.library_id].append(announcement)
+
+        logos_by_library = {
+            logo.library_id: logo
+            for logo in self._db.scalars(
+                select(LibraryLogo).where(
+                    LibraryLogo.library_id.in_(visible_library_ids)
+                )
+            )
+        }
 
         for library in visible_libraries:
             settings = library.settings_dict
@@ -111,8 +119,9 @@ class LibrarySettingsController(AdminPermissionsControllerMixin):
             if announcements:
                 settings["announcements"] = json.dumps(announcements)
 
-            if library.logo:
-                settings["logo"] = library.logo.data_url
+            logo = logos_by_library.get(library.id)
+            if logo:
+                settings["logo"] = logo.data_url
 
             libraries_response += [
                 dict(

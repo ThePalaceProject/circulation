@@ -282,9 +282,9 @@ class TestCollectionSettings:
         # query joins to libraries, so count only the statements that select
         # from libraries directly.
         library_queries = [
-            statement
-            for statement in query_counter.touching(statements, "FROM libraries")
-            if "integration_library_configurations" not in statement
+            query
+            for query in query_counter.touching(statements, "FROM libraries")
+            if "integration_library_configurations" not in query.statement
         ]
         assert len(library_queries) == 1
 

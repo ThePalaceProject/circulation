@@ -256,6 +256,57 @@ class TestLibrarySettings:
         assert len(query_counter.touching(statements, "announcements")) == 1
         assert len(query_counter.touching(statements, "libraries_logos")) == 1
 
+    def test_libraries_get_does_not_read_invisible_libraries_rows(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller: LibrarySettingsController,
+        db: DatabaseTransactionFixture,
+        library_fixture: LibraryFixture,
+        announcement_fixture: AnnouncementFixture,
+        logo_properties: dict[str, Any],
+        query_counter: QueryCounterFixture,
+    ) -> None:
+        """An admin's listing reads rows only for the libraries it shows them.
+
+        The announcements and the logo are fetched in one query each, but
+        keyed to the libraries this admin can see. A librarian at one library
+        of a consortium shouldn't pay to load every other library's logo --
+        which is why LibraryLogo is a table of its own.
+        """
+        # Delete any existing library created by the controller test setup, so
+        # that every library in the listing is one this test set up.
+        existing = get_one(db.session, Library)
+        if existing:
+            db.session.delete(existing)
+
+        libraries = []
+        for i in range(5):
+            library = library_fixture.library(f"Library {i}", f"L{i}")
+            announcement_fixture.active_announcement(db.session, library)
+            library.logo = LibraryLogo(content=logo_properties["base64_bytes"])
+            libraries.append(library)
+
+        # The admin is a librarian at one of the five libraries.
+        visible, *invisible = libraries
+        admin = flask_app_fixture.admin_user(email="librarian@example.org")
+        admin.remove_role(AdminRole.SYSTEM_ADMIN)
+        admin.add_role(AdminRole.LIBRARIAN, visible)
+
+        with flask_app_fixture.test_request_context("/", admin=admin):
+            with query_counter.record() as statements:
+                response = controller.process_get()
+
+        assert response.status_code == 200
+        assert isinstance(response.json, dict)
+        assert [l["uuid"] for l in response.json["libraries"]] == [visible.uuid]
+
+        invisible_ids = {library.id for library in invisible}
+        for table in ("announcements", "libraries_logos"):
+            [query] = query_counter.touching(statements, table)
+            values = query_counter.parameter_values(query)
+            assert visible.id in values
+            assert values.isdisjoint(invisible_ids)
+
     def test_libraries_get_with_multiple_libraries(
         self,
         flask_app_fixture: FlaskAppFixture,
