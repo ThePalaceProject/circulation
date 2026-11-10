@@ -55,6 +55,7 @@ from palace.manager.sqlalchemy.util import get_one
 from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailException
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.flask import NON_SYSTEM_ADMIN_ROLES, FlaskAppFixture
+from tests.fixtures.queries import QueryCounterFixture
 from tests.fixtures.services import ServicesFixture
 
 
@@ -239,6 +240,53 @@ class TestCollectionSettings:
             "parent_id": c2.integration_configuration.id,
             "libraries": [{"short_name": "L2"}],
         }
+
+    def test_collections_get_reads_library_configurations_once(
+        self,
+        controller: CollectionSettingsController,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+        query_counter: QueryCounterFixture,
+    ) -> None:
+        """The listing reads each service's libraries once, however many there are.
+
+        A consortium associates its collections with every member library, and
+        the listing reports each association. Left to lazy loading, that was a
+        query for the service's library configurations plus one per
+        configuration for the library it names, so the endpoint's query count
+        grew with the size of the consortium.
+        """
+        collection = db.collection(name="Consortium Collection", protocol=OverdriveAPI)
+        for i in range(5):
+            db.integration_library_configuration(
+                collection.integration_configuration,
+                db.library(short_name=f"L{i}"),
+                OverdriveLibrarySettings(ebook_loan_duration=14),
+            )
+
+        with flask_app_fixture.test_request_context_system_admin("/"):
+            with query_counter.record() as statements:
+                services = controller.configured_services
+
+        [service] = [s for s in services if s["name"] == "Consortium Collection"]
+        assert sorted(l["short_name"] for l in service["libraries"]) == [
+            f"L{i}" for i in range(5)
+        ]
+        assert (
+            len(
+                query_counter.touching(statements, "integration_library_configurations")
+            )
+            == 1
+        )
+        # The libraries themselves are loaded in one query too. The collections
+        # query joins to libraries, so count only the statements that select
+        # from libraries directly.
+        library_queries = [
+            statement
+            for statement in query_counter.touching(statements, "FROM libraries")
+            if "integration_library_configurations" not in statement
+        ]
+        assert len(library_queries) == 1
 
     @pytest.mark.parametrize("role, library_scoped", NON_SYSTEM_ADMIN_ROLES)
     def test_collections_get_limits_info_for_non_system_admins(

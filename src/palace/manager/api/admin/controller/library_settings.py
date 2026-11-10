@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import uuid
+from collections import defaultdict
 from io import BytesIO
 from typing import Any, cast
 
@@ -12,6 +13,7 @@ from flask_babel import lazy_gettext as _
 from PIL import Image, UnidentifiedImageError
 from PIL.Image import DecompressionBombError, Resampling
 from pydantic import BaseModel, ValidationError
+from sqlalchemy.orm import selectinload
 from werkzeug.datastructures import FileStorage
 
 from palace.manager.api.admin.announcement_list_validator import (
@@ -71,26 +73,41 @@ class LibrarySettingsController(AdminPermissionsControllerMixin):
 
     def process_get(self) -> Response:
         libraries_response = []
-        libraries = self._db.query(Library).order_by(Library.name).all()
+        # The logo is loaded up front because it is read for every library
+        # below; left lazy it would be a query per library.
+        libraries = (
+            self._db.query(Library)
+            .options(selectinload(Library.logo))
+            .order_by(Library.name)
+            .all()
+        )
         admin = get_request_admin(default=None)
 
-        for library in libraries:
-            # Only include libraries this admin has librarian access to.
-            if not admin or not admin.is_librarian(library):
-                continue
+        # Only include libraries this admin has librarian access to.
+        visible_libraries = [
+            library for library in libraries if admin and admin.is_librarian(library)
+        ]
 
+        # Fetch every visible library's announcements in a single query, rather
+        # than one query per library.
+        announcements_by_library: dict[int, list[Announcement]] = defaultdict(list)
+        for announcement in self._db.scalars(
+            Announcement.announcements_for_libraries(
+                [library.id for library in visible_libraries]
+            )
+        ):
+            announcements_by_library[announcement.library_id].append(announcement)
+
+        for library in visible_libraries:
             settings = library.settings_dict
 
             # TODO: It would be nice to make this more sane in the future, but right now the admin interface
             #  is expecting the "announcements" field to be a JSON string, within the JSON document we send,
             #  so it ends up being double-encoded. This is a quick fix to make it work without modifying the
             #  admin interface.
-            db_announcements = (
-                self._db.execute(Announcement.library_announcements(library))
-                .scalars()
-                .all()
-            )
-            announcements = [x.to_data().as_dict() for x in db_announcements]
+            announcements = [
+                x.to_data().as_dict() for x in announcements_by_library[library.id]
+            ]
             if announcements:
                 settings["announcements"] = json.dumps(announcements)
 

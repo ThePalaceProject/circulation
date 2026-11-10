@@ -86,14 +86,25 @@ class CustomListsController(
         self.require_librarian(library)
 
         if flask.request.method == "GET":
+            # Each list's collections, and the integration configuration that
+            # holds a collection's name and protocol, are read by
+            # _list_as_json. Left lazy, they would be a query per list plus one
+            # per collection.
+            collection_options = selectinload(CustomList.collections).selectinload(
+                Collection.integration_configuration
+            )
+
             custom_lists = []
-            for list in library.custom_lists:
+            owned_lists = self._db.scalars(
+                select(CustomList)
+                .where(CustomList.library_id == library.id)
+                .options(collection_options)
+            ).all()
+            for list in owned_lists:
                 custom_lists.append(self._list_as_json(list))
 
             shared_lists = self._db.scalars(
-                CustomList.shared_with_library(library).options(
-                    selectinload(CustomList.collections)
-                )
+                CustomList.shared_with_library(library).options(collection_options)
             ).all()
             custom_lists.extend(
                 self._list_as_json(list, is_owner=False) for list in shared_lists

@@ -40,6 +40,7 @@ from tests.fixtures.announcements import AnnouncementFixture
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.flask import FlaskAppFixture
 from tests.fixtures.library import LibraryFixture
+from tests.fixtures.queries import QueryCounterFixture
 
 
 @pytest.fixture
@@ -210,6 +211,50 @@ class TestLibrarySettings:
 
         assert "logo" in library_settings
         assert library_settings["logo"] == logo_properties["data_url"]
+
+    def test_libraries_get_reads_announcements_and_logos_once(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller: LibrarySettingsController,
+        db: DatabaseTransactionFixture,
+        library_fixture: LibraryFixture,
+        announcement_fixture: AnnouncementFixture,
+        logo_properties: dict[str, Any],
+        query_counter: QueryCounterFixture,
+    ) -> None:
+        """The listing reads announcements and logos once, however many libraries it has.
+
+        Both used to be read per library -- a query for the library's
+        announcements and a lazy load of its logo -- so the endpoint's query
+        count grew with the size of the consortium.
+        """
+        # Delete any existing library created by the controller test setup, so
+        # that every library in the listing is one this test set up.
+        library = get_one(db.session, Library)
+        if library:
+            db.session.delete(library)
+
+        for i in range(5):
+            new_library = library_fixture.library(f"Library {i}", f"L{i}")
+            announcement_fixture.active_announcement(db.session, new_library)
+            new_library.logo = LibraryLogo(content=logo_properties["base64_bytes"])
+
+        with flask_app_fixture.test_request_context_system_admin("/"):
+            with query_counter.record() as statements:
+                response = controller.process_get()
+
+        assert response.status_code == 200
+        assert isinstance(response.json, dict)
+        libraries = response.json["libraries"]
+        assert len(libraries) == 5
+        # Every library's announcement and logo made it into the response...
+        assert all("announcements" in l["settings"] for l in libraries)
+        assert all(
+            l["settings"]["logo"] == logo_properties["data_url"] for l in libraries
+        )
+        # ...from a single query each.
+        assert len(query_counter.touching(statements, "announcements")) == 1
+        assert len(query_counter.touching(statements, "libraries_logos")) == 1
 
     def test_libraries_get_with_multiple_libraries(
         self,
