@@ -206,11 +206,11 @@ class Admin(Base, HasSessionCache):
             None,
         )
         if admin_role:
-            # Detach the role as well as deleting the row. SQLAlchemy does not
-            # prune a loaded collection when a member is deleted, so a role left
-            # in it would keep granting access for the rest of the session.
+            # Removing the role from the collection is enough to delete the row:
+            # the relationship cascades delete-orphan. It also keeps the loaded
+            # collection accurate, which is what the permission checks above read
+            # for the rest of the session.
             self.roles.remove(admin_role)
-            Session.object_session(self).delete(admin_role)
 
     def generate_reset_password_token(self, secret_key: str) -> str:
         serializer = URLSafeTimedSerializer(secret_key)
