@@ -318,6 +318,18 @@ class TestCollectionSettings:
             name="Consortium Collection", protocol=OverdriveAPI, library=library
         )
         collection.associated_libraries += [db.library() for _ in range(10)]
+
+        # A second collection the admin has no role for. The listing asks
+        # `can_see_collection` about each collection and stops at the first
+        # library the admin is a librarian of, so a collection the admin *can*
+        # see settles on its first library and leaves the rest of the loop
+        # unrun. Only a collection the admin cannot see walks every library,
+        # which is where the per-library role lookups accumulated.
+        unassociated = db.collection(
+            name="Unassociated Collection", protocol=OverdriveAPI
+        )
+        unassociated.associated_libraries += [db.library() for _ in range(10)]
+
         admin = flask_app_fixture.admin_user(
             email="librarian@example.org", role=AdminRole.LIBRARIAN, library=library
         )
@@ -328,6 +340,14 @@ class TestCollectionSettings:
                 response = controller.process_get()
 
         assert response.status_code == 200
+        data = response.json
+        assert isinstance(data, dict)
+        # The collection the admin has no role for is walked in full and
+        # withheld, so the role checks below cover both of the listing's
+        # paths and not just the one that short-circuits.
+        names = {c["name"] for c in data.get("collections", [])}
+        assert names == {"Consortium Collection"}
+
         role_queries = [s for s in statements if "adminroles" in s]
         assert len(role_queries) <= 1
 
