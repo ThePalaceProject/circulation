@@ -737,6 +737,47 @@ class TestIndividualAdmins:
         assert AdminRole.LIBRARY_MANAGER == manager.role
         assert db.default_library() == manager.library
 
+    def test_individual_admins_post_edit_removes_every_dropped_role(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+        controller_fixture: IndividualAdminControllerFixture,
+    ) -> None:
+        """Dropping several roles at once drops all of them, not just the first.
+
+        `handle_roles` walks the admin's existing roles and removes the ones
+        missing from the submitted form. It has to walk a snapshot: removing a
+        role also detaches it from `admin.roles`, so iterating that list
+        directly would skip the element after each removal and silently leave
+        the admin holding access the form took away.
+        """
+        library_one = db.library(short_name="L1")
+        library_two = db.library(short_name="L2")
+        admin, _ = create(db.session, Admin, email="admin@nypl.org")
+        admin.password = "password"
+        admin.add_role(AdminRole.LIBRARIAN, library_one)
+        admin.add_role(AdminRole.LIBRARIAN, library_two)
+
+        # The form comes back with both library roles taken away.
+        with flask_app_fixture.test_request_context_system_admin("/", method="POST"):
+            flask.request.form = ImmutableMultiDict(
+                [
+                    ("email", "admin@nypl.org"),
+                    ("roles", json.dumps([])),
+                ]
+            )
+            response = controller_fixture.controller.process_post()
+            assert response.status_code == 200
+
+        assert admin.roles == []
+        assert admin.is_librarian(library_one) is False
+        assert admin.is_librarian(library_two) is False
+
+        # The rows are gone, not merely detached from the loaded collection.
+        db.session.flush()
+        remaining = db.session.query(AdminRole).filter(AdminRole.admin == admin).all()
+        assert remaining == []
+
     def test_individual_admin_delete(
         self,
         flask_app_fixture: FlaskAppFixture,

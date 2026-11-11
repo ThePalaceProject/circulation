@@ -351,7 +351,11 @@ class IndividualAdminSettingsController(AdminPermissionsControllerMixin):
         else:
             user = get_request_admin()
 
-        old_roles = admin.roles
+        # Take a snapshot. Both loops below change `admin.roles` as they go --
+        # `add_role` appends to it and `remove_role` detaches from it -- and
+        # removing from the list being iterated would skip the element after
+        # each removal, leaving the admin holding a role the form took away.
+        old_roles = list(admin.roles)
         old_roles_set = {(role.role, role.library) for role in old_roles}
 
         for role in roles:
