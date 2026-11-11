@@ -374,6 +374,12 @@ filterwarnings = [
     # to see in our tests.
     # https://github.com/SAML-Toolkits/python3-saml/issues/434
     "ignore::DeprecationWarning:onelogin.saml2",
+    # Firebase deprecated Message.token in favor of Message.fid, but recommends
+    # switching once clients register with Firebase Installation IDs. Keep
+    # sending the FCM registration tokens our apps provide in Message.token,
+    # and remove this filter when we move to fid (see PP-5551).
+    # https://firebase.google.com/docs/cloud-messaging/send/admin-sdk
+    "ignore:Message.token is deprecated:DeprecationWarning",
 ]
 markers = [
     "db: mark test as using the database (applied automatically to tests using the db fixture)",
