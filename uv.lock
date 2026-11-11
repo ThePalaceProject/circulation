@@ -802,14 +802,14 @@ wheels = [
 
 [[package]]
 name = "dunamai"
-version = "1.26.3"
+version = "1.26.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "packaging" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c5/62/edf5352d8ce1371129ccfe971e6de3a1ce4dc7f9bdc80390fb79856b78d4/dunamai-1.26.3.tar.gz", hash = "sha256:fe2f732186710ee5048044fdbef6c76c6afbb9ee7de4f6d00cf34256e9ec2e7f", size = 46820, upload-time = "2026-10-14T20:13:30.921Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/9a/f7/11694756c174d9552a97a9ebb191bda5f46a4176700d9d2d698182d9f75e/dunamai-1.26.4.tar.gz", hash = "sha256:13b2b2af2af44158ef02f22ae4ff1b280b221c2760bd0f5891ef58b884678754", size = 47115, upload-time = "2026-11-07T07:28:17.195Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/cc/f4/e3be26f6301535ab4a3a940b09e55615c6286195b07fec9aa2cf8b842563/dunamai-1.26.3-py3-none-any.whl", hash = "sha256:cc486963f21ad5b5b20d95424909ff5029990241eea3e2272865e1542c5fd19f", size = 27628, upload-time = "2026-10-14T20:13:29.974Z" },
+    { url = "https://files.pythonhosted.org/packages/62/df/d4bb8f35c4dc38f17defb1c73235fe675e52db9fe2cabcdc59fb6d766575/dunamai-1.26.4-py3-none-any.whl", hash = "sha256:dba10d5e116c68b81423ac9c9bc051ee9035786e7f964783fd0f354959754546", size = 27725, upload-time = "2026-11-07T07:28:16.068Z" },
 ]
 
 [[package]]
