@@ -234,9 +234,17 @@ class LanesController(CirculationManagerController, AdminPermissionsControllerMi
         ) -> list[tuple[Lane, int]]:
             lane_priorities: list[tuple[Lane, int]] = []
             for index, lane_data in enumerate(lanes):
-                lane = get_one(self._db, Lane, id=lane_data.get("id"), library=library)
+                lane_id = lane_data.get("id")
+                lane = get_one(self._db, Lane, id=lane_id, library=library)
                 if lane is None:
-                    raise ProblemDetailException(MISSING_LANE)
+                    raise ProblemDetailException(
+                        MISSING_LANE.detailed(
+                            _(
+                                "The lane with id %(lane_id)s does not exist, or is associated with a different library.",
+                                lane_id=lane_id,
+                            )
+                        )
+                    )
                 lane_priorities.append((lane, index))
                 lane_priorities.extend(
                     collect_lane_priorities(lane_data.get("sublanes", []))

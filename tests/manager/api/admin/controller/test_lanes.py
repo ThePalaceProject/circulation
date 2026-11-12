@@ -654,10 +654,13 @@ class TestLanesController:
             alm_fixture.request_context_with_library_and_admin(
                 "/", library=library
             ) as ctx,
-            raises_problem_detail(pd=MISSING_LANE),
+            raises_problem_detail() as info,
         ):
             ctx.request.data = json.dumps(new_order).encode()
             alm_fixture.manager.admin_lanes_controller.change_order()
+
+        assert info.value.uri == MISSING_LANE.uri
+        assert str(missing["id"]) in str(info.value.detail)
 
         # No priority changed, not even for the lanes listed before the missing one.
         assert 0 == parent1.priority
