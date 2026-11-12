@@ -131,16 +131,8 @@ class LanesController(CirculationManagerController, AdminPermissionsControllerMi
             lane.inherit_parent_restrictions = inherit_parent_restrictions
 
             for list_id in custom_list_ids:
-                list = get_one(self._db, CustomList, library=library, id=list_id)
-                if not list:
-                    # Not a list this library owns -- is it one that another library
-                    # on this Palace Manager has shared?
-                    list = self._db.scalars(
-                        CustomList.shared_with_library(library).where(
-                            CustomList.id == list_id
-                        )
-                    ).first()
-                if not list:
+                list = get_one(self._db, CustomList, id=list_id)
+                if not list or not list.is_usable_by(library):
                     self._db.rollback()
                     return MISSING_CUSTOM_LIST.detailed(
                         _(
