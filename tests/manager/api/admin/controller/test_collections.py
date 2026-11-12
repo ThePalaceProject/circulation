@@ -241,6 +241,45 @@ class TestCollectionSettings:
             "libraries": [{"short_name": "L2"}],
         }
 
+    def test_collections_get_reads_collections_once(
+        self,
+        controller: CollectionSettingsController,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+        query_counter: QueryCounterFixture,
+    ) -> None:
+        """The listing reads the collections once, however many there are.
+
+        Every service in the listing is reported with its collection's
+        marked_for_deletion, export_marc_records and parent, so the collection
+        was read once per service and the endpoint's query count grew with the
+        number of collections on the server.
+        """
+        parent = db.collection(name="Parent Collection", protocol=OverdriveAPI)
+        for i in range(5):
+            child = db.collection(
+                name=f"Child Collection {i}",
+                protocol=OverdriveAPI,
+                settings=db.overdrive_settings(external_account_id=str(i)),
+            )
+            child.parent = parent
+
+        with flask_app_fixture.test_request_context_system_admin("/"):
+            with query_counter.record() as statements:
+                services = controller.configured_services
+
+        # Every child reports its parent, which means the parents were loaded too.
+        children = [s for s in services if s["name"].startswith("Child Collection")]
+        assert len(children) == 5
+        assert all(
+            child["parent_id"] == parent.integration_configuration.id
+            for child in children
+        )
+
+        # The collections and their parents took one query each, not one per
+        # service.
+        assert len(query_counter.touching(statements, "FROM collections")) == 2
+
     def test_collections_get_reads_library_configurations_once(
         self,
         controller: CollectionSettingsController,
@@ -1028,11 +1067,11 @@ class TestCollectionSettings:
         self,
         db: DatabaseTransactionFixture,
         flask_app_fixture: FlaskAppFixture,
-        services_fixture: ServicesFixture,
     ):
-        registry: LicenseProvidersRegistry = (
-            services_fixture.services.integration_registry.license_providers()
-        )
+        # A registry of this test's own. The one on the services container is
+        # shared by every test in the process, so registering a mock protocol
+        # on it leaks into whatever runs next.
+        registry = LicenseProvidersRegistry()
         registry.register(object, canonical="mock_api")  # type: ignore[arg-type]
         collection = db.collection(protocol="mock_api")
         controller = CollectionSettingsController(db.session, registry)
