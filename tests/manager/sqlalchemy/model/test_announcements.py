@@ -35,6 +35,48 @@ class TestAnnouncements:
         assert active.id == active_expected.id
         assert expired.id == expired_expected.id
 
+    def test_announcements_for_libraries(
+        self, db: DatabaseTransactionFixture, announcement_fixture: AnnouncementFixture
+    ):
+        """The batched form returns several libraries' announcements at once."""
+        first = db.library(short_name="first")
+        second = db.library(short_name="second")
+        third = db.library(short_name="third")
+
+        # `first` has two announcements, which should come back oldest first.
+        first_expired = announcement_fixture.expired_announcement(db.session, first)
+        first_active = announcement_fixture.active_announcement(db.session, first)
+        second_active = announcement_fixture.active_announcement(db.session, second)
+        # A third library's announcement, and a global one, that the query
+        # should leave out.
+        announcement_fixture.active_announcement(db.session, third)
+        announcement_fixture.active_announcement(db.session)
+
+        announcements = (
+            db.session.scalars(
+                Announcement.announcements_for_libraries([first.id, second.id])
+            )
+            .unique()
+            .all()
+        )
+        assert all(isinstance(a, Announcement) for a in announcements)
+
+        # Grouped by library, and ordered by start date within a library.
+        by_library: dict[int, list[Announcement]] = {}
+        for announcement in announcements:
+            by_library.setdefault(announcement.library_id, []).append(announcement)
+        assert set(by_library) == {first.id, second.id}
+        assert [a.id for a in by_library[first.id]] == [
+            first_expired.id,
+            first_active.id,
+        ]
+        assert [a.id for a in by_library[second.id]] == [second_active.id]
+
+        # Asking about no libraries at all returns nothing rather than everything.
+        assert (
+            db.session.scalars(Announcement.announcements_for_libraries([])).all() == []
+        )
+
     def test_library_announcements_deleted(
         self, db: DatabaseTransactionFixture, announcement_fixture: AnnouncementFixture
     ):

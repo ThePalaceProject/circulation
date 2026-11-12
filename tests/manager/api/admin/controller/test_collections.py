@@ -295,22 +295,37 @@ class TestCollectionSettings:
         configuration for the library it names, so the endpoint's query count
         grew with the size of the consortium.
         """
-        collection = db.collection(name="Consortium Collection", protocol=OverdriveAPI)
-        for i in range(5):
-            db.integration_library_configuration(
-                collection.integration_configuration,
-                db.library(short_name=f"L{i}"),
-                OverdriveLibrarySettings(ebook_loan_duration=14),
+        # Several collections, each associated with several libraries, so that
+        # the assertions below fail if either relationship goes back to being
+        # loaded per service or per library configuration.
+        libraries = [db.library(short_name=f"L{i}") for i in range(5)]
+        for collection_index in range(3):
+            collection = db.collection(
+                name=f"Consortium Collection {collection_index}",
+                protocol=OverdriveAPI,
+                settings=db.overdrive_settings(
+                    external_account_id=str(collection_index)
+                ),
             )
+            for library in libraries:
+                db.integration_library_configuration(
+                    collection.integration_configuration,
+                    library,
+                    OverdriveLibrarySettings(ebook_loan_duration=14),
+                )
 
         with flask_app_fixture.test_request_context_system_admin("/"):
             with query_counter.record() as statements:
                 services = controller.configured_services
 
-        [service] = [s for s in services if s["name"] == "Consortium Collection"]
-        assert sorted(l["short_name"] for l in service["libraries"]) == [
-            f"L{i}" for i in range(5)
+        consortium_services = [
+            s for s in services if s["name"].startswith("Consortium Collection")
         ]
+        assert len(consortium_services) == 3
+        for service in consortium_services:
+            assert sorted(l["short_name"] for l in service["libraries"]) == [
+                f"L{i}" for i in range(5)
+            ]
         assert (
             len(
                 query_counter.touching(statements, "integration_library_configurations")

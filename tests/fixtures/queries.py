@@ -75,4 +75,9 @@ class QueryCounterFixture:
 
 @pytest.fixture
 def query_counter(db: DatabaseTransactionFixture) -> QueryCounterFixture:
+    """A recorder for the statements sent on the test's database session.
+
+    :param db: The database fixture whose session to record.
+    :return: A `QueryCounterFixture` bound to that session.
+    """
     return QueryCounterFixture(db.session)
