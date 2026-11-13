@@ -51,12 +51,10 @@ class Statistics:
     )
     # The union of every filter above. Rows excluded by this contribute nothing to any
     # of the statistics, so the single inventory query can be narrowed to it up front.
-    COUNTED_FILTER = and_(  # type: ignore[type-var]
-        LicensePool.active_status,
-        or_(
-            LicensePool.metered_or_equivalent_type,
-            LicensePool.type == LicensePoolType.UNLIMITED,
-        ),
+    COUNTED_FILTER = or_(
+        METERED_LICENSE_FILTER,
+        UNLIMITED_LICENSE_FILTER,
+        OPEN_ACCESS_FILTER,
     )
 
     def __init__(self, session: Session):
