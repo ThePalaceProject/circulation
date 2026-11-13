@@ -26,7 +26,7 @@ from palace.manager.sqlalchemy.model.integration import (
     IntegrationLibraryConfiguration,
 )
 from palace.manager.sqlalchemy.model.library import Library
-from palace.manager.sqlalchemy.model.licensing import LicensePool, LicensePoolType
+from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.patron import Hold, Loan, Patron
 
 
