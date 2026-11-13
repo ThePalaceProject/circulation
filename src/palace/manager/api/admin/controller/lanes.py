@@ -214,17 +214,36 @@ class LanesController(CirculationManagerController, AdminPermissionsControllerMi
         return Response(str(_("Success")), 200)
 
     def change_order(self) -> Response:
-        self.require_library_manager(get_request_library())
+        library = get_request_library()
+        self.require_library_manager(library)
 
         submitted_lanes = json.loads(flask.request.data)
 
-        def update_lane_order(lanes: list[dict[str, Any]]) -> None:
+        # Resolve every lane before assigning any priority, so that an invalid
+        # request leaves the existing order untouched.
+        def collect_lane_priorities(
+            lanes: list[dict[str, Any]],
+        ) -> list[tuple[Lane, int]]:
+            lane_priorities: list[tuple[Lane, int]] = []
             for index, lane_data in enumerate(lanes):
                 lane_id = lane_data.get("id")
-                lane = self._db.query(Lane).filter(Lane.id == lane_id).one()
-                lane.priority = index
-                update_lane_order(lane_data.get("sublanes", []))
+                lane = get_one(self._db, Lane, id=lane_id, library=library)
+                if lane is None:
+                    raise ProblemDetailException(
+                        MISSING_LANE.detailed(
+                            _(
+                                "The lane with id %(lane_id)s does not exist, or is associated with a different library.",
+                                lane_id=lane_id,
+                            )
+                        )
+                    )
+                lane_priorities.append((lane, index))
+                lane_priorities.extend(
+                    collect_lane_priorities(lane_data.get("sublanes", []))
+                )
+            return lane_priorities
 
-        update_lane_order(submitted_lanes)
+        for lane, priority in collect_lane_priorities(submitted_lanes):
+            lane.priority = priority
 
         return Response(str(_("Success")), 200)
