@@ -308,6 +308,45 @@ class TestIndividualAdmins:
                 key=lambda x: x["email"],
             ) == sorted(admins, key=lambda x: x["email"])
 
+    def test_individual_admins_get_reads_roles_once(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+        controller_fixture: IndividualAdminControllerFixture,
+    ) -> None:
+        """The listing reads the admins' roles once, however many admins there are.
+
+        Each admin's roles, and the library each role is for, are loaded with
+        the admins. Left lazy they are a query per admin plus one per library,
+        so this test fails if either goes back to being loaded that way.
+        """
+        for i in range(5):
+            admin, _ = create(db.session, Admin, email=f"extra{i}@example.com")
+            admin.add_role(AdminRole.LIBRARIAN, controller_fixture.l1)
+            admin.add_role(AdminRole.LIBRARY_MANAGER, controller_fixture.l2)
+
+        with flask_app_fixture.test_request_context(
+            "/", admin=controller_fixture.system
+        ):
+            with db.record_statements(expire=True) as statements:
+                response = controller_fixture.controller.process_get()
+
+        assert isinstance(response, dict)
+        admins = response["individualAdmins"]
+        # The extra admins' roles, with their libraries, are all in the response.
+        for i in range(5):
+            [extra] = [a for a in admins if a["email"] == f"extra{i}@example.com"]
+            assert sorted(r["library"] for r in extra["roles"]) == ["l1", "l2"]
+
+        # Two role queries: one for the logged-in admin's own roles, which
+        # decides what this admin is allowed to see, and one that loads every
+        # listed admin's roles. Neither grows with the number of admins.
+        assert len([q for q in statements if q.touches("adminroles")]) == 2
+        # And one query for the libraries those roles name, however many roles
+        # name them.
+        library_queries = [q for q in statements if q.touches("FROM libraries")]
+        assert len(library_queries) == 1
+
     def test_individual_admins_get_no_admin(
         self,
         flask_app_fixture: FlaskAppFixture,
