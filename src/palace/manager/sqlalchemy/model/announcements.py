@@ -3,6 +3,7 @@ from __future__ import annotations
 import dataclasses
 import datetime
 import uuid
+from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Column, Date, ForeignKey, Integer, Unicode, select
@@ -51,6 +52,24 @@ class Announcement(Base):
     @classmethod
     def library_announcements(cls, library: Library) -> Select:
         return select(cls).where(cls.library_id == library.id).order_by(cls.start)
+
+    @classmethod
+    def announcements_for_libraries(cls, library_ids: Iterable[int]) -> Select:
+        """A query for the announcements belonging to any of several libraries.
+
+        This is the batched form of :meth:`library_announcements`, for callers
+        that would otherwise run that query once per library. The results are
+        ordered by library so a caller can group them, and by start date within
+        a library, matching :meth:`library_announcements`.
+
+        :param library_ids: The ids of the libraries whose announcements to fetch.
+        :return: A Select of Announcements.
+        """
+        return (
+            select(cls)
+            .where(cls.library_id.in_(library_ids))
+            .order_by(cls.library_id, cls.start)
+        )
 
     @classmethod
     def authentication_document_announcements(
