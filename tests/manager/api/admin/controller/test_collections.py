@@ -240,6 +240,47 @@ class TestCollectionSettings:
             "libraries": [{"short_name": "L2"}],
         }
 
+    def test_collections_get_reads_collections_once(
+        self,
+        controller: CollectionSettingsController,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+    ) -> None:
+        """The listing reads the collections once, however many there are.
+
+        Every service in the listing is reported with its collection's
+        marked_for_deletion, export_marc_records and parent, so the collection
+        was read once per service and the endpoint's query count grew with the
+        number of collections on the server.
+        """
+        parent = db.collection(name="Parent Collection", protocol=OverdriveAPI)
+        for i in range(5):
+            child = db.collection(
+                name=f"Child Collection {i}",
+                protocol=OverdriveAPI,
+                settings=db.overdrive_settings(external_account_id=str(i)),
+            )
+            child.parent = parent
+
+        with flask_app_fixture.test_request_context_system_admin("/"):
+            with db.record_statements(expire=True) as statements:
+                services = controller.configured_services
+
+        # Every child reports its parent, which means the parents were loaded too.
+        children = [s for s in services if s["name"].startswith("Child Collection")]
+        assert len(children) == 5
+        assert all(
+            child["parent_id"] == parent.integration_configuration.id
+            for child in children
+        )
+
+        # One query for the collections, and none for the parents: a parent is
+        # a collection in this same listing, so it is already loaded and the
+        # many-to-one resolves without going back to the database. This still
+        # fails if that stops being true -- if the listing later left some
+        # collections out, say.
+        assert len([q for q in statements if q.touches("FROM collections")]) == 1
+
     def test_collections_get_reads_library_configurations_once(
         self,
         controller: CollectionSettingsController,
