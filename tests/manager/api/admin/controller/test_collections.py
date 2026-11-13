@@ -240,6 +240,64 @@ class TestCollectionSettings:
             "libraries": [{"short_name": "L2"}],
         }
 
+    def test_collections_get_reads_library_configurations_once(
+        self,
+        controller: CollectionSettingsController,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+    ) -> None:
+        """The listing reads each service's libraries once, however many there are.
+
+        A collection can be associated with every library on the circulation
+        manager, and the listing reports each association. Left to lazy
+        loading that is a query for the service's library configurations plus
+        one per configuration for the library it names, so this test fails if
+        either relationship goes back to being loaded that way.
+        """
+        # Several collections, each associated with several libraries, so that
+        # the assertions below fail if either relationship goes back to being
+        # loaded per service or per library configuration.
+        libraries = [db.library(short_name=f"L{i}") for i in range(5)]
+        for collection_index in range(3):
+            collection = db.collection(
+                name=f"Shared Collection {collection_index}",
+                protocol=OverdriveAPI,
+                settings=db.overdrive_settings(
+                    external_account_id=str(collection_index)
+                ),
+            )
+            for library in libraries:
+                db.integration_library_configuration(
+                    collection.integration_configuration,
+                    library,
+                    OverdriveLibrarySettings(ebook_loan_duration=14),
+                )
+
+        with flask_app_fixture.test_request_context_system_admin("/"):
+            with db.record_statements(expire=True) as statements:
+                services = controller.configured_services
+
+        shared_services = [
+            s for s in services if s["name"].startswith("Shared Collection")
+        ]
+        assert len(shared_services) == 3
+        for service in shared_services:
+            assert sorted(l["short_name"] for l in service["libraries"]) == [
+                f"L{i}" for i in range(5)
+            ]
+        assert (
+            len(
+                [
+                    q
+                    for q in statements
+                    if q.touches("integration_library_configurations")
+                ]
+            )
+            == 1
+        )
+        # The libraries themselves are loaded in one query too.
+        assert len([q for q in statements if q.touches("FROM libraries")]) == 1
+
     @pytest.mark.parametrize("role, library_scoped", NON_SYSTEM_ADMIN_ROLES)
     def test_collections_get_limits_info_for_non_system_admins(
         self,
@@ -1032,11 +1090,11 @@ class TestCollectionSettings:
         self,
         db: DatabaseTransactionFixture,
         flask_app_fixture: FlaskAppFixture,
-        services_fixture: ServicesFixture,
     ):
-        registry: LicenseProvidersRegistry = (
-            services_fixture.services.integration_registry.license_providers()
-        )
+        # A registry of this test's own. The one on the services container is
+        # shared by every test in the process, so registering a mock protocol
+        # on it leaks into whatever runs next.
+        registry = LicenseProvidersRegistry()
         registry.register(object, canonical="mock_api")  # type: ignore[arg-type]
         collection = db.collection(protocol="mock_api")
         controller = CollectionSettingsController(db.session, registry)
@@ -1125,11 +1183,11 @@ class TestCollectionSettings:
     def test_collection_self_tests_run_self_tests_unsupported_collection(
         self,
         db: DatabaseTransactionFixture,
-        services_fixture: ServicesFixture,
     ):
-        registry: LicenseProvidersRegistry = (
-            services_fixture.services.integration_registry.license_providers()
-        )
+        # A registry of this test's own. The one on the services container is
+        # shared by every test in the process, so registering a mock protocol
+        # on it leaks into whatever runs next.
+        registry = LicenseProvidersRegistry()
         registry.register(object, canonical="mock_api")  # type: ignore[arg-type]
         collection = db.collection(protocol="mock_api")
         manager = MagicMock()
@@ -1141,7 +1199,6 @@ class TestCollectionSettings:
     def test_collection_self_tests_post(
         self,
         db: DatabaseTransactionFixture,
-        services_fixture: ServicesFixture,
     ):
         mock = MagicMock()
 
@@ -1154,9 +1211,10 @@ class TestCollectionSettings:
             def collection(self) -> None:
                 return None
 
-        registry: LicenseProvidersRegistry = (
-            services_fixture.services.integration_registry.license_providers()
-        )
+        # A registry of this test's own. The one on the services container is
+        # shared by every test in the process, so registering a mock protocol
+        # on it leaks into whatever runs next.
+        registry = LicenseProvidersRegistry()
         registry.register(MockApi, canonical="Foo")  # type: ignore[arg-type]
 
         collection = db.collection(protocol="Foo")
