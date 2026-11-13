@@ -348,7 +348,7 @@ class TestCollectionSettings:
         names = {c["name"] for c in data.get("collections", [])}
         assert names == {"Consortium Collection"}
 
-        role_queries = [s for s in statements if "adminroles" in s]
+        role_queries = [q for q in statements if q.touches("adminroles")]
         assert len(role_queries) <= 1
 
     @pytest.mark.parametrize(
