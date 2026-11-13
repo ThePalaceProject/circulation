@@ -276,9 +276,12 @@ class TestCollectionSettings:
             for child in children
         )
 
-        # The collections and their parents took one query each, not one per
-        # service.
-        assert len(query_counter.touching(statements, "FROM collections")) == 2
+        # One query for the collections, and none for the parents: a parent is
+        # a collection in this same listing, so it is already loaded and the
+        # many-to-one resolves without going back to the database. This still
+        # fails if that stops being true -- if the listing later left some
+        # collections out, say.
+        assert len(query_counter.touching(statements, "FROM collections")) == 1
 
     def test_collections_get_reads_library_configurations_once(
         self,

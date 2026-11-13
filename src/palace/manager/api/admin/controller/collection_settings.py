@@ -55,10 +55,14 @@ class CollectionSettingsController(
     )
 
     def configured_services_query(self) -> Query[IntegrationConfiguration]:
-        """Load each service's collection, and the collection's parent, up front.
+        """Load each service's collection up front.
 
-        `configured_service_info` reads both for every service in the listing.
-        Left lazy, each is a query per service.
+        `configured_service_info` reads the collection for every service in the
+        listing. Left lazy, that is a query per service.
+
+        The collection's parent needs no load of its own. It is a license-goal
+        collection too, so this listing has already read it, and a many-to-one
+        resolves from the session without going back to the database.
 
         The collection's libraries are deliberately not loaded. A collection can
         be associated with every library on the server, so loading them per
@@ -71,11 +75,7 @@ class CollectionSettingsController(
         return (
             super()
             .configured_services_query()
-            .options(
-                selectinload(IntegrationConfiguration.collection).selectinload(
-                    Collection.parent
-                )
-            )
+            .options(selectinload(IntegrationConfiguration.collection))
         )
 
     def configured_service_info(
