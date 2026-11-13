@@ -6,7 +6,7 @@ from typing import Any, NamedTuple
 
 import flask
 from flask import Response
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from werkzeug.datastructures import ImmutableMultiDict
 
 from palace.util.log import LoggerMixin
@@ -137,6 +137,14 @@ class IntegrationSettingsController[T: HasIntegrationConfiguration[BaseSettings]
         for service in (
             self._db.query(IntegrationConfiguration)
             .filter(IntegrationConfiguration.goal == self.registry.goal)
+            # The library configurations, and the library each one belongs to,
+            # are read for every service below. Left lazy, they would be two
+            # queries per service plus one per library configuration.
+            .options(
+                selectinload(
+                    IntegrationConfiguration.library_configurations
+                ).selectinload(IntegrationLibraryConfiguration.library)
+            )
             .order_by(IntegrationConfiguration.name)
         ):
             service_info = self.configured_service_info(service)
