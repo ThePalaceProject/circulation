@@ -588,8 +588,8 @@ class TestLanesController:
         library = alm_fixture.ctrl.db.library()
         parent1 = alm_fixture.ctrl.db.lane("parent1", library=library)
         parent2 = alm_fixture.ctrl.db.lane("parent2", library=library)
-        child1 = alm_fixture.ctrl.db.lane("child1", parent=parent2)
-        child2 = alm_fixture.ctrl.db.lane("child2", parent=parent2)
+        child1 = alm_fixture.ctrl.db.lane("child1", library=library, parent=parent2)
+        child2 = alm_fixture.ctrl.db.lane("child2", library=library, parent=parent2)
         parent1.priority = 0
         parent2.priority = 1
         child1.priority = 0
@@ -618,3 +618,51 @@ class TestLanesController:
             assert 1 == parent1.priority
             assert 0 == child2.priority
             assert 1 == child1.priority
+
+    @pytest.mark.parametrize(
+        "other_library_lane, nested",
+        [
+            pytest.param(True, False, id="other-library-lane"),
+            pytest.param(True, True, id="other-library-sublane"),
+            pytest.param(False, False, id="unknown-lane"),
+        ],
+    )
+    def test_change_order_lane_not_in_library(
+        self,
+        alm_fixture: AdminLibraryManagerFixture,
+        other_library_lane: bool,
+        nested: bool,
+    ):
+        db = alm_fixture.ctrl.db
+        library = db.library()
+        parent1 = db.lane("parent1", library=library)
+        parent2 = db.lane("parent2", library=library)
+        parent1.priority = 0
+        parent2.priority = 1
+        other = db.lane("other", library=db.library())
+        other.priority = 5
+        db.session.flush()
+
+        missing = {"id": other.id if other_library_lane else other.id + 1000}
+        if nested:
+            new_order = [{"id": parent2.id, "sublanes": [missing]}, {"id": parent1.id}]
+        else:
+            new_order = [{"id": parent2.id}, missing, {"id": parent1.id}]
+
+        alm_fixture.admin.add_role(AdminRole.LIBRARY_MANAGER, library)
+        with (
+            alm_fixture.request_context_with_library_and_admin(
+                "/", library=library
+            ) as ctx,
+            raises_problem_detail() as info,
+        ):
+            ctx.request.data = json.dumps(new_order).encode()
+            alm_fixture.manager.admin_lanes_controller.change_order()
+
+        assert info.value.uri == MISSING_LANE.uri
+        assert str(missing["id"]) in str(info.value.detail)
+
+        # No priority changed, not even for the lanes listed before the missing one.
+        assert 0 == parent1.priority
+        assert 1 == parent2.priority
+        assert 5 == other.priority

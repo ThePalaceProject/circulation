@@ -33,10 +33,10 @@ pytest_plugins = [
     "tests.fixtures.webserver",
 ]
 
-# Ensure that Freezegun does not interfere when using PyInstrument to profile tests or
-# running Celery tests.
+# Ensure that Freezegun does not interfere when using PyInstrument to profile tests,
+# running Celery tests, or timing tests with pytest's --durations.
 # See: https://github.com/spulec/freezegun#ignore-packages
-fg_configure(extend_ignore_list=["pyinstrument", "celery"])
+fg_configure(extend_ignore_list=["pyinstrument", "celery", "_pytest.timing"])
 
 
 # Tests acquire a real OpenSearch instance through one of these fixtures (directly or

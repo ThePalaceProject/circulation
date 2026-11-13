@@ -404,6 +404,58 @@ class TestCollectionSettings:
         }
         assert all("settings" not in c for c in collections)
 
+    def test_collections_get_checks_roles_once_for_non_system_admins(
+        self,
+        controller: CollectionSettingsController,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+    ) -> None:
+        """The listing reads the admin's roles once, however many libraries it sees.
+
+        A consortium manager associates its collections with every member
+        library, and the listing asks whether the admin may see each one. When
+        that question went to the database per library, the endpoint issued
+        enough queries to time out for any admin who wasn't a system admin,
+        who alone is answered without a per-library check.
+        """
+        library = db.library(short_name="L1")
+        collection = db.collection(
+            name="Consortium Collection", protocol=OverdriveAPI, library=library
+        )
+        collection.associated_libraries += [db.library() for _ in range(10)]
+
+        # A second collection the admin has no role for. The listing asks
+        # `can_see_collection` about each collection and stops at the first
+        # library the admin is a librarian of, so a collection the admin *can*
+        # see settles on its first library and leaves the rest of the loop
+        # unrun. Only a collection the admin cannot see walks every library,
+        # which is where the per-library role lookups accumulated.
+        unassociated = db.collection(
+            name="Unassociated Collection", protocol=OverdriveAPI
+        )
+        unassociated.associated_libraries += [db.library() for _ in range(10)]
+
+        admin = flask_app_fixture.admin_user(
+            email="librarian@example.org", role=AdminRole.LIBRARIAN, library=library
+        )
+        db.session.flush()
+
+        with db.record_statements() as statements:
+            with flask_app_fixture.test_request_context("/", admin=admin):
+                response = controller.process_get()
+
+        assert response.status_code == 200
+        data = response.json
+        assert isinstance(data, dict)
+        # The collection the admin has no role for is walked in full and
+        # withheld, so the role checks below cover both of the listing's
+        # paths and not just the one that short-circuits.
+        names = {c["name"] for c in data.get("collections", [])}
+        assert names == {"Consortium Collection"}
+
+        role_queries = [s for s in statements if "adminroles" in s]
+        assert len(role_queries) <= 1
+
     @pytest.mark.parametrize(
         "post_data,expected,detailed",
         [

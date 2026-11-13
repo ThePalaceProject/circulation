@@ -1,8 +1,8 @@
 import re
 import unicodedata
 
+import nameparser
 from fuzzywuzzy import fuzz
-from nameparser import HumanName
 
 from palace.manager.util.permanent_work_id import WorkIDCalculator
 
@@ -144,23 +144,23 @@ def display_name_to_sort_name(display_name: str | None) -> str | None:
     Checks first if the display_name fits what we know of corporate entity business names.
     If yes, uses the whole name without re-converting it.
 
-    Uses the HumanName library to try to parse the name into parts, and rearrange the parts into
+    Uses the nameparser library to try to parse the name into parts, and rearrange the parts into
     desired order and format.
     """
     if not display_name:
         return None
 
-    # TODO: to humanname: PhD, Ph.D. Sister, Queen are titles and suffixes
+    # TODO: to nameparser: PhD, Ph.D. Sister, Queen are titles and suffixes
 
     # check if corporate, and if yes, return whole
     if is_corporate_name(display_name):
         return display_name
 
-    # clean up the common PhD and MD suffixes, so HumanName recognizes them better
+    # clean up the common PhD and MD suffixes, so nameparser recognizes them better
     display_name = name_tidy(display_name)
 
-    # name has title, first, middle, last, suffix, nickname
-    name = HumanName(display_name)
+    # name has title, given, middle, family, suffix, nickname
+    name = nameparser.parse(display_name)
 
     # Note: When the first and middle names are initials that have come in with a space between them,
     # let them keep that space, to be consistent with initials with no periods, which would be more
@@ -169,18 +169,18 @@ def display_name_to_sort_name(display_name: str | None) -> str | None:
 
     # This might go after a comma, or it might be someone's entire
     # name.
-    base_name = " ".join([name.title, name.first, name.middle, name.suffix]).strip()
-    if not name.last:
+    base_name = " ".join([name.title, name.given, name.middle, name.suffix]).strip()
+    if not name.family:
         # Examples: 'Pope Francis', 'Prince'.
         sort_name = base_name
     else:
         if base_name:
             # A comma is used to separate the family name from the other
             # parts of the name.
-            sort_name = name.last + ", " + base_name
+            sort_name = name.family + ", " + base_name
         else:
             # This person has _only_ a last name.
-            sort_name = name.last
+            sort_name = name.family
 
     # Regardless of how the name was processed, a nickname goes at the
     # end, in parentheses.
@@ -198,7 +198,7 @@ def name_tidy(name: str) -> str:
     * Strips excessive whitespace and trailing punctuation.
     * Normalizes PhD/MD suffixes.
     * Does not perform any potentially name-altering business logic, such as
-        running HumanName parser or any other name part reorganization.
+        running nameparser or any other name part reorganization.
     * Does not perform any cleaning that would later need to be reversed,
         such as lowercasing.
 
@@ -213,7 +213,7 @@ def name_tidy(name: str) -> str:
     # the period is a legitimate part of the initials.
     name = trailingPunctuation.sub(_replace_end_punctuation, name, re.I)
 
-    # clean up the common PhD and MD suffixes, so HumanName recognizes them better
+    # clean up the common PhD and MD suffixes, so nameparser recognizes them better
     name = phdFix.sub(_replace_phd, name, re.I)
     name = mdFix.sub(_replace_md, name, re.I)
 
@@ -236,19 +236,19 @@ def normalize_contributor_name_for_matching(name: str) -> str:
     TODO: consider what to do for multiple authors, like an et al or brothers grimm
     """
 
-    # HumanName has a bug where two joiner words together cause an error.
-    # This is a quickie hack to fix that.
+    # Collapse "of the" to "of" before parsing. Do not remove this without
+    # checking that contributor matching results stay the same.
     joiner_fix = re.compile("of the", re.IGNORECASE)
     name = joiner_fix.sub("of", name)
 
-    name_obj = HumanName(name)
-    # name has title, first, middle, last, suffix, nickname
+    name_obj = nameparser.parse(name)
+    # name has title, given, middle, family, suffix, nickname
     name = " ".join(
         [
             name_obj.title,
-            name_obj.first,
+            name_obj.given,
             name_obj.middle,
-            name_obj.last,
+            name_obj.family,
             name_obj.suffix,
             name_obj.nickname,
         ]
@@ -274,12 +274,11 @@ def sort_name_to_display_name(sort_name: str | None) -> str | None:
     if not sort_name:
         return None
 
-    name = HumanName(sort_name)
-    # name has title, first, middle, last, suffix, nickname
-    if name.nickname:
-        name.nickname = "(" + name.nickname + ")"
+    name = nameparser.parse(sort_name)
+    # name has title, given, middle, family, suffix, nickname
+    nickname = f"({name.nickname})" if name.nickname else ""
     display_name = " ".join(
-        [name.title, name.first, name.nickname, name.middle, name.last, name.suffix]
+        [name.title, name.given, nickname, name.middle, name.family, name.suffix]
     )
 
     display_name = name_tidy(display_name)
