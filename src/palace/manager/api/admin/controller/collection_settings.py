@@ -55,14 +55,19 @@ class CollectionSettingsController(
     )
 
     def configured_services_query(self) -> Query[IntegrationConfiguration]:
-        # configured_service_info reads the collection, and the collection's
-        # parent, for every service. Left lazy, each is a query per service.
-        #
-        # The collection's libraries are deliberately not loaded here. A
-        # collection can be associated with every library on the server, so
-        # loading them per collection would read far more than the listing
-        # reports. can_see_collection reaches them through the service's own
-        # library configurations, which are already loaded.
+        """Load each service's collection, and the collection's parent, up front.
+
+        `configured_service_info` reads both for every service in the listing.
+        Left lazy, each is a query per service.
+
+        The collection's libraries are deliberately not loaded. A collection can
+        be associated with every library on the server, so loading them per
+        collection would read far more than the listing reports.
+        `can_see_collection` reaches them through the service's own library
+        configurations, which are already loaded.
+
+        :return: The query from the superclass, with the collection loaded too.
+        """
         return (
             super()
             .configured_services_query()

@@ -647,7 +647,7 @@ def test_stats_parent_collection_permissions(
 def test_stats_query_count_is_independent_of_library_count(
     admin_statistics_session: AdminStatisticsSessionFixture,
     query_counter: QueryCounterFixture,
-):
+) -> None:
     """The number of statements issued must not grow with the number of libraries.
 
     `_authorized_collections` used to resolve `Library.associated_collections` one

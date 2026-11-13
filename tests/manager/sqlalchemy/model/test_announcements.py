@@ -37,7 +37,7 @@ class TestAnnouncements:
 
     def test_announcements_for_libraries(
         self, db: DatabaseTransactionFixture, announcement_fixture: AnnouncementFixture
-    ):
+    ) -> None:
         """The batched form returns several libraries' announcements at once."""
         first = db.library(short_name="first")
         second = db.library(short_name="second")
