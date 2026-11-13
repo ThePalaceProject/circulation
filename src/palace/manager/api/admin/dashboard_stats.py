@@ -4,7 +4,6 @@ import dataclasses
 from collections import defaultdict
 from collections.abc import Iterable
 from datetime import datetime
-from typing import Any
 
 from sqlalchemy import not_, union
 from sqlalchemy.orm import Session
@@ -18,10 +17,14 @@ from palace.manager.api.admin.model.dashboard_statistics import (
     PatronStatistics,
     StatisticsResponse,
 )
+from palace.manager.integration.goals import Goals
 from palace.manager.sqlalchemy.model.admin import Admin
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.edition import Edition
-from palace.manager.sqlalchemy.model.integration import IntegrationConfiguration
+from palace.manager.sqlalchemy.model.integration import (
+    IntegrationConfiguration,
+    IntegrationLibraryConfiguration,
+)
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.patron import Hold, Loan, Patron
@@ -46,6 +49,13 @@ class Statistics:
         OPEN_ACCESS_FILTER,
         and_(METERED_LICENSE_FILTER, LicensePool.licenses_available > 0),
     )
+    # The union of every filter above. Rows excluded by this contribute nothing to any
+    # of the statistics, so the single inventory query can be narrowed to it up front.
+    COUNTED_FILTER = or_(
+        METERED_LICENSE_FILTER,
+        UNLIMITED_LICENSE_FILTER,
+        OPEN_ACCESS_FILTER,
+    )
 
     def __init__(self, session: Session):
         self._db = session
@@ -58,11 +68,10 @@ class Statistics:
         (
             all_authorized_collections,
             authorized_collections_by_library,
-            filter_collections,
         ) = self._authorized_collections(admin, authorized_libraries)
 
         collection_inventories = self._create_collection_inventories(
-            all_authorized_collections, filter_collections
+            all_authorized_collections
         )
         (
             collection_inventory_summary,
@@ -117,19 +126,53 @@ class Statistics:
             if c.id is not None
         }
 
+    def _collections_by_library(
+        self, authorized_libraries: list[Library]
+    ) -> dict[int, set[int]]:
+        """Map each library's id to the ids of the collections associated with it.
+
+        This answers for every library at once what ``Library.associated_collections``
+        answers for one, so the caller does not emit a query per library.
+
+        :param authorized_libraries: Libraries to look up associated collections for.
+        :return: Mapping of library id to the set of associated collection ids.
+        """
+        library_ids = [lib.id for lib in authorized_libraries if lib.id is not None]
+        if not library_ids:
+            return {}
+
+        rows = self._db.execute(
+            select(IntegrationLibraryConfiguration.library_id, Collection.id)
+            .select_from(Collection)
+            .join(IntegrationConfiguration)
+            .join(IntegrationLibraryConfiguration)
+            .where(
+                IntegrationConfiguration.goal == Goals.LICENSE_GOAL,
+                IntegrationLibraryConfiguration.library_id.in_(library_ids),
+            )
+        ).all()
+
+        collections_by_library: dict[int, set[int]] = defaultdict(set)
+        for library_id, collection_id in rows:
+            collections_by_library[library_id].add(collection_id)
+        return collections_by_library
+
     def _authorized_collections(
         self,
         admin: Admin,
         authorized_libraries: list[Library],
-    ) -> tuple[list[_Collection], dict[str, list[_Collection]], bool]:
+    ) -> tuple[list[_Collection], dict[str, list[_Collection]]]:
         authorized_collections: set[_Collection] = set()
         authorized_collections_by_library = {}
 
         all_collections = self._all_collections()
+        collection_ids_by_library = self._collections_by_library(authorized_libraries)
 
         for library in authorized_libraries:
             library_collections = {
-                all_collections[c.id] for c in library.associated_collections
+                all_collections[collection_id]
+                for collection_id in collection_ids_by_library.get(library.id, ())
+                if collection_id in all_collections
             }
             authorized_collections_by_library[library.short_name] = sorted(
                 library_collections, key=lambda c: c.id
@@ -145,118 +188,83 @@ class Statistics:
             for collections in authorized_collections_by_library.values():
                 authorized_collections.update(collections)
 
-        # This cutoff is arbitrary, but it's a reasonable heuristic for when to filter collections
-        # by library as part of the query, vs filtering them in Python. It is slower to filter as
-        # part of the query if the user has access to most collections.
-        filter_collections = (
-            len(authorized_collections) / len(all_collections) < 0.5
-            if all_collections
-            else False
-        )
-
         return (
             sorted(authorized_collections, key=lambda c: c.id),
             authorized_collections_by_library,
-            filter_collections,
         )
 
-    def _collections_statistics_by_medium_query(
-        self,
-        query_filter: Any,
-        /,
-        columns: list[Any],
-        collections: list[_Collection] | None,
+    def _collections_statistics_query(
+        self, collections: list[_Collection]
     ) -> dict[int, dict[str, dict[str, int]]]:
+        """Gather every inventory statistic for the given collections in one pass.
+
+        Each statistic is a conditional aggregate over the same scan, so the
+        ``licensepools``/``editions`` join is performed once rather than once per
+        statistic.
+
+        :param collections: Collections to restrict the query to.
+        :return: Mapping of collection id to medium to statistic name to value.
+        """
         query = (
             select(
                 LicensePool.collection_id,
                 Edition.medium,
-                *columns,
+                func.count()
+                .filter(self.METERED_LICENSE_FILTER)
+                .label("metered_titles"),
+                func.count()
+                .filter(self.UNLIMITED_LICENSE_FILTER)
+                .label("unlimited_titles"),
+                func.count()
+                .filter(self.OPEN_ACCESS_FILTER)
+                .label("open_access_titles"),
+                func.count()
+                .filter(self.AT_LEAST_ONE_LOANABLE_FILTER)
+                .label("loanable_titles"),
+                func.coalesce(
+                    func.sum(LicensePool.licenses_owned).filter(
+                        self.METERED_LICENSE_FILTER
+                    ),
+                    0,
+                ).label("metered_licenses_owned"),
+                func.coalesce(
+                    func.sum(LicensePool.licenses_available).filter(
+                        self.METERED_LICENSE_FILTER
+                    ),
+                    0,
+                ).label("metered_licenses_available"),
             )
             .select_from(LicensePool)
             .join(Edition, Edition.id == LicensePool.presentation_edition_id)
-            .where(query_filter)
+            .where(
+                self.COUNTED_FILTER,
+                LicensePool.collection_id.in_({c.id for c in collections}),
+            )
             .group_by(Edition.medium, LicensePool.collection_id)
         )
-        if collections is not None:
-            query = query.where(
-                LicensePool.collection_id.in_({c.id for c in collections})
-            )
-
-        stats_with_medium = self._db.execute(query).mappings().all()
 
         statistics: dict[int, dict[str, dict[str, int]]] = defaultdict(dict)
-        for row in stats_with_medium:
-            collection_id = row["collection_id"]
-            medium = row["medium"]
-            statistics[collection_id][medium] = {
-                k: v for k, v in row.items() if k not in ["medium", "collection_id"]
+        for row in self._db.execute(query).mappings().all():
+            statistics[row["collection_id"]][row["medium"]] = {
+                k: v for k, v in row.items() if k not in ("medium", "collection_id")
             }
         return statistics
 
     def _run_collections_stats_queries(
-        self, collections: list[_Collection], filter_collections: bool
+        self, collections: list[_Collection]
     ) -> dict[int | None, _CollectionStatisticsQueryResults]:
-        count = func.count().label("count")
-        collection_filter = collections if filter_collections else None
-        metered_title_counts = self._collections_statistics_by_medium_query(
-            self.METERED_LICENSE_FILTER, columns=[count], collections=collection_filter
-        )
-        unlimited_title_counts = self._collections_statistics_by_medium_query(
-            self.UNLIMITED_LICENSE_FILTER,
-            columns=[count],
-            collections=collection_filter,
-        )
-        open_access_title_counts = self._collections_statistics_by_medium_query(
-            self.OPEN_ACCESS_FILTER,
-            columns=[count],
-            collections=collection_filter,
-        )
-        loanable_title_counts = self._collections_statistics_by_medium_query(
-            self.AT_LEAST_ONE_LOANABLE_FILTER,
-            columns=[count],
-            collections=collection_filter,
-        )
-        metered_license_stats = self._collections_statistics_by_medium_query(
-            self.METERED_LICENSE_FILTER,
-            columns=[
-                func.sum(LicensePool.licenses_owned).label("owned"),
-                func.sum(LicensePool.licenses_available).label("available"),
-            ],
-            collections=collection_filter,
-        )
-
+        statistics = self._collections_statistics_query(collections)
         return {
             c.id: _CollectionStatisticsQueryResults(
-                metered_title_counts=(
-                    metered_title_counts[c.id] if c.id in metered_title_counts else {}
-                ),
-                unlimited_title_counts=(
-                    unlimited_title_counts[c.id]
-                    if c.id in unlimited_title_counts
-                    else {}
-                ),
-                open_access_title_counts=(
-                    open_access_title_counts[c.id]
-                    if c.id in open_access_title_counts
-                    else {}
-                ),
-                loanable_title_counts=(
-                    loanable_title_counts[c.id] if c.id in loanable_title_counts else {}
-                ),
-                metered_license_stats=(
-                    metered_license_stats[c.id] if c.id in metered_license_stats else {}
-                ),
+                statistics_by_medium=statistics.get(c.id) or {}
             )
             for c in collections
         }
 
     def _create_collection_inventories(
-        self, collections: list[_Collection], filter_collections: bool
+        self, collections: list[_Collection]
     ) -> list[CollectionInventory]:
-        statistics = self._run_collections_stats_queries(
-            collections, filter_collections
-        )
+        statistics = self._run_collections_stats_queries(collections)
         inventories = []
         for collection in collections:
             inventory_by_medium = {
@@ -415,11 +423,13 @@ def _summarize_collection_inventories(
 
 @dataclasses.dataclass(frozen=True)
 class _CollectionStatisticsQueryResults:
-    unlimited_title_counts: dict[str, dict[str, int]]
-    open_access_title_counts: dict[str, dict[str, int]]
-    loanable_title_counts: dict[str, dict[str, int]]
-    metered_title_counts: dict[str, dict[str, int]]
-    metered_license_stats: dict[str, dict[str, int]]
+    """The inventory statistics for a single collection, keyed by medium.
+
+    The inner mapping holds one entry per statistic, using the column labels
+    produced by ``Statistics._collections_statistics_query``.
+    """
+
+    statistics_by_medium: dict[str, dict[str, int]]
 
     def inventories_by_medium(self) -> dict[str, InventoryStatistics]:
         """Return a mapping of all mediums present to their associated inventories."""
@@ -429,28 +439,16 @@ class _CollectionStatisticsQueryResults:
         }
 
     def mediums_present(self) -> set[str]:
-        """Returns a list of the mediums present in these collection statistics."""
-        statistics = dataclasses.asdict(self)
-        return set().union(*(stat.keys() for stat in statistics.values()))
+        """Returns the set of the mediums present in these collection statistics."""
+        return set(self.statistics_by_medium)
 
     def inventory_for_medium(self, medium: str) -> InventoryStatistics:
         """Return statistics for the specified medium."""
-        unlimited_titles = self._lookup_property(
-            "unlimited_title_counts", medium, "count"
-        )
-        open_access_titles = self._lookup_property(
-            "open_access_title_counts", medium, "count"
-        )
-        loanable_titles = self._lookup_property(
-            "loanable_title_counts", medium, "count"
-        )
-        metered_titles = self._lookup_property("metered_title_counts", medium, "count")
-        metered_owned_licenses = self._lookup_property(
-            "metered_license_stats", medium, "owned"
-        )
-        metered_available_licenses = self._lookup_property(
-            "metered_license_stats", medium, "available"
-        )
+        statistics = self.statistics_by_medium.get(medium, {})
+        unlimited_titles = statistics.get("unlimited_titles", 0)
+        open_access_titles = statistics.get("open_access_titles", 0)
+        loanable_titles = statistics.get("loanable_titles", 0)
+        metered_titles = statistics.get("metered_titles", 0)
 
         return InventoryStatistics(
             titles=metered_titles + unlimited_titles + open_access_titles,
@@ -459,19 +457,9 @@ class _CollectionStatisticsQueryResults:
             licensed_titles=metered_titles + unlimited_titles,
             unlimited_license_titles=unlimited_titles,
             metered_license_titles=metered_titles,
-            metered_licenses_owned=metered_owned_licenses,
-            metered_licenses_available=metered_available_licenses,
+            metered_licenses_owned=statistics.get("metered_licenses_owned", 0),
+            metered_licenses_available=statistics.get("metered_licenses_available", 0),
         )
-
-    def _lookup_property(
-        self,
-        group: str,
-        medium: str,
-        column_name: str,
-    ) -> int:
-        """Return value for a statistic, if present; else, return zero."""
-        field: dict[str, dict[str, int]] = getattr(self, group, {})
-        return field.get(medium, {}).get(column_name, 0)
 
 
 @dataclasses.dataclass(frozen=True)
