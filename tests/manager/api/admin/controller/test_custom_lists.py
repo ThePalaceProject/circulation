@@ -117,6 +117,68 @@ class TestCustomListsController:
                 admin_librarian_fixture.manager.admin_custom_lists_controller.custom_lists,
             )
 
+    def test_custom_lists_get_reads_collections_once(
+        self,
+        admin_librarian_fixture: AdminLibrarianFixture,
+    ) -> None:
+        """The listing reads the lists' collections once, however many lists there are.
+
+        A list's collections, and the integration configuration that holds a
+        collection's name and protocol, are loaded with the lists -- for the
+        library's own lists and for the ones shared with it. Left lazy they
+        are a query per list plus one per collection.
+        """
+        db = admin_librarian_fixture.ctrl.db
+        library = db.default_library()
+
+        # Each list gets a collection of its own. A collection's integration
+        # configuration is a many-to-one, so a lazy load of it costs one query
+        # per distinct collection: were every list to share one collection,
+        # the lazy count would not grow with the number of lists and this test
+        # would pin nothing.
+        collections_by_list_name: dict[str, Collection] = {}
+        for i in range(5):
+            name = f"Owned list {i}"
+            custom_list, _ = create(db.session, CustomList, name=name, library=library)
+            collections_by_list_name[name] = db.collection()
+            custom_list.collections = [collections_by_list_name[name]]
+
+        # A list another library shared, to cover that branch too.
+        shared, _ = create(
+            db.session, CustomList, name="Shared list", library=db.library()
+        )
+        collections_by_list_name["Shared list"] = db.collection()
+        shared.collections = [collections_by_list_name["Shared list"]]
+        shared.shared_locally = True
+
+        with admin_librarian_fixture.request_context_with_library_and_admin("/"):
+            with db.record_statements(expire=True) as statements:
+                response = (
+                    admin_librarian_fixture.manager.admin_custom_lists_controller.custom_lists()
+                )
+
+        assert isinstance(response, dict)
+        lists_by_name = {l["name"]: l for l in response["custom_lists"]}
+        assert set(lists_by_name) >= set(collections_by_list_name)
+        # Every list reports its own collection, by name and protocol.
+        for name, collection in collections_by_list_name.items():
+            assert lists_by_name[name]["collections"] == [
+                {
+                    "id": collection.id,
+                    "name": collection.name,
+                    "protocol": collection.protocol,
+                }
+            ]
+
+        # Two queries per branch (owned and shared): one for the lists'
+        # collections and one for the integration configurations that name
+        # them. Neither grows with the number of lists.
+        assert len([q for q in statements if q.touches("collections_customlists")]) == 2
+        assert (
+            len([q for q in statements if q.touches("FROM integration_configurations")])
+            == 2
+        )
+
     def test_custom_lists_post_errors(
         self, admin_librarian_fixture: AdminLibrarianFixture
     ):
