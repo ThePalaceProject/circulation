@@ -41,6 +41,7 @@ jobs:
             echo "::error::No network interface found on the default route."
             exit 1
           fi
+          echo "Using interface: $iface"
           sudo ethtool -K "$iface" tx off rx off
 
       - name: Set up Python
@@ -110,6 +111,7 @@ jobs:
             echo "::error::No network interface found on the default route."
             exit 1
           fi
+          echo "Using interface: $iface"
           sudo ethtool -K "$iface" tx off rx off
 
       - name: Set up Python
