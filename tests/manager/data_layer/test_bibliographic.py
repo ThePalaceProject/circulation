@@ -990,6 +990,97 @@ class TestBibliographicData:
 
         assert [link2, link5, link4, link3] == filtered_links
 
+    def _bibliographic_for_pwid(
+        self,
+        db: DatabaseTransactionFixture,
+        medium: str | None = None,
+        published: datetime.date | None = None,
+        title: str = "The Palace Review",
+    ) -> BibliographicData:
+        return BibliographicData(
+            data_source_name=DataSource.GUTENBERG,
+            primary_identifier_data=IdentifierData.from_identifier(db.identifier()),
+            title=title,
+            medium=medium,
+            published=published,
+            contributors=[
+                ContributorData(
+                    sort_name="Palace, Editors",
+                    roles=[Contributor.Role.PRIMARY_AUTHOR],
+                )
+            ],
+        )
+
+    def test_calculate_permanent_work_id_matches_the_edition(
+        self, db: DatabaseTransactionFixture
+    ):
+        # BibliographicData and Edition have to work out the same permanent
+        # work ID for the same item, whatever the medium.
+        for medium in (
+            Edition.BOOK_MEDIUM,
+            Edition.AUDIO_MEDIUM,
+            Edition.MUSIC_MEDIUM,
+            Edition.VIDEO_MEDIUM,
+            Edition.IMAGE_MEDIUM,
+            Edition.COURSEWARE_MEDIUM,
+        ):
+            bibliographic = self._bibliographic_for_pwid(db, medium=medium)
+            edition = db.edition(title="The Palace Review", authors="Palace, Editors")
+            edition.medium = medium
+            edition.calculate_permanent_work_id()
+
+            assert (
+                bibliographic.calculate_permanent_work_id(db.session)
+                == edition.permanent_work_id
+            )
+
+    def test_calculate_permanent_work_id_without_a_medium(
+        self, db: DatabaseTransactionFixture
+    ):
+        # With no medium we fall back to treating the item as a book, which is
+        # what this did before it looked at the medium at all.
+        no_medium = self._bibliographic_for_pwid(db, medium=None)
+        book = self._bibliographic_for_pwid(db, medium=Edition.BOOK_MEDIUM)
+
+        assert no_medium.calculate_permanent_work_id(
+            db.session
+        ) == book.calculate_permanent_work_id(db.session)
+
+    def test_calculate_permanent_work_id_for_issues_of_a_periodical(
+        self, db: DatabaseTransactionFixture
+    ):
+        # Twelve issues of one magazine, told apart by their publication date.
+        permanent_work_ids = set()
+        for month in range(1, 13):
+            issue = self._bibliographic_for_pwid(
+                db,
+                medium=Edition.PERIODICAL_MEDIUM,
+                published=datetime.date(2024, month, 1),
+            )
+            permanent_work_ids.add(issue.calculate_permanent_work_id(db.session))
+
+        assert len(permanent_work_ids) == 12
+
+        # A magazine is not grouped with a book of the same name.
+        book = self._bibliographic_for_pwid(db, medium=Edition.BOOK_MEDIUM)
+        assert book.calculate_permanent_work_id(db.session) not in permanent_work_ids
+
+    def test_the_same_issue_from_two_sources_gets_one_permanent_work_id(
+        self, db: DatabaseTransactionFixture
+    ):
+        published = datetime.date(2024, 3, 1)
+        first = self._bibliographic_for_pwid(
+            db, medium=Edition.PERIODICAL_MEDIUM, published=published
+        )
+        second = self._bibliographic_for_pwid(
+            db, medium=Edition.PERIODICAL_MEDIUM, published=published
+        )
+        second.data_source_name = DataSource.STANDARD_EBOOKS
+
+        assert first.calculate_permanent_work_id(
+            db.session
+        ) == second.calculate_permanent_work_id(db.session)
+
     def test_associate_with_identifiers_based_on_permanent_work_id(
         self, db: DatabaseTransactionFixture
     ):

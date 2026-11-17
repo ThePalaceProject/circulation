@@ -707,10 +707,14 @@ class Edition(Base, EditionConstants):
 
     def calculate_permanent_work_id(self, debug: bool = False) -> None:
         title = self.title_for_permanent_work_id
-        medium: str | None = (
-            self.medium_for_permanent_work_id.get(self.medium) if self.medium else None
+        # For an issue of a periodical this says which issue it is, so that two
+        # issues of the same magazine don't share a permanent work ID.
+        grouping_category = self.grouping_category_for_permanent_work_id(
+            self.medium,
+            published=self.published,
+            issue_position=self.issue_position,
         )
-        if not title or not medium:
+        if not title or not grouping_category:
             # If a book has no title or medium, it has no permanent work ID.
             if self.permanent_work_id != None:
                 self.permanent_work_id = None
@@ -724,7 +728,7 @@ class Edition(Base, EditionConstants):
 
         old_id = self.permanent_work_id
         new_permanent_work_id = self.calculate_permanent_work_id_for_title_and_author(
-            title, author, medium
+            title, author, grouping_category
         )
 
         if old_id != new_permanent_work_id:
@@ -737,7 +741,7 @@ class Edition(Base, EditionConstants):
             author,
             norm_title,
             norm_author,
-            medium,
+            grouping_category,
             new_permanent_work_id,
             old_id,
         )
@@ -748,13 +752,21 @@ class Edition(Base, EditionConstants):
 
     @classmethod
     def calculate_permanent_work_id_for_title_and_author(
-        cls, title: str, author: str | None, medium: str
+        cls, title: str, author: str | None, grouping_category: str
     ) -> str:
+        """Build a permanent work ID out of a title, an author and a grouping
+        category.
+
+        :param grouping_category: What kind of thing this is, as worked out by
+            :meth:`grouping_category_for_permanent_work_id`.
+        """
         w = WorkIDCalculator
         norm_title = w.normalize_title(title)
         norm_author = w.normalize_author(author)
 
-        result: str = WorkIDCalculator.permanent_id(norm_title, norm_author, medium)
+        result: str = WorkIDCalculator.permanent_id(
+            norm_title, norm_author, grouping_category
+        )
         return result
 
     UNKNOWN_AUTHOR = "[Unknown]"

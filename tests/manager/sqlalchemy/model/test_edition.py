@@ -1,3 +1,4 @@
+import datetime
 import random
 import string
 from datetime import timedelta
@@ -770,6 +771,149 @@ class TestEdition:
         edition.medium = None
         edition.calculate_permanent_work_id()
         assert None == edition.permanent_work_id
+
+    # The permanent work IDs below were calculated before periodicals got a
+    # grouping category of their own. They are pinned here so that a change to
+    # the way we group things can't quietly change the permanent work ID of
+    # everything that isn't a periodical.
+    PINNED_PERMANENT_WORK_IDS = {
+        Edition.BOOK_MEDIUM: "4823fe05-ec45-73d9-d234-c66756b666d1",
+        Edition.AUDIO_MEDIUM: "4823fe05-ec45-73d9-d234-c66756b666d1",
+        Edition.MUSIC_MEDIUM: "7fe17ac2-22f7-e210-9f13-a83b044a5330",
+        Edition.VIDEO_MEDIUM: "47e474b4-670a-1621-de81-c0b6a60e452a",
+        Edition.IMAGE_MEDIUM: "dfafea0e-dd29-e3de-90e3-951723d29aff",
+        Edition.COURSEWARE_MEDIUM: "ec94bf94-6785-93e2-035c-f324f4f172c2",
+    }
+
+    def test_permanent_work_id_unchanged_for_everything_but_periodicals(
+        self, db: DatabaseTransactionFixture
+    ):
+        # Nothing that isn't a periodical changes its permanent work ID.
+        for medium, expected in self.PINNED_PERMANENT_WORK_IDS.items():
+            edition = db.edition(title="Fahrenheit 451", authors="Bradbury, Ray")
+            edition.medium = medium
+            edition.calculate_permanent_work_id()
+            assert edition.permanent_work_id == expected
+
+    def test_publication_date_does_not_affect_a_book(
+        self, db: DatabaseTransactionFixture
+    ):
+        # The publication date and the issue position only count for
+        # periodicals. A book ignores both.
+        edition = db.edition(title="Fahrenheit 451", authors="Bradbury, Ray")
+        edition.calculate_permanent_work_id()
+        before = edition.permanent_work_id
+
+        edition.published = datetime.date(2024, 3, 1)
+        edition.issue_position = 3
+        edition.calculate_permanent_work_id()
+        assert edition.permanent_work_id == before
+        assert before == self.PINNED_PERMANENT_WORK_IDS[Edition.BOOK_MEDIUM]
+
+    def _issue(
+        self,
+        db: DatabaseTransactionFixture,
+        published: datetime.date | None = None,
+        issue_position: int | None = None,
+        data_source_name: str = DataSource.GUTENBERG,
+        identifier_type: str = Identifier.GUTENBERG_ID,
+        with_open_access_download: bool = False,
+    ):
+        """Make one issue of The Palace Review.
+
+        Every issue carries the same title and the same author, which is what
+        made them all collapse into one Work.
+        """
+        made = db.edition(
+            title="The Palace Review",
+            authors="Palace, Editors",
+            data_source_name=data_source_name,
+            identifier_type=identifier_type,
+            with_open_access_download=with_open_access_download,
+        )
+        edition, pool = made if with_open_access_download else (made, None)
+        edition.medium = Edition.PERIODICAL_MEDIUM
+        edition.published = published
+        edition.issue_position = issue_position
+        edition.calculate_permanent_work_id()
+        return edition, pool
+
+    def test_twelve_issues_get_twelve_permanent_work_ids(
+        self, db: DatabaseTransactionFixture
+    ):
+        # A year of a monthly magazine: same title, same author, twelve issues.
+        editions = [
+            self._issue(db, published=datetime.date(2024, month, 1))[0]
+            for month in range(1, 13)
+        ]
+        permanent_work_ids = {edition.permanent_work_id for edition in editions}
+        assert len(permanent_work_ids) == 12
+        assert None not in permanent_work_ids
+
+    def test_twelve_issues_get_twelve_works(self, db: DatabaseTransactionFixture):
+        # Open access pools are grouped into Works by permanent work ID, so
+        # this is where the issues used to collapse into one Work.
+        works = set()
+        for month in range(1, 13):
+            edition, pool = self._issue(
+                db,
+                published=datetime.date(2024, month, 1),
+                with_open_access_download=True,
+            )
+            assert pool is not None
+            work, _ = pool.calculate_work()
+            works.add(work)
+
+        assert len(works) == 12
+
+    def test_the_same_issue_from_two_sources_is_one_work(
+        self, db: DatabaseTransactionFixture
+    ):
+        # Two sources, one issue. These should still come together.
+        published = datetime.date(2024, 3, 1)
+        first, first_pool = self._issue(
+            db,
+            published=published,
+            data_source_name=DataSource.GUTENBERG,
+            identifier_type=Identifier.GUTENBERG_ID,
+            with_open_access_download=True,
+        )
+        second, second_pool = self._issue(
+            db,
+            published=published,
+            data_source_name=DataSource.STANDARD_EBOOKS,
+            identifier_type=Identifier.URI,
+            with_open_access_download=True,
+        )
+
+        assert first.permanent_work_id == second.permanent_work_id
+        assert first_pool is not None and second_pool is not None
+        first_work, _ = first_pool.calculate_work()
+        second_work, _ = second_pool.calculate_work()
+        assert first_work == second_work
+
+    def test_issue_position_tells_issues_apart_without_a_date(
+        self, db: DatabaseTransactionFixture
+    ):
+        # Not every source gives us a publication date. The position of the
+        # issue within its volume will do instead.
+        first, _ = self._issue(db, issue_position=1)
+        second, _ = self._issue(db, issue_position=2)
+        assert first.permanent_work_id != second.permanent_work_id
+
+    def test_an_issue_with_no_date_and_no_position(
+        self, db: DatabaseTransactionFixture
+    ):
+        # With nothing to tell them apart, two issues still share a permanent
+        # work ID. We have no way to do better, and guessing would split
+        # issues that are really the same.
+        first, _ = self._issue(db)
+        second, _ = self._issue(db)
+        assert first.permanent_work_id == second.permanent_work_id
+
+        # It is still not the ID it would have had as a book, because a
+        # periodical is no longer grouped with books.
+        assert first.permanent_work_id != "1229788b-6b12-bb9c-99bf-b255379303e3"
 
     def test_choose_cover_can_choose_full_image_and_thumbnail_separately(
         self, db: DatabaseTransactionFixture
