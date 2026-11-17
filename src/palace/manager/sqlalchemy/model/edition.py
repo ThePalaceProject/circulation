@@ -46,6 +46,10 @@ from palace.manager.util.permanent_work_id import WorkIDCalculator
 
 if TYPE_CHECKING:
     from palace.manager.sqlalchemy.model.customlist import CustomListEntry
+    from palace.manager.sqlalchemy.model.periodical import (
+        Periodical,
+        PeriodicalVolume,
+    )
     from palace.manager.sqlalchemy.model.resource import Resource
     from palace.manager.sqlalchemy.model.work import Work
 
@@ -120,6 +124,32 @@ class Edition(Base, EditionConstants):
     subtitle = Column(Unicode, index=True)
     series = Column(Unicode, index=True)
     series_position = Column(Integer)
+
+    # When this Edition is an issue of a magazine, journal or newspaper,
+    # these say which magazine, which volume of it, and where the issue
+    # sorts within that volume.
+    #
+    # They are separate from `series` and `series_position` above, which
+    # are left alone: a book that is part of a series is not a serial, and
+    # nothing about those two columns changes.
+    periodical_id = Column(
+        Integer, ForeignKey("periodicals.id"), index=True, nullable=True
+    )
+    periodical: Mapped[Periodical | None] = relationship(
+        "Periodical", back_populates="editions"
+    )
+
+    periodical_volume_id = Column(
+        Integer,
+        ForeignKey("periodical_volumes.id"),
+        index=True,
+        nullable=True,
+    )
+    periodical_volume: Mapped[PeriodicalVolume | None] = relationship(
+        "PeriodicalVolume", back_populates="editions"
+    )
+
+    issue_position = Column(Integer, index=True)
 
     # This is not a foreign key per se; it's a calculated UUID-like
     # identifier for this work based on its title and author, used to

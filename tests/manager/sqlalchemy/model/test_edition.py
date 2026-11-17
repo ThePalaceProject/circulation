@@ -17,12 +17,55 @@ from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
+from palace.manager.sqlalchemy.model.periodical import (
+    Periodical,
+    PeriodicalVolume,
+)
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.sqlalchemy.util import get_one_or_create
 from tests.fixtures.database import DatabaseTransactionFixture
 
 
 class TestEdition:
+    def test_periodical_columns_are_empty_for_a_book(
+        self, db: DatabaseTransactionFixture
+    ):
+        # A book is not an issue of anything, so the three periodical
+        # columns stay empty.
+        edition = db.edition(series="The Lord of the Rings")
+        edition.series_position = 2
+        db.session.flush()
+
+        assert edition.periodical is None
+        assert edition.periodical_id is None
+        assert edition.periodical_volume is None
+        assert edition.periodical_volume_id is None
+        assert edition.issue_position is None
+
+        # `series` and `series_position` keep working exactly as before.
+        assert edition.series == "The Lord of the Rings"
+        assert edition.series_position == 2
+
+    def test_periodical_columns_do_not_touch_series(
+        self, db: DatabaseTransactionFixture
+    ):
+        # Putting an edition in a periodical leaves `series` and
+        # `series_position` alone. The two ideas are kept apart.
+        periodical = Periodical(title="The Palace Review")
+        volume = PeriodicalVolume(periodical=periodical, label="Volume 1", position=1)
+        edition = db.edition(title="March 2026")
+        edition.periodical = periodical
+        edition.periodical_volume = volume
+        edition.issue_position = 3
+        db.session.add_all([periodical, volume])
+        db.session.flush()
+
+        assert edition.periodical == periodical
+        assert edition.periodical_volume == volume
+        assert edition.issue_position == 3
+        assert edition.series is None
+        assert edition.series_position is None
+
     def test_audio_mpeg_is_audiobook(self):
         assert Edition.AUDIO_MEDIUM == Edition.medium_from_media_type("audio/mpeg")
 

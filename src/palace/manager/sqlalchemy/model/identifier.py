@@ -56,6 +56,7 @@ if TYPE_CHECKING:
     from palace.manager.sqlalchemy.model.collection import Collection
     from palace.manager.sqlalchemy.model.edition import Edition
     from palace.manager.sqlalchemy.model.patron import Annotation
+    from palace.manager.sqlalchemy.model.periodical import Periodical
     from palace.manager.sqlalchemy.model.resource import Hyperlink, Resource
     from palace.manager.sqlalchemy.model.work import Work
 
@@ -293,6 +294,11 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
     # several Editions.
     primarily_identifies: Mapped[list[Edition]] = relationship(
         "Edition", back_populates="primary_identifier"
+    )
+
+    # An ISSN identifies a periodical.
+    periodicals: Mapped[list[Periodical]] = relationship(
+        "Periodical", back_populates="identifier"
     )
 
     # One Identifier may serve as the identifier for many

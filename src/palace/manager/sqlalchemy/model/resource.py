@@ -54,6 +54,7 @@ from palace.manager.util.http.http import HTTP
 if TYPE_CHECKING:
     from palace.manager.sqlalchemy.model.datasource import DataSource
     from palace.manager.sqlalchemy.model.identifier import Identifier
+    from palace.manager.sqlalchemy.model.periodical import Periodical
     from palace.manager.sqlalchemy.model.work import Work
 
 
@@ -86,6 +87,13 @@ class Resource(Base):
 
     summary_works: Mapped[list[Work]] = relationship(
         "Work", back_populates="summary", foreign_keys="Work.summary_id"
+    )
+
+    # Many Periodicals may use this resource as their cover image.
+    cover_periodicals: Mapped[list[Periodical]] = relationship(
+        "Periodical",
+        back_populates="cover",
+        foreign_keys="Periodical.cover_id",
     )
 
     # Many LicensePools (but probably one at most) may use this

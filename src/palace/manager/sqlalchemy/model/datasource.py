@@ -27,6 +27,7 @@ if TYPE_CHECKING:
         LicensePoolDeliveryMechanism,
     )
     from palace.manager.sqlalchemy.model.measurement import Measurement
+    from palace.manager.sqlalchemy.model.periodical import Periodical
     from palace.manager.sqlalchemy.model.resource import Hyperlink, Resource
 
 
@@ -66,6 +67,12 @@ class DataSource(Base, HasSessionCache, DataSourceConstants):
     # One DataSource can provide many Hyperlinks.
     links: Mapped[list[Hyperlink]] = relationship(
         "Hyperlink", back_populates="data_source"
+    )
+
+    # One DataSource can provide many Periodicals. This records where the
+    # metadata came from; it is not part of a Periodical's identity.
+    periodicals: Mapped[list[Periodical]] = relationship(
+        "Periodical", back_populates="data_source"
     )
 
     # One DataSource can provide many Resources.

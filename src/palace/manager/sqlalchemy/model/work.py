@@ -79,6 +79,7 @@ if TYPE_CHECKING:
     from palace.manager.search.external_search import ExternalSearchIndex
     from palace.manager.sqlalchemy.model.customlist import CustomList, CustomListEntry
     from palace.manager.sqlalchemy.model.library import Library
+    from palace.manager.sqlalchemy.model.periodical import Periodical
     from palace.manager.sqlalchemy.model.resource import Resource
 
 
@@ -272,6 +273,16 @@ class Work(Base, LoggerMixin):
         if not self.presentation_edition:
             return None
         return self.presentation_edition.subtitle
+
+    @property
+    def periodical(self) -> Periodical | None:
+        """The magazine, journal or newspaper this work is an issue of.
+
+        None for anything that is not a serial.
+        """
+        if not self.presentation_edition:
+            return None
+        return self.presentation_edition.periodical
 
     @property
     def series(self):

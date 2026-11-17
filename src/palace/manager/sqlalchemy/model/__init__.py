@@ -29,6 +29,7 @@ import palace.manager.sqlalchemy.model.licensing
 import palace.manager.sqlalchemy.model.marcfile
 import palace.manager.sqlalchemy.model.measurement
 import palace.manager.sqlalchemy.model.patron
+import palace.manager.sqlalchemy.model.periodical
 import palace.manager.sqlalchemy.model.resource
 import palace.manager.sqlalchemy.model.saml
 import palace.manager.sqlalchemy.model.startup_task
