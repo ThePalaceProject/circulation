@@ -19,8 +19,11 @@ import re
 from palace.util.exceptions import PalaceValueError
 
 # An ISSN, with or without its conventional hyphen, and with a check character
-# that may be a digit or an "X" in either case.
-ISSN_RE = re.compile(r"^(\d{4})-?(\d{3})([0-9Xx])$")
+# that may be a digit or an "X" in either case. Only ASCII digits count: \d
+# would also match digits from other scripts, which look like a normal ISSN
+# but are a different string, so the same magazine would end up with two
+# identifiers.
+ISSN_RE = re.compile(r"^([0-9]{4})-?([0-9]{3})([0-9Xx])$")
 
 # When calculating the check character, the first digit of the ISSN is
 # multiplied by 8, the second by 7, and so on down to 2.

@@ -31,6 +31,10 @@ class TestNormalizeISSN:
             pytest.param("0317--8471", id="doubled_hyphen"),
             pytest.param("2434-561Y", id="letter_other_than_x"),
             pytest.param("978-0-306-40615-7", id="isbn"),
+            pytest.param(
+                "\uff10\uff13\uff11\uff17-\uff18\uff14\uff17\uff11",
+                id="full_width_digits",
+            ),
         ],
     )
     def test_malformed(self, value: str) -> None:

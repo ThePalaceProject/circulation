@@ -118,8 +118,8 @@ class ISSNURNIdentifierParser(IdentifierParser):
             return (Identifier.ISSN, normalize_issn(issn))
 
         self.log.debug(
-            'Finished parsing identifier string "{}". It does not contain a '
-            "ISSN URN ID".format(identifier_string)
+            f'Finished parsing identifier string "{identifier_string}". It does '
+            "not contain an ISSN URN ID"
         )
 
         return None
@@ -419,10 +419,10 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
 
         if primary_type in (Identifier.OVERDRIVE_ID, Identifier.BIBLIOTHECA_ID):
             foreign_identifier = foreign_identifier.lower()
-        elif primary_type == Identifier.ISSN and is_valid_issn(foreign_identifier):
-            # Store every ISSN the same way, so the same magazine written
-            # two different ways doesn't become two identifiers. An ISSN we
-            # can't make sense of is left alone and rejected just below.
+        elif primary_type == Identifier.ISSN:
+            # Store every ISSN the same way, so the same magazine written two
+            # different ways doesn't become two identifiers. An ISSN we can't
+            # make sense of raises an InvalidISSNError, a kind of ValueError.
             foreign_identifier = normalize_issn(foreign_identifier)
 
         if not cls.valid_as_foreign_identifier(primary_type, foreign_identifier):
@@ -442,11 +442,12 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
         invalid (e.g. all Overdrive IDs look like UUIDs, but we
         currently don't enforce that). We only reject an ID out of
         hand if it will cause problems with a third-party API.
+        ISSNs are the exception: an ISSN carries a check character, so
+        we can tell a mistyped one from a real one, and we don't give it
+        the benefit of the doubt.
         """
         if type == Identifier.ISSN:
-            # An ISSN carries a check character, so we can tell a mistyped
-            # one from a real one. A bad ISSN would quietly split a magazine
-            # in two, so we don't give it the benefit of the doubt.
+            # A bad ISSN would quietly split one magazine into two.
             return is_valid_issn(id)
 
         forbidden_characters = ""
