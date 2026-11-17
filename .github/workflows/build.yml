@@ -85,8 +85,17 @@ jobs:
           echo "baseimage=$baseimage" >> "$GITHUB_OUTPUT"
 
       # See comment here: https://github.com/actions/runner-images/issues/1187#issuecomment-686735760
+      # Do not hard-code eth0. Some runner images may give the network interface a different name,
+      # so use the interface on the default route. The interface list helps debug failures.
       - name: Disable network offload
-        run: sudo ethtool -K eth0 tx off rx off
+        run: |
+          ip -o link
+          iface="$(ip -o route show default | awk '{print $5; exit}')"
+          if [ -z "$iface" ]; then
+            echo "::error::No network interface found on the default route."
+            exit 1
+          fi
+          sudo ethtool -K "$iface" tx off rx off
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -293,8 +302,17 @@ jobs:
           echo "WEBAPP_IMAGE=$IMAGE" >> $GITHUB_ENV
 
       # See comment here: https://github.com/actions/runner-images/issues/1187#issuecomment-686735760
+      # Do not hard-code eth0. Some runner images may give the network interface a different name,
+      # so use the interface on the default route. The interface list helps debug failures.
       - name: Disable network offload
-        run: sudo ethtool -K eth0 tx off rx off
+        run: |
+          ip -o link
+          iface="$(ip -o route show default | awk '{print $5; exit}')"
+          if [ -z "$iface" ]; then
+            echo "::error::No network interface found on the default route."
+            exit 1
+          fi
+          sudo ethtool -K "$iface" tx off rx off
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -353,8 +371,17 @@ jobs:
           echo "WEBAPP_IMAGE=$IMAGE" >> $GITHUB_ENV
 
       # See comment here: https://github.com/actions/runner-images/issues/1187#issuecomment-686735760
+      # Do not hard-code eth0. Some runner images may give the network interface a different name,
+      # so use the interface on the default route. The interface list helps debug failures.
       - name: Disable network offload
-        run: sudo ethtool -K eth0 tx off rx off
+        run: |
+          ip -o link
+          iface="$(ip -o route show default | awk '{print $5; exit}')"
+          if [ -z "$iface" ]; then
+            echo "::error::No network interface found on the default route."
+            exit 1
+          fi
+          sudo ethtool -K "$iface" tx off rx off
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -413,8 +440,17 @@ jobs:
           echo "WEBAPP_IMAGE=$IMAGE" >> $GITHUB_ENV
 
       # See comment here: https://github.com/actions/runner-images/issues/1187#issuecomment-686735760
+      # Do not hard-code eth0. Some runner images may give the network interface a different name,
+      # so use the interface on the default route. The interface list helps debug failures.
       - name: Disable network offload
-        run: sudo ethtool -K eth0 tx off rx off
+        run: |
+          ip -o link
+          iface="$(ip -o route show default | awk '{print $5; exit}')"
+          if [ -z "$iface" ]; then
+            echo "::error::No network interface found on the default route."
+            exit 1
+          fi
+          sudo ethtool -K "$iface" tx off rx off
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -455,8 +491,17 @@ jobs:
           echo "WEBAPP_IMAGE=$IMAGE" >> $GITHUB_ENV
 
       # See comment here: https://github.com/actions/runner-images/issues/1187#issuecomment-686735760
+      # Do not hard-code eth0. Some runner images may give the network interface a different name,
+      # so use the interface on the default route. The interface list helps debug failures.
       - name: Disable network offload
-        run: sudo ethtool -K eth0 tx off rx off
+        run: |
+          ip -o link
+          iface="$(ip -o route show default | awk '{print $5; exit}')"
+          if [ -z "$iface" ]; then
+            echo "::error::No network interface found on the default route."
+            exit 1
+          fi
+          sudo ethtool -K "$iface" tx off rx off
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
