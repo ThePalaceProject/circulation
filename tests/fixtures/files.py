@@ -69,6 +69,19 @@ def opds2_files_fixture() -> OPDS2FilesFixture:
     return OPDS2FilesFixture()
 
 
+class PeriodicalFilesFixture(FilesFixture):
+    """A fixture providing access to periodical (magazine, journal) feed files."""
+
+    def __init__(self):
+        super().__init__("periodicals")
+
+
+@pytest.fixture()
+def periodical_files_fixture() -> PeriodicalFilesFixture:
+    """A fixture providing access to periodical feed files."""
+    return PeriodicalFilesFixture()
+
+
 class OPDS2WithODLFilesFixture(FilesFixture):
     """A fixture providing access to OPDS2 + ODL files."""
 

@@ -3,9 +3,10 @@ from __future__ import annotations
 from collections.abc import Sequence
 from enum import StrEnum, auto
 from functools import cached_property
-from typing import Any, Literal, cast
+from typing import Any, Final, Literal, cast
 
 from pydantic import (
+    AliasChoices,
     Field,
     NonNegativeInt,
     PositiveFloat,
@@ -238,8 +239,48 @@ class Subject(Named):
     links: CompactCollection[Link] = Field(default_factory=CompactCollection)
 
 
+class SerialType(StrEnum):
+    """
+    What kind of serial a publication belongs to.
+
+    These match the serial types we store on a periodical, so the importer can
+    pass the value straight through.
+    """
+
+    MAGAZINE = auto()
+    JOURNAL = auto()
+    NEWSPAPER = auto()
+
+    PERIODICAL = auto()
+    """The feed says it comes out in issues, but not what kind of thing it is."""
+
+
+class SerialReference(Contributor):
+    """
+    The serial a publication belongs to: a magazine, journal or newspaper.
+
+    This is a normal RWPM contributor object, so it already carries ``name``,
+    ``sortAs``, ``identifier`` and ``position``. Some feeds put the volume on
+    this object instead of giving it its own ``belongsTo`` key, so we accept it
+    here as well. Read the volume through :attr:`BelongsTo.volume`, which looks
+    in both places.
+    """
+
+    volume: str | None = None
+
+
 class BelongsTo(BaseOpdsModel):
     """
+    The series, collections and serials a publication belongs to.
+
+    Beyond the ``series`` and ``collection`` keys in the specification, feeds in
+    the wild use a handful of keys to say that a publication is one issue of a
+    serial. Each publisher picks a different one, and some use the schema.org
+    name rather than a plain word. We accept all of them and sort it out here,
+    so that everything reading this model sees one idea instead of a list of
+    special cases. Use :attr:`serial`, :attr:`serial_type` and :attr:`volume`
+    rather than the raw fields.
+
     https://github.com/readium/webpub-manifest/tree/master/contexts/default#collections--series
     https://github.com/readium/webpub-manifest/blob/b43ec57fd28028316272987ccb10c326f0130280/schema/metadata.schema.json#L138-L147
     """
@@ -255,6 +296,96 @@ class BelongsTo(BaseOpdsModel):
     @cached_property
     def collections(self) -> Sequence[Contributor]:
         return _named_or_sequence_to_sequence(self.collection, Contributor)
+
+    magazine: StrModelOrTuple[SerialReference] | None = None
+    journal: StrModelOrTuple[SerialReference] | None = None
+    newspaper: StrModelOrTuple[SerialReference] | None = None
+    periodical: StrModelOrTuple[SerialReference] | None = None
+
+    schema_periodical: StrModelOrTuple[SerialReference] | None = Field(
+        None,
+        serialization_alias="schema:Periodical",
+        validation_alias=AliasChoices(
+            "schema:Periodical",
+            "schema:periodical",
+            "http://schema.org/Periodical",
+            "https://schema.org/Periodical",
+        ),
+    )
+    """
+    The schema.org name for a serial. This is not part of RWPM, but some feeds
+    send it. We read the short form and both the http and https spellings of
+    the full name, and write back whichever we read.
+
+    https://schema.org/Periodical
+    """
+
+    volume_data: StrModelOrTuple[Contributor] | None = Field(None, alias="volume")
+
+    @cached_property
+    def volumes(self) -> Sequence[Contributor]:
+        return _named_or_sequence_to_sequence(self.volume_data, Contributor)
+
+    @cached_property
+    def serials(self) -> Sequence[SerialReference]:
+        """
+        Every serial this publication belongs to, whichever key it came in on.
+
+        More specific keys come first, so a feed that sends both ``magazine``
+        and ``periodical`` is read as a magazine.
+        """
+        return tuple(
+            serial
+            for field_name, _ in _SERIAL_FIELDS
+            for serial in _named_or_sequence_to_sequence(
+                getattr(self, field_name), SerialReference
+            )
+        )
+
+    @cached_property
+    def serial(self) -> SerialReference | None:
+        """The serial this publication is an issue of, or None if it is not one."""
+        return self.serials[0] if self.serials else None
+
+    @cached_property
+    def serial_type(self) -> SerialType | None:
+        """
+        What kind of serial the feed said this is, or None if it did not say.
+
+        A feed that only says "periodical" gets :attr:`SerialType.PERIODICAL`,
+        which means we know it comes out in issues but not what kind it is.
+        """
+        for field_name, serial_type in _SERIAL_FIELDS:
+            if _named_or_sequence_to_sequence(
+                getattr(self, field_name), SerialReference
+            ):
+                return serial_type
+        return None
+
+    @cached_property
+    def volume(self) -> str | None:
+        """
+        The volume this issue belongs to, or None if the feed did not give one.
+
+        Feeds either give the volume its own ``belongsTo`` key or flatten it
+        onto the serial. We look in its own key first, then on the serial.
+        """
+        for volume in self.volumes:
+            return str(volume.name)
+        for serial in self.serials:
+            if serial.volume is not None:
+                return serial.volume
+        return None
+
+
+_SERIAL_FIELDS: Final[tuple[tuple[str, SerialType], ...]] = (
+    ("magazine", SerialType.MAGAZINE),
+    ("journal", SerialType.JOURNAL),
+    ("newspaper", SerialType.NEWSPAPER),
+    ("periodical", SerialType.PERIODICAL),
+    ("schema_periodical", SerialType.PERIODICAL),
+)
+"""The ``belongsTo`` keys that name a serial, most specific first."""
 
 
 def _named_or_sequence_to_sequence[NamedT: Named](
