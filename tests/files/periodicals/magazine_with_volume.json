@@ -1,0 +1,53 @@
+{
+  "metadata": {
+    "title": "Magazine issue with a volume"
+  },
+  "links": [
+    {
+      "rel": "self",
+      "href": "https://feed.example.com/publications",
+      "type": "application/opds+json"
+    }
+  ],
+  "publications": [
+    {
+      "metadata": {
+        "@type": "https://schema.org/PublicationIssue",
+        "identifier": "urn:uuid:9f2a1b7c-6a1e-4d33-9f0b-2c6a8e4f1d55",
+        "title": "November 2026",
+        "sortAs": "2026-11",
+        "language": "en",
+        "publisher": "Example Publishing Co.",
+        "published": "2026-11-01",
+        "belongsTo": {
+          "magazine": {
+            "name": "Example Science Monthly",
+            "sortAs": "Example Science Monthly",
+            "identifier": "urn:issn:1234-5679",
+            "position": 11
+          },
+          "volume": {
+            "name": "2026",
+            "position": 2026
+          }
+        }
+      },
+      "links": [
+        {
+          "rel": "http://opds-spec.org/acquisition",
+          "href": "https://feed.example.com/issues/9f2a1b7c/manifest.json{?authentication_token}",
+          "type": "application/webpub+json",
+          "templated": true
+        }
+      ],
+      "images": [
+        {
+          "href": "https://cdn.example.com/covers/9f2a1b7c.jpg",
+          "type": "image/jpeg",
+          "width": 1400,
+          "height": 1867
+        }
+      ]
+    }
+  ]
+}

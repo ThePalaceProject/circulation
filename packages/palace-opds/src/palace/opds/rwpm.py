@@ -260,13 +260,28 @@ class SerialReference(Contributor):
     The serial a publication belongs to: a magazine, journal or newspaper.
 
     This is a normal RWPM contributor object, so it already carries ``name``,
-    ``sortAs``, ``identifier`` and ``position``. Some feeds put the volume on
-    this object instead of giving it its own ``belongsTo`` key, so we accept it
-    here as well. Read the volume through :attr:`BelongsTo.volume`, which looks
-    in both places.
+    ``sortAs``, ``identifier`` and ``position``.
     """
 
-    volume: str | None = None
+    position: int | float | None = None  # type: ignore[assignment] # widens Contributor.position
+    """
+    Where this issue sits in the serial.
+
+    This widens the whole number a contributor's position allows. An issue's
+    position may be a decimal, so that an issue sitting between two numbered
+    issues (#0, a half issue, #14.1) still sorts in the right place. Feeds also
+    use a date here, such as ``20261124``, which is a whole number and fits
+    either way. We keep whichever we were given, because the value is only ever
+    a sort key.
+    """
+
+    volume: str | int | float | None = None
+    """
+    The volume, where the feed puts it here instead of in its own ``volume``
+    key. It is written as a plain value rather than an object, so it may be a
+    number. Read it through :attr:`BelongsTo.volume`, which looks in both
+    places and always gives back a string.
+    """
 
 
 class BelongsTo(BaseOpdsModel):
@@ -307,15 +322,19 @@ class BelongsTo(BaseOpdsModel):
         serialization_alias="schema:Periodical",
         validation_alias=AliasChoices(
             "schema:Periodical",
-            "schema:periodical",
             "http://schema.org/Periodical",
             "https://schema.org/Periodical",
         ),
     )
     """
-    The schema.org name for a serial. This is not part of RWPM, but some feeds
-    send it. We read the short form and both the http and https spellings of
-    the full name, and write back whichever we read.
+    The schema.org name for a serial. This is not an RWPM term and feeds are
+    asked not to send it, but some do, so we read it rather than drop the
+    publication's only link to its magazine. We read the short form and both
+    the http and https spellings of the full name, and write back whichever we
+    read.
+
+    A feed using this key has told us nothing about what kind of serial it is,
+    and in practice it is always a magazine, so we read it as one.
 
     https://schema.org/Periodical
     """
@@ -374,8 +393,19 @@ class BelongsTo(BaseOpdsModel):
             return str(volume.name)
         for serial in self.serials:
             if serial.volume is not None:
-                return serial.volume
+                return _scalar_to_str(serial.volume)
         return None
+
+
+def _scalar_to_str(value: str | int | float) -> str:
+    """
+    Render a flattened volume as the string a reader would see.
+
+    A whole number written as a decimal, ``2026.0``, comes back as ``"2026"``.
+    """
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
 
 
 _SERIAL_FIELDS: Final[tuple[tuple[str, SerialType], ...]] = (
@@ -383,9 +413,14 @@ _SERIAL_FIELDS: Final[tuple[tuple[str, SerialType], ...]] = (
     ("journal", SerialType.JOURNAL),
     ("newspaper", SerialType.NEWSPAPER),
     ("periodical", SerialType.PERIODICAL),
-    ("schema_periodical", SerialType.PERIODICAL),
+    ("schema_periodical", SerialType.MAGAZINE),
 )
-"""The ``belongsTo`` keys that name a serial, most specific first."""
+"""
+The ``belongsTo`` keys that name a serial, most specific first.
+
+``periodical`` is the generic key, used for a serial whose kind the feed does
+not say, and for comic series, which have no key of their own.
+"""
 
 
 def _named_or_sequence_to_sequence[NamedT: Named](
