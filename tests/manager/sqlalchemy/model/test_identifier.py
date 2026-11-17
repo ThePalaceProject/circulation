@@ -86,7 +86,9 @@ class TestIdentifier:
             Identifier.for_foreign_id(db.session, Identifier.BIBLIOTHECA_ID, "foo/bar")
         assert '"foo/bar" is not a valid Bibliotheca ID.' in str(excinfo.value)
 
-    def test_for_foreign_id_normalizes_issn(self, db: DatabaseTransactionFixture):
+    def test_for_foreign_id_normalizes_issn(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
         # However an ISSN is written, we end up with a single identifier for it.
         canonical, was_new = Identifier.for_foreign_id(
             db.session, Identifier.ISSN, "0317-8471"
@@ -109,7 +111,9 @@ class TestIdentifier:
         assert "2434-561X" == with_x.identifier
         assert True == was_new
 
-    def test_for_foreign_id_rejects_invalid_issn(self, db: DatabaseTransactionFixture):
+    def test_for_foreign_id_rejects_invalid_issn(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
         # This ISSN's check character doesn't match the rest of the number.
         with pytest.raises(ValueError) as excinfo:
             Identifier.for_foreign_id(db.session, Identifier.ISSN, "0317-8470")
@@ -329,7 +333,7 @@ class TestIdentifier:
             must_support_license_pools=True,
         )
 
-    def test_parse_urn_issn(self, db: DatabaseTransactionFixture):
+    def test_parse_urn_issn(self, db: DatabaseTransactionFixture) -> None:
         # An ISSN URN becomes an ISSN identifier, in canonical form.
         identifier, is_new = Identifier.parse_urn(db.session, "urn:issn:0317-8471")
         assert isinstance(identifier, Identifier)
@@ -922,7 +926,9 @@ class TestISSNURNIdentifierParser:
             ),
         ],
     )
-    def test_parse(self, identifier_string, expected_result):
+    def test_parse(
+        self, identifier_string: str, expected_result: tuple[str, str] | None
+    ) -> None:
         parser = ISSNURNIdentifierParser()
         result = parser.parse(identifier_string)
         assert expected_result == result
@@ -935,7 +941,7 @@ class TestISSNURNIdentifierParser:
             pytest.param("urn:issn:", id="empty"),
         ],
     )
-    def test_parse_rejects_malformed_issn(self, identifier_string):
+    def test_parse_rejects_malformed_issn(self, identifier_string: str) -> None:
         parser = ISSNURNIdentifierParser()
         with pytest.raises(ValueError):
             parser.parse(identifier_string)
