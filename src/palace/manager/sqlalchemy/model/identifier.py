@@ -49,6 +49,7 @@ from palace.manager.sqlalchemy.model.licensing import (
 )
 from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.sqlalchemy.util import create, get_one, get_one_or_create
+from palace.manager.util.issn import is_valid_issn, normalize_issn
 from palace.manager.util.summary import SummaryEvaluator
 
 if TYPE_CHECKING:
@@ -98,6 +99,27 @@ class ISBNURNIdentifierParser(IdentifierParser):
         self.log.debug(
             'Finished parsing identifier string "{}". It does not contain a '
             "ISBN URN ID".format(identifier_string)
+        )
+
+        return None
+
+
+class ISSNURNIdentifierParser(IdentifierParser):
+    """Parser for ISSN URN IDs."""
+
+    def parse(self, identifier_string: str) -> tuple[str, str] | None:
+        self.log.debug(f'Started parsing identifier string "{identifier_string}"')
+
+        if identifier_string.lower().startswith(Identifier.ISSN_URN_SCHEME_PREFIX):
+            issn = unquote(identifier_string[len(Identifier.ISSN_URN_SCHEME_PREFIX) :])
+            # Raises an InvalidISSNError (a kind of ValueError) if this isn't
+            # a real ISSN. We store ISSNs in one canonical form so that a
+            # magazine can't end up split across several identifiers.
+            return (Identifier.ISSN, normalize_issn(issn))
+
+        self.log.debug(
+            'Finished parsing identifier string "{}". It does not contain a '
+            "ISSN URN ID".format(identifier_string)
         )
 
         return None
@@ -397,6 +419,11 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
 
         if primary_type in (Identifier.OVERDRIVE_ID, Identifier.BIBLIOTHECA_ID):
             foreign_identifier = foreign_identifier.lower()
+        elif primary_type == Identifier.ISSN and is_valid_issn(foreign_identifier):
+            # Store every ISSN the same way, so the same magazine written
+            # two different ways doesn't become two identifiers. An ISSN we
+            # can't make sense of is left alone and rejected just below.
+            foreign_identifier = normalize_issn(foreign_identifier)
 
         if not cls.valid_as_foreign_identifier(primary_type, foreign_identifier):
             raise ValueError(f'"{foreign_identifier}" is not a valid {primary_type}.')
@@ -416,6 +443,12 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
         currently don't enforce that). We only reject an ID out of
         hand if it will cause problems with a third-party API.
         """
+        if type == Identifier.ISSN:
+            # An ISSN carries a check character, so we can tell a mistyped
+            # one from a real one. A bad ISSN would quietly split a magazine
+            # in two, so we don't give it the benefit of the doubt.
+            return is_valid_issn(id)
+
         forbidden_characters = ""
         if type == Identifier.BIBLIOTHECA_ID:
             # IDs are joined with commas and provided as a URL path
@@ -439,6 +472,8 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
         identifier_text = quote(id_value)
         if id_type == Identifier.ISBN:
             return cls.ISBN_URN_SCHEME_PREFIX + identifier_text
+        elif id_type == Identifier.ISSN:
+            return cls.ISSN_URN_SCHEME_PREFIX + identifier_text
         elif id_type == Identifier.URI:
             return id_value
         elif id_type == Identifier.GUTENBERG_ID:
@@ -467,6 +502,7 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
         GutenbergIdentifierParser(),
         URIIdentifierParser(),
         ISBNURNIdentifierParser(),
+        ISSNURNIdentifierParser(),
         URNIdentifierParser(),
         ProQuestIdentifierParser(),
         GenericURNIdentifierParser(),
