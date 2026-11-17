@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from frozendict import frozendict
 
 from palace.manager.api.admin.problem_details import INVALID_CONFIGURATION_OPTION
 from palace.manager.integration.license.bibliotheca.constants import (
@@ -18,7 +19,9 @@ QA_URL = "https://partnerqa.yourcloudlibrary.com"
 
 
 class TestBibliothecaSettings:
-    REQUIRED = {"username": "a", "password": "b", "external_account_id": "c"}
+    REQUIRED = frozendict(
+        {"username": "a", "password": "b", "external_account_id": "c"}
+    )
 
     @pytest.mark.parametrize(
         "settings, expected, saved",
