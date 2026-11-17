@@ -363,6 +363,7 @@ addopts = [
     "--numprocesses=auto",
     "--strict-markers",
 ]
+asyncio_default_fixture_loop_scope = "function"
 asyncio_mode = "auto"
 filterwarnings = [
     "error::pydantic.PydanticDeprecatedSince20",
