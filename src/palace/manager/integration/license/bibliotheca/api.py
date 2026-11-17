@@ -79,7 +79,6 @@ class BibliothecaAPI(
     VERSION_HEADER = "3mcl-Version"
 
     DEFAULT_VERSION = "2.0"
-    DEFAULT_BASE_URL = "https://partner.yourcloudlibrary.com/"
 
     MAX_AGE = timedelta(days=730).seconds
     CAN_REVOKE_HOLD_WHEN_RESERVED = False
@@ -111,7 +110,7 @@ class BibliothecaAPI(
         self.account_id = self.settings.username
         self.account_key = self.settings.password
         self.library_id = self.settings.external_account_id
-        self.base_url = self.DEFAULT_BASE_URL
+        self.base_url = self.settings.server_url
 
         if not self.account_id or not self.account_key or not self.library_id:
             raise CannotLoadConfiguration("Bibliotheca configuration is incomplete.")

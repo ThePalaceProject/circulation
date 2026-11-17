@@ -11,3 +11,7 @@ BIBLIOTHECA_SERVICE_NAME = "Bibliotheca"
 # The format Bibliotheca uses for datetimes, both for the arguments it expects
 # on requests and for the timestamps in the documents it returns.
 BIBLIOTHECA_TIME_FORMAT = "%Y-%m-%dT%H:%M:%S"
+
+# The cloudLibrary production partner API. It is the default server URL for a
+# Bibliotheca collection.
+BIBLIOTHECA_DEFAULT_BASE_URL = "https://partner.yourcloudlibrary.com"

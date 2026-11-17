@@ -20,6 +20,12 @@ class BibliothecaAPITestFixture:
         )
         self.api = MockBibliothecaAPI(db.session, self.collection)
 
+    def api_with_settings(self, settings: dict[str, str]) -> MockBibliothecaAPI:
+        """Add ``settings`` to the collection and return a new API for it."""
+        config = self.collection.integration_configuration
+        config.settings_dict = {**config.settings_dict, **settings}
+        return MockBibliothecaAPI(self.db.session, self.collection)
+
 
 @pytest.fixture(scope="function")
 def bibliotheca_fixture(
