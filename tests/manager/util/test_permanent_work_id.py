@@ -6,7 +6,7 @@ from palace.manager.util.permanent_work_id import (
 )
 
 
-class TestPeriodicalGroupingCategory:
+class TestPermanentWorkId:
     def test_publication_date_is_used_when_we_have_one(self):
         # The date tells one issue from another.
         assert (
@@ -44,6 +44,32 @@ class TestPeriodicalGroupingCategory:
     def test_nothing_to_go_on(self):
         # With no date and no position we have nothing to tell issues apart.
         assert periodical_grouping_category() == PERIODICAL_GROUPING_CATEGORY
+
+    def test_volume_goes_in_front_of_the_issue_position(self):
+        # An issue position only counts within a volume, so position 3 of two
+        # different volumes must not come out the same.
+        first = periodical_grouping_category(issue_position=3, volume="1")
+        second = periodical_grouping_category(issue_position=3, volume="2")
+        assert first != second
+        assert first == "periodical/v1/3"
+
+    def test_volume_on_its_own(self):
+        # Knowing only the volume still keeps one volume apart from the next.
+        assert periodical_grouping_category(volume="12") == "periodical/v12"
+
+    def test_a_volume_is_not_an_issue_position(self):
+        # The volume is marked, so volume 12 and issue 12 don't collide.
+        assert periodical_grouping_category(
+            volume="12"
+        ) != periodical_grouping_category(issue_position=12)
+
+    def test_the_date_still_wins_over_the_volume(self):
+        # The date is used on its own, so an issue that came with a date, a
+        # volume and a position still matches one that came with the date
+        # alone.
+        assert periodical_grouping_category(
+            published=datetime.date(2024, 3, 1), issue_position=3, volume="1"
+        ) == periodical_grouping_category(published=datetime.date(2024, 3, 1))
 
     def test_a_periodical_is_never_a_book(self):
         for category in (

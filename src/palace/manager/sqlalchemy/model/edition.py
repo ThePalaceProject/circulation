@@ -705,6 +705,23 @@ class Edition(Base, EditionConstants):
             author = self.sort_author or self.author
         return author
 
+    @property
+    def volume_for_permanent_work_id(self) -> str | None:
+        """A stable name for the volume this issue belongs to.
+
+        An issue position only counts within a volume, so the volume has to go
+        into the permanent work ID alongside it. We prefer the volume's
+        position, which is a plain number, over its label, which is text a
+        source wrote and two sources may word differently.
+        """
+        volume = self.periodical_volume
+        if volume is None:
+            return None
+        if volume.position is not None:
+            return str(volume.position)
+        label: str | None = volume.label
+        return label
+
     def calculate_permanent_work_id(self, debug: bool = False) -> None:
         title = self.title_for_permanent_work_id
         # For an issue of a periodical this says which issue it is, so that two
@@ -713,6 +730,7 @@ class Edition(Base, EditionConstants):
             self.medium,
             published=self.published,
             issue_position=self.issue_position,
+            volume=self.volume_for_permanent_work_id,
         )
         if not title or not grouping_category:
             # If a book has no title or medium, it has no permanent work ID.

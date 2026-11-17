@@ -14,6 +14,7 @@ PERIODICAL_GROUPING_CATEGORY = "periodical"
 def periodical_grouping_category(
     published: datetime.date | None = None,
     issue_position: int | None = None,
+    volume: str | None = None,
 ) -> str:
     """Work out the grouping category for a single issue of a periodical.
 
@@ -22,22 +23,28 @@ def periodical_grouping_category(
     permanent work ID and collapse a whole run of issues into one Work. The
     grouping category is where we say which issue this is.
 
-    We use the publication date when we have one, and the position of the issue
-    when we do not. Both of these come from the issue itself rather than from
-    our database, so the same issue from two different sources still works out
-    to the same permanent work ID and the two still count as one Work.
+    The publication date is the best thing to say it with, so we use it alone
+    whenever we have one. Failing that we use the position of the issue, which
+    only counts within a volume, so the volume goes in front of it: position 3
+    of volume 1 and position 3 of volume 2 are different issues. A volume on
+    its own is still better than nothing, since it at least keeps one year of a
+    magazine apart from the next.
 
-    We only ever use one of the two. If we joined them, an issue that reached us
-    with a date and a position would not match the same issue from a source that
-    only gave us the date.
+    All of these come from the issue itself rather than from our database, so
+    the same issue from two different sources still works out to the same
+    permanent work ID and the two still count as one Work.
 
-    With neither a date nor a position we have nothing to tell one issue from
-    another, so all the issues fall back to the same category, as they did
-    before. Guessing here would be worse: it would split issues that are really
-    the same.
+    The date is used on its own and never joined with the rest. If we joined
+    them, an issue that reached us with a date and a position would not match
+    the same issue from a source that only gave us the date.
+
+    With nothing at all to go on, every issue falls back to the same category,
+    as they did before. Guessing here would be worse: it would split issues
+    that are really the same.
 
     :param published: The date this issue was published.
     :param issue_position: Where this issue sorts within its volume.
+    :param volume: A stable name for the volume this issue belongs to.
     :return: A grouping category to pass to :meth:`WorkIDCalculator.permanent_id`.
     """
     if published is not None:
@@ -46,9 +53,15 @@ def periodical_grouping_category(
         if isinstance(published, datetime.datetime):
             published = published.date()
         return f"{PERIODICAL_GROUPING_CATEGORY}/{published.isoformat()}"
+
+    parts = [PERIODICAL_GROUPING_CATEGORY]
+    if volume is not None:
+        # The "v" keeps a volume apart from an issue position of the same
+        # number.
+        parts.append(f"v{volume}")
     if issue_position is not None:
-        return f"{PERIODICAL_GROUPING_CATEGORY}/{issue_position}"
-    return PERIODICAL_GROUPING_CATEGORY
+        parts.append(str(issue_position))
+    return "/".join(parts)
 
 
 class WorkIDCalculator:

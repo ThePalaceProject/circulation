@@ -138,6 +138,7 @@ class EditionConstants:
         medium: str | None,
         published: datetime.date | None = None,
         issue_position: int | None = None,
+        volume: str | None = None,
     ) -> str | None:
         """Work out the third ingredient of a permanent work ID: what kind of
         thing this is.
@@ -154,6 +155,8 @@ class EditionConstants:
             periodicals.
         :param issue_position: Where this issue sorts within its volume. Only
             used for periodicals.
+        :param volume: A stable name for the volume this issue belongs to.
+            Only used for periodicals.
         :return: A grouping category, or None if we don't know the medium.
         """
         if not medium:
@@ -161,7 +164,9 @@ class EditionConstants:
         category = cls.medium_for_permanent_work_id.get(medium)
         if category == PERIODICAL_GROUPING_CATEGORY:
             return periodical_grouping_category(
-                published=published, issue_position=issue_position
+                published=published,
+                issue_position=issue_position,
+                volume=volume,
             )
         return category
 

@@ -5,6 +5,7 @@ from datetime import timedelta
 
 import pytest
 from freezegun import freeze_time
+from frozendict import frozendict
 from sqlalchemy.exc import IntegrityError
 
 from palace.util.datetime_helpers import utc_now
@@ -19,7 +20,7 @@ from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
-from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism
+from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism, LicensePool
 from palace.manager.sqlalchemy.model.periodical import (
     Periodical,
     PeriodicalVolume,
@@ -776,14 +777,16 @@ class TestEdition:
     # grouping category of their own. They are pinned here so that a change to
     # the way we group things can't quietly change the permanent work ID of
     # everything that isn't a periodical.
-    PINNED_PERMANENT_WORK_IDS = {
-        Edition.BOOK_MEDIUM: "4823fe05-ec45-73d9-d234-c66756b666d1",
-        Edition.AUDIO_MEDIUM: "4823fe05-ec45-73d9-d234-c66756b666d1",
-        Edition.MUSIC_MEDIUM: "7fe17ac2-22f7-e210-9f13-a83b044a5330",
-        Edition.VIDEO_MEDIUM: "47e474b4-670a-1621-de81-c0b6a60e452a",
-        Edition.IMAGE_MEDIUM: "dfafea0e-dd29-e3de-90e3-951723d29aff",
-        Edition.COURSEWARE_MEDIUM: "ec94bf94-6785-93e2-035c-f324f4f172c2",
-    }
+    PINNED_PERMANENT_WORK_IDS = frozendict(
+        {
+            Edition.BOOK_MEDIUM: "4823fe05-ec45-73d9-d234-c66756b666d1",
+            Edition.AUDIO_MEDIUM: "4823fe05-ec45-73d9-d234-c66756b666d1",
+            Edition.MUSIC_MEDIUM: "7fe17ac2-22f7-e210-9f13-a83b044a5330",
+            Edition.VIDEO_MEDIUM: "47e474b4-670a-1621-de81-c0b6a60e452a",
+            Edition.IMAGE_MEDIUM: "dfafea0e-dd29-e3de-90e3-951723d29aff",
+            Edition.COURSEWARE_MEDIUM: "ec94bf94-6785-93e2-035c-f324f4f172c2",
+        }
+    )
 
     def test_permanent_work_id_unchanged_for_everything_but_periodicals(
         self, db: DatabaseTransactionFixture
@@ -818,7 +821,8 @@ class TestEdition:
         data_source_name: str = DataSource.GUTENBERG,
         identifier_type: str = Identifier.GUTENBERG_ID,
         with_open_access_download: bool = False,
-    ):
+        volume: PeriodicalVolume | None = None,
+    ) -> tuple[Edition, LicensePool | None]:
         """Make one issue of The Palace Review.
 
         Every issue carries the same title and the same author, which is what
@@ -835,6 +839,7 @@ class TestEdition:
         edition.medium = Edition.PERIODICAL_MEDIUM
         edition.published = published
         edition.issue_position = issue_position
+        edition.periodical_volume = volume
         edition.calculate_permanent_work_id()
         return edition, pool
 
@@ -914,6 +919,40 @@ class TestEdition:
         # It is still not the ID it would have had as a book, because a
         # periodical is no longer grouped with books.
         assert first.permanent_work_id != "1229788b-6b12-bb9c-99bf-b255379303e3"
+
+    def test_the_same_issue_position_in_two_volumes(
+        self, db: DatabaseTransactionFixture
+    ):
+        # An issue position only counts within a volume. Issue 3 of volume 1
+        # and issue 3 of volume 2 are different issues, and neither has a
+        # publication date to say so.
+        periodical = Periodical(title="The Palace Review")
+        first_volume = PeriodicalVolume(
+            periodical=periodical, label="Volume 1", position=1
+        )
+        second_volume = PeriodicalVolume(
+            periodical=periodical, label="Volume 2", position=2
+        )
+
+        first, _ = self._issue(db, issue_position=3, volume=first_volume)
+        second, _ = self._issue(db, issue_position=3, volume=second_volume)
+        assert first.permanent_work_id != second.permanent_work_id
+
+        # The same issue of the same volume still comes out the same.
+        again, _ = self._issue(db, issue_position=3, volume=first_volume)
+        assert again.permanent_work_id == first.permanent_work_id
+
+    def test_a_volume_with_no_position_falls_back_to_its_label(
+        self, db: DatabaseTransactionFixture
+    ):
+        # Not every source numbers its volumes. The label will do.
+        periodical = Periodical(title="The Palace Review")
+        spring = PeriodicalVolume(periodical=periodical, label="Spring 2024")
+        summer = PeriodicalVolume(periodical=periodical, label="Summer 2024")
+
+        first, _ = self._issue(db, issue_position=1, volume=spring)
+        second, _ = self._issue(db, issue_position=1, volume=summer)
+        assert first.permanent_work_id != second.permanent_work_id
 
     def test_choose_cover_can_choose_full_image_and_thumbnail_separately(
         self, db: DatabaseTransactionFixture
