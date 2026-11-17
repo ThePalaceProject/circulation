@@ -46,9 +46,8 @@ jobs:
         with:
           persist-credentials: false
 
-      # See comment here: https://github.com/actions/runner-images/issues/1187#issuecomment-686735760
       - name: Disable network offload
-        run: sudo ethtool -K eth0 tx off rx off
+        uses: ./.github/actions/disable-network-offload
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
