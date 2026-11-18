@@ -108,13 +108,26 @@ class ISSNURNIdentifierParser(IdentifierParser):
     """Parser for ISSN URN IDs."""
 
     def parse(self, identifier_string: str) -> tuple[str, str] | None:
+        """Read an ISSN out of an ISSN URN.
+
+        The prefix may be in any case, and the ISSN itself may be
+        percent-encoded, written with or without its hyphen, and carry an
+        upper- or lowercase "X" check character. We store ISSNs in one
+        canonical form so that a magazine can't end up split across several
+        identifiers.
+
+        :param identifier_string: A string that may be an ISSN URN, such as
+            "urn:issn:0317-8471".
+        :raises InvalidISSNError: If the string is an ISSN URN but the ISSN in
+            it is malformed or its check character doesn't match the rest of
+            the number. This is a kind of ValueError.
+        :return: A 2-tuple of the identifier type and the ISSN in canonical
+            "NNNN-NNNC" form, or None if the string is not an ISSN URN.
+        """
         self.log.debug(f'Started parsing identifier string "{identifier_string}"')
 
         if identifier_string.lower().startswith(Identifier.ISSN_URN_SCHEME_PREFIX):
             issn = unquote(identifier_string[len(Identifier.ISSN_URN_SCHEME_PREFIX) :])
-            # Raises an InvalidISSNError (a kind of ValueError) if this isn't
-            # a real ISSN. We store ISSNs in one canonical form so that a
-            # magazine can't end up split across several identifiers.
             return (Identifier.ISSN, normalize_issn(issn))
 
         self.log.debug(
