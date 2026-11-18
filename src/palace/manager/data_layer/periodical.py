@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from pydantic import field_validator
+
 from palace.manager.data_layer.base.frozen import BaseFrozenData
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.sqlalchemy.model.periodical import SerialType
+from palace.manager.util.languages import LanguageCodes
 
 
 class PeriodicalData(BaseFrozenData):
@@ -47,7 +50,7 @@ class PeriodicalData(BaseFrozenData):
     """Who publishes the serial."""
 
     language: str | None = None
-    """The language the serial is published in."""
+    """The language the serial is published in, as a three-letter code."""
 
     volume_label: str | None = None
     """What to call this issue's volume on screen, for example "Volume 12" or "2024".
@@ -65,3 +68,17 @@ class PeriodicalData(BaseFrozenData):
     issues (#0, a half issue, #14.1) needs one to sort in the right place.
     The value is only ever a sort key, so we keep whichever we were given.
     """
+
+    @field_validator("language")
+    @classmethod
+    def _convert_language_alpha3(cls, value: str | None) -> str | None:
+        """Store the language the same way an issue's language is stored.
+
+        ``BibliographicData`` converts a language to its three-letter code as
+        it comes in, and sources hand us the two-letter one. Without the same
+        conversion here, a magazine would be stored as "en" while its own
+        issues were stored as "eng".
+        """
+        if value is not None:
+            value = LanguageCodes.string_to_alpha_3(value)
+        return value

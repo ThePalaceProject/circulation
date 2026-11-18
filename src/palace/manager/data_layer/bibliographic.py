@@ -87,6 +87,15 @@ class BibliographicData(BaseMutableData):
     periodical_id: int | None = None
     periodical_volume_id: int | None = None
     issue_position: int | float | None = None
+    """Where this issue sorts within its volume, once resolved.
+
+    This allows a decimal for the same reason
+    :attr:`~palace.manager.data_layer.periodical.PeriodicalData.issue_position`
+    does, and because this is the field an importer assigns to: the basic
+    edition fields are copied onto the edition from here, and assignment is
+    validated, so a narrower type here would reject a decimal position rather
+    than store it.
+    """
     publisher: str | None = None
     imprint: str | None = None
     issued: datetime.date | None = None

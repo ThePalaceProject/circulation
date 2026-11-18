@@ -1,6 +1,8 @@
 import pytest
 from pydantic import ValidationError
 
+from palace.opds.rwpm import SerialType as OpdsSerialType
+
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.data_layer.periodical import PeriodicalData
 from palace.manager.sqlalchemy.model.identifier import Identifier
@@ -58,14 +60,35 @@ class TestPeriodicalData:
             )
         )
 
-    def test_serial_type_from_string(self) -> None:
-        # The serial types the OPDS parser hands us are the same strings we
-        # store, so a value read straight off a feed is accepted.
-        for value in ("magazine", "journal", "newspaper", "periodical"):
-            assert PeriodicalData(serial_type=value).serial_type == SerialType(value)
+    def test_serial_type_matches_the_opds_parser(self) -> None:
+        # The OPDS parser has its own copy of this enum, and an extractor
+        # passes what it read straight through. Every member of that copy has
+        # to be a value we can store, so that adding one there and not here
+        # fails this test rather than every feed that uses it.
+        for opds_serial_type in OpdsSerialType:
+            assert PeriodicalData(
+                serial_type=opds_serial_type
+            ).serial_type == SerialType(opds_serial_type)
 
+        # Anything else is rejected.
         with pytest.raises(ValidationError):
             PeriodicalData(serial_type="comic")
+
+    @pytest.mark.parametrize(
+        "given,expected",
+        [
+            pytest.param("en", "eng", id="two_letter_code"),
+            pytest.param("eng", "eng", id="three_letter_code"),
+            pytest.param("English", "eng", id="name"),
+            pytest.param(None, None, id="nothing"),
+        ],
+    )
+    def test_language_is_normalized(
+        self, given: str | None, expected: str | None
+    ) -> None:
+        # A magazine's language is stored the same way its issues' language
+        # is, so the two never disagree over the same feed.
+        assert PeriodicalData(language=given).language == expected
 
     @pytest.mark.parametrize(
         "position",

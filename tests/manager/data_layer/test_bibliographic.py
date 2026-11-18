@@ -480,6 +480,21 @@ class TestBibliographicData:
         without = BibliographicData(data_source_name=DataSource.OCLC)
         assert without.calculate_hash() != bibliographic.calculate_hash()
 
+    def test_issue_position_accepts_a_decimal(self) -> None:
+        # An importer resolves a PeriodicalData by assigning to the fields the
+        # edition is updated from, so a decimal issue position has to survive
+        # that assignment rather than fail validation.
+        bibliographic = BibliographicData(data_source_name=DataSource.OCLC)
+        bibliographic.issue_position = 14.1
+        assert bibliographic.issue_position == 14.1
+
+        assert (
+            BibliographicData(
+                data_source_name=DataSource.OCLC, issue_position=14.1
+            ).issue_position
+            == 14.1
+        )
+
     def test_from_edition(self, db: DatabaseTransactionFixture):
         session = db.session
 
