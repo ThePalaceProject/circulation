@@ -46,6 +46,13 @@ _BASIC_EDITION_FIELDS: list[str] = [
     "imprint",
     "issued",
     "published",
+    # An issue of a magazine keeps its periodical, its volume and its place in
+    # that volume when editions are merged into a combined presentation
+    # edition. Without these, a work built from more than one source edition
+    # would lose the link and `Work.periodical` would come back None.
+    "periodical_id",
+    "periodical_volume_id",
+    "issue_position",
 ]
 
 _REL_REQUIRES_NEW_PRESENTATION_EDITION: list[str] = [
@@ -65,6 +72,9 @@ class BibliographicData(BaseMutableData):
     medium: str | None = None
     series: str | None = None
     series_position: int | None = None
+    periodical_id: int | None = None
+    periodical_volume_id: int | None = None
+    issue_position: int | None = None
     publisher: str | None = None
     imprint: str | None = None
     issued: datetime.date | None = None

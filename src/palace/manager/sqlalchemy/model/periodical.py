@@ -9,8 +9,10 @@ from sqlalchemy import (
     DateTime,
     Enum as AlchemyEnum,
     ForeignKey,
+    Index,
     Integer,
     Unicode,
+    text,
 )
 from sqlalchemy.orm import Mapped, relationship
 
@@ -56,12 +58,14 @@ class Periodical(Base):
     id: Mapped[int] = Column(Integer, primary_key=True)
 
     # The identifier this periodical is known by, normally an ISSN. Nullable,
-    # because plenty of feeds hand us a magazine with no ISSN at all.
+    # because plenty of feeds hand us a magazine with no ISSN at all. Unique,
+    # because the identifier is the periodical's identity: a second row for the
+    # same ISSN would split one magazine's issues between two records.
     identifier_id = Column(
-        Integer, ForeignKey("identifiers.id"), index=True, nullable=True
+        Integer, ForeignKey("identifiers.id"), unique=True, nullable=True
     )
     identifier: Mapped[Identifier | None] = relationship(
-        "Identifier", back_populates="periodicals"
+        "Identifier", back_populates="periodical"
     )
 
     serial_type = Column(
@@ -70,9 +74,7 @@ class Periodical(Base):
     )
 
     title = Column(Unicode)
-    # Indexed because a periodical with no identifier is looked up by its
-    # data source and its sort title.
-    sort_title = Column(Unicode, index=True)
+    sort_title = Column(Unicode)
 
     publisher = Column(Unicode)
     language = Column(Unicode)
@@ -97,7 +99,7 @@ class Periodical(Base):
     )
 
     created = Column(DateTime(timezone=True), default=utc_now)
-    updated = Column(DateTime(timezone=True), default=None)
+    updated = Column(DateTime(timezone=True), onupdate=utc_now)
 
     volumes: Mapped[list[PeriodicalVolume]] = relationship(
         "PeriodicalVolume", back_populates="periodical", uselist=True
@@ -106,6 +108,21 @@ class Periodical(Base):
     # The issues of this periodical.
     editions: Mapped[list[Edition]] = relationship(
         "Edition", back_populates="periodical", uselist=True
+    )
+
+    # A periodical with no identifier is identified by its data source and its
+    # sort title, so that pair has to be unique as well. The index also serves
+    # the lookup. Rows that do have an identifier are left out: `identifier_id`
+    # is unique on its own, and the data source is not part of identity there,
+    # so the same ISSN from two sources stays one magazine.
+    __table_args__ = (
+        Index(
+            "ix_periodicals_data_source_id_sort_title",
+            "data_source_id",
+            "sort_title",
+            unique=True,
+            postgresql_where=text("identifier_id IS NULL"),
+        ),
     )
 
     def __repr__(self) -> str:
@@ -136,7 +153,7 @@ class PeriodicalVolume(Base):
     position = Column(Integer)
 
     created = Column(DateTime(timezone=True), default=utc_now)
-    updated = Column(DateTime(timezone=True), default=None)
+    updated = Column(DateTime(timezone=True), onupdate=utc_now)
 
     # The issues that make up this volume.
     editions: Mapped[list[Edition]] = relationship(

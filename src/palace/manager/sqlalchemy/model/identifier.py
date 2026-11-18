@@ -296,8 +296,8 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
         "Edition", back_populates="primary_identifier"
     )
 
-    periodicals: Mapped[list[Periodical]] = relationship(
-        "Periodical", back_populates="identifier"
+    periodical: Mapped[Periodical | None] = relationship(
+        "Periodical", back_populates="identifier", uselist=False
     )
 
     # One Identifier may serve as the identifier for many

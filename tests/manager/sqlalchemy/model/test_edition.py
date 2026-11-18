@@ -4,8 +4,10 @@ from datetime import timedelta
 
 import pytest
 from freezegun import freeze_time
+from sqlalchemy.exc import IntegrityError
 
 from palace.util.datetime_helpers import utc_now
+from palace.util.exceptions import PalaceValueError
 from palace.util.log import LogLevel
 
 from palace.manager.data_layer.policy.presentation import (
@@ -29,7 +31,7 @@ from tests.fixtures.database import DatabaseTransactionFixture
 class TestEdition:
     def test_periodical_columns_are_empty_for_a_book(
         self, db: DatabaseTransactionFixture
-    ):
+    ) -> None:
         # A book is not an issue of anything, so the three periodical
         # columns stay empty.
         edition = db.edition(series="The Lord of the Rings")
@@ -48,16 +50,14 @@ class TestEdition:
 
     def test_periodical_columns_do_not_touch_series(
         self, db: DatabaseTransactionFixture
-    ):
+    ) -> None:
         # Putting an edition in a periodical leaves `series` and
         # `series_position` alone. The two ideas are kept apart.
         periodical = Periodical(title="The Palace Review")
         volume = PeriodicalVolume(periodical=periodical, label="Volume 1", position=1)
         edition = db.edition(title="March 2026")
-        edition.periodical = periodical
-        edition.periodical_volume = volume
-        edition.issue_position = 3
         db.session.add_all([periodical, volume])
+        edition.set_periodical(periodical, volume, issue_position=3)
         db.session.flush()
 
         assert edition.periodical == periodical
@@ -65,6 +65,76 @@ class TestEdition:
         assert edition.issue_position == 3
         assert edition.series is None
         assert edition.series_position is None
+
+    def test_set_periodical(self, db: DatabaseTransactionFixture) -> None:
+        periodical = Periodical(title="The Palace Review")
+        volume = PeriodicalVolume(periodical=periodical, label="Volume 1", position=1)
+        edition = db.edition(title="March 2026")
+        db.session.add_all([periodical, volume])
+
+        # A periodical on its own is allowed: we may not know the volume.
+        edition.set_periodical(periodical)
+        db.session.flush()
+        assert edition.periodical == periodical
+        assert edition.periodical_volume is None
+        assert edition.issue_position is None
+
+        edition.set_periodical(periodical, volume, issue_position=3)
+        db.session.flush()
+        assert edition.periodical == periodical
+        assert edition.periodical_volume == volume
+        assert edition.issue_position == 3
+
+        # Passing None clears all three together.
+        edition.set_periodical(None)
+        db.session.flush()
+        assert edition.periodical is None
+        assert edition.periodical_volume is None
+        assert edition.issue_position is None
+
+    def test_set_periodical_rejects_a_volume_from_another_periodical(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        periodical = Periodical(title="The Palace Review")
+        other = Periodical(title="The Palace Quarterly")
+        other_volume = PeriodicalVolume(periodical=other, label="Volume 1", position=1)
+        edition = db.edition(title="March 2026")
+        db.session.add_all([periodical, other, other_volume])
+
+        with pytest.raises(PalaceValueError) as excinfo:
+            edition.set_periodical(periodical, other_volume)
+        assert "belongs to a different periodical" in str(excinfo.value)
+
+        # Nothing was written.
+        assert edition.periodical is None
+        assert edition.periodical_volume is None
+
+    def test_set_periodical_rejects_a_volume_with_no_periodical(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        periodical = Periodical(title="The Palace Review")
+        volume = PeriodicalVolume(periodical=periodical, label="Volume 1", position=1)
+        edition = db.edition(title="March 2026")
+        db.session.add_all([periodical, volume])
+
+        with pytest.raises(PalaceValueError) as excinfo:
+            edition.set_periodical(None, volume)
+        assert "without also giving it a periodical" in str(excinfo.value)
+
+    def test_a_volume_without_a_periodical_is_refused_by_the_database(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        # The same rule the helper enforces is enforced by the database, for
+        # anything that sets the columns directly.
+        periodical = Periodical(title="The Palace Review")
+        volume = PeriodicalVolume(periodical=periodical, label="Volume 1", position=1)
+        edition = db.edition(title="March 2026")
+        db.session.add_all([periodical, volume])
+        db.session.flush()
+
+        edition.periodical_volume = volume
+        with pytest.raises(IntegrityError):
+            db.session.flush()
 
     def test_audio_mpeg_is_audiobook(self):
         assert Edition.AUDIO_MEDIUM == Edition.medium_from_media_type("audio/mpeg")

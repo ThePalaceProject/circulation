@@ -58,7 +58,7 @@ from tests.fixtures.search import (
 
 
 class TestWork:
-    def test_periodical(self, db: DatabaseTransactionFixture):
+    def test_periodical(self, db: DatabaseTransactionFixture) -> None:
         work = db.work(with_license_pool=True)
         edition = work.presentation_edition
 
@@ -68,8 +68,8 @@ class TestWork:
         # Once its presentation edition belongs to a periodical, the work
         # reports that periodical.
         periodical = Periodical(title="The Palace Review")
-        edition.periodical = periodical
         db.session.add(periodical)
+        edition.set_periodical(periodical)
         db.session.flush()
 
         assert work.periodical == periodical

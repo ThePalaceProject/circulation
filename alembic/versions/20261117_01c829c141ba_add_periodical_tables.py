@@ -48,17 +48,26 @@ def upgrade() -> None:
             ["cover_id"], ["resources.id"], name="fk_periodicals_cover_id"
         ),
         sa.PrimaryKeyConstraint("id"),
-    )
-    op.create_index(
-        op.f("ix_periodicals_identifier_id"), "periodicals", ["identifier_id"]
+        # The identifier is the periodical's identity, so there can only be one
+        # row per identifier. Nulls do not collide in Postgres, so any number of
+        # periodicals may have no identifier at all.
+        sa.UniqueConstraint("identifier_id"),
     )
     op.create_index(
         op.f("ix_periodicals_data_source_id"), "periodicals", ["data_source_id"]
     )
     op.create_index(op.f("ix_periodicals_cover_id"), "periodicals", ["cover_id"])
-    # A periodical with no identifier is looked up by its data source and its
-    # sort title, so that lookup gets an index.
-    op.create_index(op.f("ix_periodicals_sort_title"), "periodicals", ["sort_title"])
+    # A periodical with no identifier is identified by its data source and its
+    # sort title instead, so that pair is unique among those rows. Rows that do
+    # have an identifier are left out: the unique constraint above already
+    # covers them, and their data source is not part of their identity.
+    op.create_index(
+        "ix_periodicals_data_source_id_sort_title",
+        "periodicals",
+        ["data_source_id", "sort_title"],
+        unique=True,
+        postgresql_where=sa.text("identifier_id IS NULL"),
+    )
 
     op.create_table(
         "periodical_volumes",
@@ -100,11 +109,20 @@ def upgrade() -> None:
     op.create_index(
         op.f("ix_editions_periodical_volume_id"), "editions", ["periodical_volume_id"]
     )
-    op.create_index(op.f("ix_editions_issue_position"), "editions", ["issue_position"])
+    # A volume only means anything together with its periodical. Checking this
+    # costs nothing here: all three columns were added moments ago and are NULL
+    # on every existing row, so there is nothing for the check to scan through.
+    op.create_check_constraint(
+        "ck_editions_periodical_volume_requires_periodical",
+        "editions",
+        "periodical_volume_id IS NULL OR periodical_id IS NOT NULL",
+    )
 
 
 def downgrade() -> None:
-    op.drop_index(op.f("ix_editions_issue_position"), table_name="editions")
+    op.drop_constraint(
+        "ck_editions_periodical_volume_requires_periodical", "editions", type_="check"
+    )
     op.drop_index(op.f("ix_editions_periodical_volume_id"), table_name="editions")
     op.drop_index(op.f("ix_editions_periodical_id"), table_name="editions")
     op.drop_constraint(
@@ -120,10 +138,9 @@ def downgrade() -> None:
     )
     op.drop_table("periodical_volumes")
 
-    op.drop_index(op.f("ix_periodicals_sort_title"), table_name="periodicals")
+    op.drop_index("ix_periodicals_data_source_id_sort_title", table_name="periodicals")
     op.drop_index(op.f("ix_periodicals_cover_id"), table_name="periodicals")
     op.drop_index(op.f("ix_periodicals_data_source_id"), table_name="periodicals")
-    op.drop_index(op.f("ix_periodicals_identifier_id"), table_name="periodicals")
     op.drop_table("periodicals")
 
     # Dropping the tables leaves the enum type behind, so remove it by hand.
