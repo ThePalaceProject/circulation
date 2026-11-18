@@ -11,7 +11,7 @@ from flask import Response
 from flask_babel import lazy_gettext as _
 from PIL import Image, UnidentifiedImageError
 from PIL.Image import DecompressionBombError, Resampling
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, PositiveInt, ValidationError
 from werkzeug.datastructures import FileStorage
 
 from palace.manager.api.admin.announcement_list_validator import (
@@ -43,6 +43,13 @@ from palace.manager.util.problem_detail import ProblemDetail, ProblemDetailExcep
 
 
 class LibraryImportInfo(BaseModel):
+    """The subset of a library's configuration that can be set when importing.
+
+    Fields that default to ``None`` are optional: when one is omitted, the
+    library is created with whatever :class:`LibrarySettings` uses as its
+    default for that setting.
+    """
+
     name: str
     short_name: str
     website_url: str
@@ -51,6 +58,12 @@ class LibraryImportInfo(BaseModel):
     small_collection_languages: list[str]
     facets_default_order: str
     enabled_entry_points: list[str]
+    featured_lane_size: PositiveInt | None = None
+    facets_default_available: str | None = None
+    filtered_audiences: list[str] | None = None
+    # Named for the "Filtered categories" label the admin interface shows. The
+    # underlying library setting is still called `filtered_genres`.
+    filtered_categories: list[str] | None = None
 
 
 class LibrarySettingsController(AdminPermissionsControllerMixin):
@@ -209,7 +222,14 @@ class LibrarySettingsController(AdminPermissionsControllerMixin):
                     "large_collection_languages": ["en"],
                     "small_collection_languages": ["es"],
                     "facets_default_order": "added",
-                    "enabled_entry_points": ["All", "Book", "Audio"]
+                    "enabled_entry_points": ["All", "Book", "Audio"],
+
+                    # The remaining fields are optional. Anything left out
+                    # keeps the default that LibrarySettings defines.
+                    "featured_lane_size": 35,
+                    "facets_default_available": "now",
+                    "filtered_audiences": ["Research"],
+                    "filtered_categories": ["Erotica", "Horror"]
                 },
                 ...
             ]
@@ -311,7 +331,7 @@ class LibrarySettingsController(AdminPermissionsControllerMixin):
         library.short_name = library_import_info.short_name
 
         # Build settings dictionary
-        settings_data = {
+        settings_data: dict[str, Any] = {
             "website": library_import_info.website_url,
             "help_email": library_import_info.patron_support_email,
             "large_collection_languages": library_import_info.large_collection_languages,
@@ -320,14 +340,40 @@ class LibrarySettingsController(AdminPermissionsControllerMixin):
             "enabled_entry_points": library_import_info.enabled_entry_points,
         }
 
+        # The remaining settings are optional. Only pass along the ones the
+        # import actually supplied, so that LibrarySettings fills in its own
+        # default for anything left out.
+        optional_settings: dict[str, Any] = {
+            "featured_lane_size": library_import_info.featured_lane_size,
+            "facets_default_available": library_import_info.facets_default_available,
+            "filtered_audiences": library_import_info.filtered_audiences,
+            "filtered_genres": library_import_info.filtered_categories,
+        }
+        settings_data.update(
+            {
+                key: value
+                for key, value in optional_settings.items()
+                if value is not None
+            }
+        )
+
         # Validate settings using LibrarySettings model
         try:
             validated_settings = LibrarySettings(**settings_data)
             library.settings_dict = validated_settings.model_dump()
         except Exception as e:
+            # LibrarySettings reports a validation failure as a
+            # ProblemDetailException whose `detail` says which setting was
+            # wrong and what the legal values are. str() on that exception
+            # gives only the generic title, so pull the detail out instead;
+            # it is the part an operator needs in order to fix their CSV.
+            if isinstance(e, ProblemDetailException) and e.problem_detail.detail:
+                reason = e.problem_detail.detail
+            else:
+                reason = str(e)
             raise ProblemDetailException(
                 problem_detail=INVALID_CONFIGURATION_OPTION.detailed(
-                    f"Invalid settings for library '{library_import_info.name}': {str(e)}"
+                    f"Invalid settings for library '{library_import_info.name}': {reason}"
                 )
             )
 
