@@ -327,14 +327,19 @@ class BelongsTo(BaseOpdsModel):
         ),
     )
     """
-    The schema.org name for a serial. This is not an RWPM term and feeds are
-    asked not to send it, but some do, so we read it rather than drop the
-    publication's only link to its magazine. We read the short form and both
-    the http and https spellings of the full name, and write back whichever we
-    read.
+    The schema.org name for a serial. This is a schema.org type rather than a
+    property, so it does not belong in a key at all, and it is not an RWPM
+    term. Feeds are asked not to send it, but some do, and we read it rather
+    than drop the publication's only link to its magazine. We read the short
+    form and both the http and https spellings of the full name, and write back
+    whichever we read.
 
-    A feed using this key has told us nothing about what kind of serial it is,
-    and in practice it is always a magazine, so we read it as one.
+    We read it as a magazine. Schema.org has no type for a magazine or a
+    journal, so a magazine, a journal and a plain periodical all become a
+    schema.org ``Periodical``. A feed that sends us this key has already lost
+    the difference between the three, and we cannot get it back. Magazine is
+    the likeliest of them, and it is the reading the feed profile gives
+    vendors.
 
     https://schema.org/Periodical
     """
