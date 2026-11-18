@@ -126,8 +126,9 @@ class Edition(Base, EditionConstants):
     series_position = Column(Integer)
 
     # When this Edition is an issue of a magazine, journal or newspaper,
-    # these say which magazine, which volume of it, and where the issue
-    # sorts within that volume.
+    # the following five fields (periodical_id, periodical,
+    # periodical_volume_id, periodical_volume, and issue_position) define
+    # the periodical relationship.
     #
     # They are separate from `series` and `series_position` above, which
     # are left alone: a book that is part of a series is not a serial, and

@@ -296,7 +296,6 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
         "Edition", back_populates="primary_identifier"
     )
 
-    # An ISSN identifies a periodical.
     periodicals: Mapped[list[Periodical]] = relationship(
         "Periodical", back_populates="identifier"
     )
