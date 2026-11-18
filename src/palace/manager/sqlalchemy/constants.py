@@ -146,7 +146,7 @@ class EditionConstants:
         Title and author make up the other two. For most media the answer is
         just the medium, looked up in :attr:`medium_for_permanent_work_id`. One
         issue of a periodical also needs to say which issue it is, or every
-        issue of a magazine ends up with the same permanent work ID and the
+        issue of a periodical ends up with the same permanent work ID and the
         whole run collapses into a single Work.
 
         :param medium: The medium of the item, one of the ``*_MEDIUM``

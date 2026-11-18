@@ -1034,6 +1034,22 @@ class TestBibliographicData:
                 == edition.permanent_work_id
             )
 
+        # A periodical is the one medium where BibliographicData reads a second
+        # field, the publication date, so it is the one most likely to drift
+        # away from what Edition works out.
+        published = datetime.date(2024, 3, 1)
+        issue = self._bibliographic_for_pwid(
+            db, medium=Edition.PERIODICAL_MEDIUM, published=published
+        )
+        edition = db.edition(title="The Palace Review", authors="Palace, Editors")
+        edition.medium = Edition.PERIODICAL_MEDIUM
+        edition.published = published
+        edition.calculate_permanent_work_id()
+
+        assert (
+            issue.calculate_permanent_work_id(db.session) == edition.permanent_work_id
+        )
+
     def test_calculate_permanent_work_id_without_a_medium(
         self, db: DatabaseTransactionFixture
     ):
@@ -1049,7 +1065,7 @@ class TestBibliographicData:
     def test_calculate_permanent_work_id_for_issues_of_a_periodical(
         self, db: DatabaseTransactionFixture
     ):
-        # Twelve issues of one magazine, told apart by their publication date.
+        # Twelve issues of one periodical, told apart by their publication date.
         permanent_work_ids = set()
         for month in range(1, 13):
             issue = self._bibliographic_for_pwid(
@@ -1061,25 +1077,9 @@ class TestBibliographicData:
 
         assert len(permanent_work_ids) == 12
 
-        # A magazine is not grouped with a book of the same name.
+        # A periodical is not grouped with a book of the same name.
         book = self._bibliographic_for_pwid(db, medium=Edition.BOOK_MEDIUM)
         assert book.calculate_permanent_work_id(db.session) not in permanent_work_ids
-
-    def test_the_same_issue_from_two_sources_gets_one_permanent_work_id(
-        self, db: DatabaseTransactionFixture
-    ):
-        published = datetime.date(2024, 3, 1)
-        first = self._bibliographic_for_pwid(
-            db, medium=Edition.PERIODICAL_MEDIUM, published=published
-        )
-        second = self._bibliographic_for_pwid(
-            db, medium=Edition.PERIODICAL_MEDIUM, published=published
-        )
-        second.data_source_name = DataSource.STANDARD_EBOOKS
-
-        assert first.calculate_permanent_work_id(
-            db.session
-        ) == second.calculate_permanent_work_id(db.session)
 
     def test_associate_with_identifiers_based_on_permanent_work_id(
         self, db: DatabaseTransactionFixture

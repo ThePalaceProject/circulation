@@ -846,7 +846,8 @@ class TestEdition:
     def test_twelve_issues_get_twelve_permanent_work_ids(
         self, db: DatabaseTransactionFixture
     ):
-        # A year of a monthly magazine: same title, same author, twelve issues.
+        # A year of a monthly periodical: same title, same author, twelve
+        # issues.
         editions = [
             self._issue(db, published=datetime.date(2024, month, 1))[0]
             for month in range(1, 13)

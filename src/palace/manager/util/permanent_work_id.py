@@ -18,17 +18,17 @@ def periodical_grouping_category(
 ) -> str:
     """Work out the grouping category for a single issue of a periodical.
 
-    Every issue of a magazine carries the magazine's title and the magazine's
-    author, so title and author on their own give every issue the same
-    permanent work ID and collapse a whole run of issues into one Work. The
-    grouping category is where we say which issue this is.
+    Every issue of a periodical carries the same title and the same author as
+    the periodical itself, so title and author on their own give every issue
+    the same permanent work ID and collapse a whole run of issues into one
+    Work. The grouping category is where we say which issue this is.
 
     The publication date is the best thing to say it with, so we use it alone
     whenever we have one. Failing that we use the position of the issue, which
     only counts within a volume, so the volume goes in front of it: position 3
     of volume 1 and position 3 of volume 2 are different issues. A volume on
     its own is still better than nothing, since it at least keeps one year of a
-    magazine apart from the next.
+    periodical apart from the next.
 
     All of these come from the issue itself rather than from our database, so
     the same issue from two different sources still works out to the same

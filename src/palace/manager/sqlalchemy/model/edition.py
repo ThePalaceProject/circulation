@@ -725,7 +725,7 @@ class Edition(Base, EditionConstants):
     def calculate_permanent_work_id(self, debug: bool = False) -> None:
         title = self.title_for_permanent_work_id
         # For an issue of a periodical this says which issue it is, so that two
-        # issues of the same magazine don't share a permanent work ID.
+        # issues of the same periodical don't share a permanent work ID.
         grouping_category = self.grouping_category_for_permanent_work_id(
             self.medium,
             published=self.published,

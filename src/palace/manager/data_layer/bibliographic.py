@@ -215,7 +215,7 @@ class BibliographicData(BaseMutableData):
         This has to match what :meth:`Edition.calculate_permanent_work_id`
         works out for the same item, so it asks the same question about the
         medium. An issue of a periodical gets a grouping category of its own
-        that includes the publication date, so that issues of one magazine
+        that includes the publication date, so that issues of one periodical
         don't all share a permanent work ID.
         """
         primary_author = self.primary_author
