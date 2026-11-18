@@ -1,6 +1,7 @@
 import datetime
 import re
 import unicodedata
+from decimal import Decimal
 from hashlib import md5
 
 # The grouping category used for books, and for anything else we treat like a
@@ -13,7 +14,7 @@ PERIODICAL_GROUPING_CATEGORY = "periodical"
 
 def periodical_grouping_category(
     published: datetime.date | None = None,
-    issue_position: int | None = None,
+    issue_position: int | float | Decimal | None = None,
     volume: str | None = None,
 ) -> str:
     """Work out the grouping category for a single issue of a periodical.
@@ -43,7 +44,8 @@ def periodical_grouping_category(
     that are really the same.
 
     :param published: The date this issue was published.
-    :param issue_position: Where this issue sorts within its volume.
+    :param issue_position: Where this issue sorts within its volume. May be
+        a fraction, for an issue sitting between two numbered ones.
     :param volume: A stable name for the volume this issue belongs to.
     :return: A grouping category to pass to :meth:`WorkIDCalculator.permanent_id`.
     """
@@ -60,6 +62,12 @@ def periodical_grouping_category(
         # number.
         parts.append(f"v{volume}")
     if issue_position is not None:
+        # A position is a whole number when we have just read it from a feed,
+        # and a fraction once it has been through the database, which stores
+        # it as one. Write 3 and 3.0 the same way, or the same issue would get
+        # a different permanent work ID depending on where it came from.
+        if issue_position == int(issue_position):
+            issue_position = int(issue_position)
         parts.append(str(issue_position))
     return "/".join(parts)
 

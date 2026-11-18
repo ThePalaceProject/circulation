@@ -4,6 +4,7 @@
 import datetime
 import re
 from collections import OrderedDict
+from decimal import Decimal
 from enum import Enum
 
 from bidict import frozenbidict
@@ -137,7 +138,7 @@ class EditionConstants:
         cls,
         medium: str | None,
         published: datetime.date | None = None,
-        issue_position: int | None = None,
+        issue_position: int | float | Decimal | None = None,
         volume: str | None = None,
     ) -> str | None:
         """Work out the third ingredient of a permanent work ID: what kind of

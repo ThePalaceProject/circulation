@@ -30,6 +30,22 @@ class TestPermanentWorkId:
     def test_issue_position_is_used_when_there_is_no_date(self):
         assert periodical_grouping_category(issue_position=3) == "periodical/3"
 
+    def test_a_whole_number_position_reads_the_same_either_way(self) -> None:
+        # The database stores a position as a fraction, so an issue that
+        # started out as number 3 comes back as 3.0. It has to give the same
+        # permanent work ID either way, or one issue becomes two Works.
+        assert periodical_grouping_category(
+            issue_position=3.0
+        ) == periodical_grouping_category(issue_position=3)
+
+    def test_a_fractional_position_is_kept(self) -> None:
+        # An issue sitting between two numbered issues is its own issue, and
+        # must not be folded into the one before it.
+        assert periodical_grouping_category(issue_position=14.1) == "periodical/14.1"
+        assert periodical_grouping_category(
+            issue_position=14.1
+        ) != periodical_grouping_category(issue_position=14)
+
     def test_the_date_wins_over_the_position(self):
         # We only ever use one of the two, so that an issue that reached us
         # with both still matches the same issue from a source that only gave
