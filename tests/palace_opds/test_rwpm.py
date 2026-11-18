@@ -86,23 +86,31 @@ class TestBelongsTo:
         assert belongs_to.serial is not None
         assert belongs_to.serial.name == "Example Science Monthly"
 
-    def test_volume_in_own_key(self) -> None:
-        """The volume in a key of its own, which is what we ask feeds for."""
+    @pytest.mark.parametrize(
+        "value",
+        [
+            pytest.param({"name": "2026", "position": 2026}, id="object"),
+            pytest.param({"name": 2026}, id="object-with-a-numeric-name"),
+            pytest.param("2026", id="string"),
+            pytest.param(2026, id="number"),
+            pytest.param(2026.0, id="whole-number-written-as-a-decimal"),
+            pytest.param(["2026"], id="array"),
+            pytest.param([2026], id="array-of-numbers"),
+        ],
+    )
+    def test_volume_in_own_key(self, value: Any) -> None:
+        """
+        The volume in a key of its own, which is what we ask feeds for.
+
+        It is a string, but feeds are also asked to keep it numeric, so they
+        send numbers. We read this key where we used to ignore it, so a number
+        here must not fail the publication.
+        """
         belongs_to = BelongsTo.model_validate(
-            {
-                "magazine": {"name": "Example Science Monthly"},
-                "volume": {"name": "2026", "position": 2026},
-            }
+            {"magazine": {"name": "Example Science Monthly"}, "volume": value}
         )
 
         assert belongs_to.volume == "2026"
-
-    def test_volume_as_string(self) -> None:
-        belongs_to = BelongsTo.model_validate(
-            {"journal": "Journal of Example Studies", "volume": "42"}
-        )
-
-        assert belongs_to.volume == "42"
 
     @pytest.mark.parametrize(
         "value, expected",
@@ -129,6 +137,38 @@ class TestBelongsTo:
         )
 
         assert belongs_to.volume == "2026"
+
+    @pytest.mark.parametrize(
+        "data, expected_serial",
+        [
+            pytest.param(
+                {"magazine": [{"name": "A"}, {"name": "B", "volume": "12"}]},
+                "A",
+                id="two-serials-under-one-key",
+            ),
+            pytest.param(
+                {
+                    "periodical": {"name": "A", "volume": "12"},
+                    "magazine": {"name": "B"},
+                },
+                "B",
+                id="two-serials-under-different-keys",
+            ),
+        ],
+    )
+    def test_volume_belongs_to_the_serial_we_chose(
+        self, data: dict[str, Any], expected_serial: str
+    ) -> None:
+        """
+        A volume flattened onto a serial we did not choose is not ours to
+        report. Handing back one serial and another serial's volume would say
+        something the feed never said.
+        """
+        belongs_to = BelongsTo.model_validate(data)
+
+        assert belongs_to.serial is not None
+        assert belongs_to.serial.name == expected_serial
+        assert belongs_to.volume is None
 
     def test_no_volume(self) -> None:
         """Most consumer magazines have no volume, and must not be given one."""
@@ -196,6 +236,28 @@ class TestBelongsTo:
         assert serial.position == 11
         assert serial.volume == 2026
 
+    @pytest.mark.parametrize(
+        "key",
+        [
+            "schema:Periodical",
+            "http://schema.org/Periodical",
+            "https://schema.org/Periodical",
+        ],
+    )
+    def test_schema_periodical_key_is_normalised(self, key: str) -> None:
+        """
+        All three spellings are written back as the short one. The key is not
+        an RWPM term in any spelling, so there is nothing to preserve, and one
+        spelling out is easier to read.
+        """
+        belongs_to = BelongsTo.model_validate(
+            {key: {"name": "Example Science Monthly"}}
+        )
+
+        assert belongs_to.serialize() == {
+            "schema:Periodical": {"name": "Example Science Monthly"}
+        }
+
     def test_empty(self) -> None:
         """An empty belongsTo serializes to nothing, so existing feeds are unchanged."""
         assert BelongsTo().serialize() == {}
@@ -236,36 +298,12 @@ class TestBelongsTo:
         assert serialized == data
         assert BelongsTo.model_validate(serialized).volume == belongs_to.volume
 
-
-class TestMetadata:
-    def test_type_is_a_free_string(self) -> None:
-        """
-        An issue sent as a Book still parses, and is still an issue.
-
-        Feeds are asked to type an issue as a PublicationIssue, but we work out
-        that something is an issue from its belongsTo, not from its type.
-        """
-        metadata = Metadata.model_validate(
-            {
-                "@type": "http://schema.org/Book",
-                "title": "November 2026",
-                "belongsTo": {"magazine": [{"name": "Example Science Monthly"}]},
-            }
-        )
-
-        assert metadata.type == "http://schema.org/Book"
-        assert metadata.belongs_to.serial_type == SerialType.MAGAZINE
-
-
-class TestPeriodicalFeeds:
-    """Whole feeds, in each of the shapes a serial gets written in."""
-
     @pytest.mark.parametrize(
         "filename",
         [CONFORMANT, TOLERATED],
         ids=["conformant", "schema-periodical-flattened-volume"],
     )
-    def test_canonical_serial(
+    def test_sample_feed_canonical_serial(
         self, filename: str, periodical_files_fixture: PeriodicalFilesFixture
     ) -> None:
         """
@@ -293,7 +331,7 @@ class TestPeriodicalFeeds:
         [CONFORMANT, TOLERATED],
         ids=["conformant", "schema-periodical-flattened-volume"],
     )
-    def test_round_trip(
+    def test_sample_feed_round_trip(
         self, filename: str, periodical_files_fixture: PeriodicalFilesFixture
     ) -> None:
         """Serializing a parsed feed gives back the belongsTo we read."""
@@ -313,3 +351,23 @@ class TestPeriodicalFeeds:
             reparsed.publications[0].metadata.belongs_to.serial
             == feed.publications[0].metadata.belongs_to.serial
         )
+
+
+class TestMetadata:
+    def test_type_is_a_free_string(self) -> None:
+        """
+        An issue sent as a Book still parses, and is still an issue.
+
+        Feeds are asked to type an issue as a PublicationIssue, but we work out
+        that something is an issue from its belongsTo, not from its type.
+        """
+        metadata = Metadata.model_validate(
+            {
+                "@type": "http://schema.org/Book",
+                "title": "November 2026",
+                "belongsTo": {"magazine": [{"name": "Example Science Monthly"}]},
+            }
+        )
+
+        assert metadata.type == "http://schema.org/Book"
+        assert metadata.belongs_to.serial_type == SerialType.MAGAZINE

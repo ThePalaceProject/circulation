@@ -12,6 +12,7 @@ from pydantic import (
     PositiveFloat,
     PositiveInt,
     SerializerFunctionWrapHandler,
+    field_validator,
     model_serializer,
 )
 
@@ -331,8 +332,8 @@ class BelongsTo(BaseOpdsModel):
     property, so it does not belong in a key at all, and it is not an RWPM
     term. Feeds are asked not to send it, but some do, and we read it rather
     than drop the publication's only link to its magazine. We read the short
-    form and both the http and https spellings of the full name, and write back
-    whichever we read.
+    form and both the http and https spellings of the full name, and write all
+    three back as ``schema:Periodical``.
 
     We read it as a magazine. Schema.org has no type for a magazine or a
     journal, so a magazine, a journal and a plain periodical all become a
@@ -345,6 +346,32 @@ class BelongsTo(BaseOpdsModel):
     """
 
     volume_data: StrModelOrTuple[Contributor] | None = Field(None, alias="volume")
+
+    @field_validator("volume_data", mode="before")
+    @classmethod
+    def _numeric_volume_to_str(cls, value: Any) -> Any:
+        """
+        Accept a volume written as a number.
+
+        A volume is a string, but feeds are also asked to make it numeric where
+        they can, so they send it both ways: ``"volume": 2026`` and
+        ``"volume": {"name": 2026}``. We read this key now where we used to
+        ignore it, and failing the whole publication over the difference would
+        be worse than reading the number.
+        """
+
+        def coerce(item: Any) -> Any:
+            if isinstance(item, (int, float)) and not isinstance(item, bool):
+                return _scalar_to_str(item)
+            if isinstance(item, dict):
+                name = item.get("name")
+                if isinstance(name, (int, float)) and not isinstance(name, bool):
+                    return item | {"name": _scalar_to_str(name)}
+            return item
+
+        if isinstance(value, (list, tuple)):
+            return [coerce(item) for item in value]
+        return coerce(value)
 
     @cached_property
     def volumes(self) -> Sequence[Contributor]:
@@ -393,12 +420,16 @@ class BelongsTo(BaseOpdsModel):
 
         Feeds either give the volume its own ``belongsTo`` key or flatten it
         onto the serial. We look in its own key first, then on the serial.
+
+        The flattened volume is only ever read off :attr:`serial`, the serial
+        we chose, so that the two always describe the same thing. A feed naming
+        more than one serial gets the volume of the one we picked, or none.
         """
         for volume in self.volumes:
             return str(volume.name)
-        for serial in self.serials:
-            if serial.volume is not None:
-                return _scalar_to_str(serial.volume)
+        serial = self.serial
+        if serial is not None and serial.volume is not None:
+            return _scalar_to_str(serial.volume)
         return None
 
 
