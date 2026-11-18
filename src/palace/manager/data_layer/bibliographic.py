@@ -17,6 +17,7 @@ from palace.manager.data_layer.contributor import ContributorData
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.data_layer.link import LinkData
 from palace.manager.data_layer.measurement import MeasurementData
+from palace.manager.data_layer.periodical import PeriodicalData
 from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.data_layer.subject import SubjectData
@@ -72,6 +73,17 @@ class BibliographicData(BaseMutableData):
     medium: str | None = None
     series: str | None = None
     series_position: int | None = None
+    periodical: PeriodicalData | None = None
+    """The serial this is an issue of, as the source described it.
+
+    This is the unresolved side of the periodical fields: what a feed said,
+    before anything has been looked up or created. An importer reads it and
+    fills in the three fields below. The fields below are the resolved side,
+    database ids that are copied from edition to edition when source editions
+    are merged into a presentation edition, and nothing fills them in from a
+    feed.
+    """
+
     periodical_id: int | None = None
     periodical_volume_id: int | None = None
     issue_position: int | float | None = None

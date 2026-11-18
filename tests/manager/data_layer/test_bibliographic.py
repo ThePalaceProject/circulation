@@ -21,6 +21,7 @@ from palace.manager.data_layer.format import FormatData
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.data_layer.link import LinkData
 from palace.manager.data_layer.measurement import MeasurementData
+from palace.manager.data_layer.periodical import PeriodicalData
 from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.data_layer.subject import SubjectData
 from palace.manager.sqlalchemy.model.classification import Subject
@@ -33,6 +34,7 @@ from palace.manager.sqlalchemy.model.licensing import (
     RightsStatus,
 )
 from palace.manager.sqlalchemy.model.measurement import Measurement
+from palace.manager.sqlalchemy.model.periodical import SerialType
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.sqlalchemy.model.work import Work
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -452,6 +454,31 @@ class TestBibliographicData:
         # about an item's medium.
         bibliographic = BibliographicData(data_source_name=DataSource.OCLC)
         assert None == bibliographic.medium
+
+        # Nothing is assumed about a periodical either. The unresolved
+        # periodical and the resolved fields alongside it all start empty, and
+        # so do the series fields, which are unaffected by them.
+        assert bibliographic.periodical is None
+        assert bibliographic.periodical_id is None
+        assert bibliographic.periodical_volume_id is None
+        assert bibliographic.issue_position is None
+        assert bibliographic.series is None
+        assert bibliographic.series_position is None
+
+    def test_periodical(self) -> None:
+        # A PeriodicalData is carried through unchanged.
+        periodical = PeriodicalData(
+            serial_type=SerialType.MAGAZINE, title="Harper's Magazine"
+        )
+        bibliographic = BibliographicData(
+            data_source_name=DataSource.OCLC, periodical=periodical
+        )
+        assert bibliographic.periodical == periodical
+
+        # It is part of the bibliographic data, so a change to it is a change
+        # worth re-importing.
+        without = BibliographicData(data_source_name=DataSource.OCLC)
+        assert without.calculate_hash() != bibliographic.calculate_hash()
 
     def test_from_edition(self, db: DatabaseTransactionFixture):
         session = db.session
