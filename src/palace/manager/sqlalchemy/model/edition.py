@@ -158,7 +158,15 @@ class Edition(Base, EditionConstants):
     # every row in a very large table. `series_position` is not indexed
     # either. An ordered lookup would want a composite index on
     # (periodical_volume_id, issue_position).
-    issue_position = Column(Integer)
+    #
+    # Not a whole number: an issue that sits between two numbered issues (a
+    # half issue, #14.1) needs a fraction to sort in the right place, and the
+    # feed profile allows one. Double precision rather than numeric because a
+    # position arrives from a feed as a JSON number and stays an `int | float`
+    # all the way through the parser and the data layer; it is only ever
+    # compared and ordered, never added up, so there is nothing to gain by
+    # converting it at every boundary.
+    issue_position = Column(Float)
 
     # A volume only means anything together with its periodical: an issue is
     # in a volume *of* a magazine. Without the periodical, `Work.periodical`
@@ -229,7 +237,7 @@ class Edition(Base, EditionConstants):
         self,
         periodical: Periodical | None,
         volume: PeriodicalVolume | None = None,
-        issue_position: int | None = None,
+        issue_position: int | float | None = None,
     ) -> None:
         """Record that this Edition is an issue of a periodical.
 
@@ -239,7 +247,8 @@ class Edition(Base, EditionConstants):
         :param periodical: The magazine, journal or newspaper this edition is
             an issue of. Pass None to clear all three fields.
         :param volume: The volume of that periodical this issue belongs to.
-        :param issue_position: Where this issue sorts within its volume.
+        :param issue_position: Where this issue sorts within its volume. May
+            be a fraction, for an issue that sits between two numbered ones.
         :raises PalaceValueError: If a volume is given without a periodical,
             or if the volume belongs to a different periodical.
         """

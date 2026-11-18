@@ -74,7 +74,7 @@ class BibliographicData(BaseMutableData):
     series_position: int | None = None
     periodical_id: int | None = None
     periodical_volume_id: int | None = None
-    issue_position: int | None = None
+    issue_position: int | float | None = None
     publisher: str | None = None
     imprint: str | None = None
     issued: datetime.date | None = None

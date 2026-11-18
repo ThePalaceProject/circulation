@@ -92,6 +92,25 @@ class TestEdition:
         assert edition.periodical_volume is None
         assert edition.issue_position is None
 
+    def test_an_issue_position_can_be_a_fraction(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        # An issue that sits between two numbered issues keeps its fraction,
+        # so it still sorts between them. A whole-number column would round
+        # it to 14 and put it on top of issue 14.
+        periodical = Periodical(title="The Palace Review")
+        volume = PeriodicalVolume(periodical=periodical, label="Volume 1", position=1)
+        edition = db.edition(title="Issue 14.1")
+        db.session.add_all([periodical, volume])
+
+        edition.set_periodical(periodical, volume, issue_position=14.1)
+        db.session.flush()
+
+        # Read it back out of the database rather than off the object we
+        # just set, so this is the stored value and not the one in memory.
+        db.session.expire(edition)
+        assert edition.issue_position == 14.1
+
     def test_set_periodical_rejects_a_volume_from_another_periodical(
         self, db: DatabaseTransactionFixture
     ) -> None:

@@ -90,7 +90,7 @@ def upgrade() -> None:
     op.add_column(
         "editions", sa.Column("periodical_volume_id", sa.Integer(), nullable=True)
     )
-    op.add_column("editions", sa.Column("issue_position", sa.Integer(), nullable=True))
+    op.add_column("editions", sa.Column("issue_position", sa.Float(), nullable=True))
     op.create_foreign_key(
         "editions_periodical_id_fkey",
         "editions",
