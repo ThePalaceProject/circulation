@@ -840,6 +840,9 @@ class TestEdition:
         edition.published = published
         edition.issue_position = issue_position
         edition.periodical_volume = volume
+        # The database will not take a volume without the periodical it
+        # belongs to, so take the periodical from the volume.
+        edition.periodical = volume.periodical if volume is not None else None
         edition.calculate_permanent_work_id()
         return edition, pool
 
