@@ -72,7 +72,7 @@ def opds2_files_fixture() -> OPDS2FilesFixture:
 class PeriodicalFilesFixture(FilesFixture):
     """A fixture providing access to periodical (magazine, journal) feed files."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__("periodicals")
 
 
