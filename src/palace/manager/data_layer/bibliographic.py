@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime
 from collections import defaultdict
-from typing import Any, Literal, Self, overload
+from typing import Any, Final, Literal, Self, overload
 
 from pydantic import Field, field_validator, model_validator
 from sqlalchemy import and_
@@ -54,6 +54,19 @@ _BASIC_EDITION_FIELDS: list[str] = [
     "periodical_volume_id",
     "issue_position",
 ]
+
+_PERIODICAL_FIELDS: Final[frozenset[str]] = frozenset(
+    {
+        "periodical_id",
+        "periodical_volume_id",
+        "issue_position",
+    }
+)
+"""The fields that only mean anything for an issue of a periodical.
+
+Kept together because the fingerprint leaves out whichever of them are unset,
+and a new one added without being listed here would quietly undo that.
+"""
 
 _REL_REQUIRES_NEW_PRESENTATION_EDITION: list[str] = [
     LinkRelations.IMAGE,
@@ -125,8 +138,23 @@ class BibliographicData(BaseMutableData):
         returned here is applied by ``model_dump(exclude=...)`` to top-level names
         only. Including ``circulation`` would pull a nested, always-changing timestamp
         into the fingerprint and re-import every book on every run.
+
+        The periodical fields are left out as well, but only while they are
+        unset, which is why this is worked out per object rather than being a
+        fixed set. A book that is not an issue of anything hashes exactly as it
+        did before those fields existed, so adding them does not change the
+        fingerprint of every title already stored and does not send every title
+        through a needless re-apply the next time an import touches it. An
+        issue of a magazine does carry them, so a change to one is still a
+        change worth re-importing.
+
+        This is a trade: a little work on every hash, against having to
+        invalidate every stored fingerprint whenever these fields change.
         """
-        return super().fields_excluded_from_hash().union({"circulation"})
+        excluded = super().fields_excluded_from_hash().union({"circulation"})
+        return excluded | {
+            field for field in _PERIODICAL_FIELDS if getattr(self, field) is None
+        }
 
     @classmethod
     def from_edition(cls, edition: Edition) -> BibliographicData:

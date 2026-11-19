@@ -13,6 +13,7 @@ from palace.util.exceptions import PalaceValueError
 from palace.manager.core.classifier import NO_NUMBER, NO_VALUE
 from palace.manager.data_layer.bibliographic import (
     _BASIC_EDITION_FIELDS,
+    _PERIODICAL_FIELDS,
     BibliographicData,
 )
 from palace.manager.data_layer.circulation import CirculationData
@@ -35,6 +36,7 @@ from palace.manager.sqlalchemy.model.licensing import (
 from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.sqlalchemy.model.work import Work
+from palace.manager.util.json import json_hash
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.mocks.mock import LogCaptureHandler
 
@@ -1151,6 +1153,50 @@ class TestBibliographicData:
         same_time_changed.apply(db.session, edition, None)
         assert edition.updated_at == now
         assert edition.updated_at_data_hash == same_time_changed.calculate_hash()
+
+    def test_unset_periodical_fields_are_left_out_of_the_hash(self) -> None:
+        # A title that is not an issue of anything hashes as though the
+        # periodical fields were not there at all, so adding them does not
+        # invalidate every fingerprint already stored.
+        bibliographic = BibliographicData(
+            data_source_name=DataSource.OCLC, title="A book"
+        )
+        assert _PERIODICAL_FIELDS <= bibliographic.fields_excluded_from_hash()
+
+        without_the_fields = json_hash(
+            bibliographic.model_dump(
+                mode="json",
+                exclude={"created_at", "updated_at", "circulation"}
+                | _PERIODICAL_FIELDS,
+            )
+        )
+        assert bibliographic.calculate_hash() == without_the_fields
+
+    def test_set_periodical_fields_are_kept_in_the_hash(self) -> None:
+        # An issue does carry them, so a change to one is still a change worth
+        # re-importing. Each field is judged on its own.
+        bibliographic = BibliographicData(
+            data_source_name=DataSource.OCLC,
+            title="An issue",
+            issue_position=3,
+        )
+        excluded = bibliographic.fields_excluded_from_hash()
+        assert "issue_position" not in excluded
+        # The two that are still unset stay out.
+        assert "periodical_id" in excluded
+        assert "periodical_volume_id" in excluded
+
+        third_issue = bibliographic.calculate_hash()
+        bibliographic.issue_position = 4
+        fourth_issue = bibliographic.calculate_hash()
+
+        # Clearing a field puts it back out of the hash, and losing the value
+        # is itself a change, so that is still detected too.
+        bibliographic.issue_position = None
+        assert "issue_position" in bibliographic.fields_excluded_from_hash()
+        no_issue = bibliographic.calculate_hash()
+
+        assert len({third_issue, fourth_issue, no_issue}) == 3
 
     def test_calculate_hash_excludes_circulation_including_formats(self) -> None:
         """The delivery formats do not influence the bibliographic fingerprint.
