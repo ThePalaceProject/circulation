@@ -14,11 +14,13 @@ from sqlalchemy import (
     Unicode,
     text,
 )
-from sqlalchemy.orm import Mapped, relationship
+from sqlalchemy.orm import Mapped, Session, relationship
 
 from palace.util.datetime_helpers import utc_now
+from palace.util.exceptions import PalaceValueError
 
 from palace.manager.sqlalchemy.model.base import Base
+from palace.manager.sqlalchemy.util import get_one_or_create
 
 if TYPE_CHECKING:
     from palace.manager.sqlalchemy.model.datasource import DataSource
@@ -124,6 +126,54 @@ class Periodical(Base):
             postgresql_where=text("identifier_id IS NULL"),
         ),
     )
+
+    @classmethod
+    def lookup(
+        cls,
+        db: Session,
+        identifier: Identifier | None,
+        data_source: DataSource,
+        sort_title: str | None,
+    ) -> tuple[Periodical, bool]:
+        """Find the periodical these details describe, creating it if it is new.
+
+        This is where the identity rule in the class docstring is applied, kept
+        next to the index that enforces it.
+
+        :param db: Database session.
+        :param identifier: The serial's own identifier, normally its ISSN.
+        :param data_source: Where the metadata came from. Only used to tell
+            periodicals apart when there is no identifier.
+        :param sort_title: The serial's title as it sorts, already normalized.
+        :return: The periodical, and whether it was just created.
+        :raises PalaceValueError: If there is neither an identifier nor a sort
+            title, which would leave nothing to recognize the row by.
+        """
+        if identifier is not None:
+            # The data source is deliberately left out, so the same ISSN
+            # arriving from two distributors is one periodical.
+            return get_one_or_create(db, cls, identifier=identifier)
+
+        if not sort_title:
+            raise PalaceValueError(
+                "Can't look up a periodical with neither an identifier nor a "
+                "title: there would be nothing to recognize it by, and every "
+                "import would create another row."
+            )
+
+        # `identifier_id` has to be part of the lookup, not just of the row we
+        # would create. The unique index covering this pair only applies to
+        # rows without an identifier, so a lookup that left it out could match
+        # a row the index does not cover, and `get_one_or_create` would then
+        # recover from a conflict by querying for something the database never
+        # promised was unique.
+        return get_one_or_create(
+            db,
+            cls,
+            data_source=data_source,
+            sort_title=sort_title,
+            identifier_id=None,
+        )
 
     def __repr__(self) -> str:
         return (

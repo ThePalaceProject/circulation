@@ -1,0 +1,49 @@
+{
+  "metadata": {
+    "title": "Magazine issue that belongs to no volume"
+  },
+  "links": [
+    {
+      "rel": "self",
+      "href": "https://feed.example.com/publications",
+      "type": "application/opds+json"
+    }
+  ],
+  "publications": [
+    {
+      "metadata": {
+        "@type": "https://schema.org/PublicationIssue",
+        "identifier": "urn:uuid:3d8c5e21-4b77-42a9-8e10-7f45c2b9a6d3",
+        "title": "December 2026",
+        "sortAs": "2026-12",
+        "language": "en",
+        "publisher": "Example Publishing Co.",
+        "published": "2026-12-01",
+        "belongsTo": {
+          "magazine": {
+            "name": "Example Weekly",
+            "sortAs": "Example Weekly",
+            "identifier": "urn:issn:0317-8471",
+            "position": 12
+          }
+        }
+      },
+      "links": [
+        {
+          "rel": "http://opds-spec.org/acquisition",
+          "href": "https://feed.example.com/issues/3d8c5e21/manifest.json{?authentication_token}",
+          "type": "application/webpub+json",
+          "templated": true
+        }
+      ],
+      "images": [
+        {
+          "href": "https://cdn.example.com/covers/3d8c5e21.jpg",
+          "type": "image/jpeg",
+          "width": 1400,
+          "height": 1867
+        }
+      ]
+    }
+  ]
+}

@@ -5,7 +5,7 @@ from collections import defaultdict
 from typing import Any, Literal, Self, overload
 
 from pydantic import Field, field_validator, model_validator
-from sqlalchemy import and_
+from sqlalchemy import and_, desc, nullslast
 from sqlalchemy.orm import Query, Session
 
 from palace.util.exceptions import PalaceValueError
@@ -29,8 +29,10 @@ from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import LicensePool, RightsStatus
+from palace.manager.sqlalchemy.model.periodical import Periodical, PeriodicalVolume
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Resource
 from palace.manager.sqlalchemy.util import get_one, get_one_or_create
+from palace.manager.util import TitleProcessor
 from palace.manager.util.languages import LanguageCodes
 from palace.manager.util.median import median
 
@@ -737,6 +739,169 @@ class BibliographicData(BaseMutableData):
             edition.updated_at = updated_at
             edition.updated_at_data_hash = self.calculate_hash()
 
+    def _report_guessed_serial_type(
+        self,
+        data: PeriodicalData,
+        identifier: Identifier | None,
+        data_source: DataSource,
+        collection: Collection | None,
+    ) -> None:
+        """Report a serial whose kind we had to guess.
+
+        A feed that names its serials with the schema.org ``schema:Periodical``
+        key has already lost the difference between a magazine, a journal and a
+        newspaper. We read it as a magazine, so a journal sent that way is
+        stored as a magazine and nothing in the feed gets the difference back.
+        The only way to put that right is to ask the vendor which of the three
+        they mean, so this says enough to find them.
+
+        This is reported once for each periodical we create, rather than once
+        for each issue. A weekly title would otherwise write the same line
+        fifty-two times a year.
+
+        :param data: What the feed said about the serial.
+        :param identifier: The serial's identifier, if it had one.
+        :param data_source: Where the metadata came from.
+        :param collection: The collection being imported into, if there is one.
+        """
+        self.log.warning(
+            "Read %r as a magazine, but the feed only said it is a periodical "
+            "(the schema:Periodical key), so this may really be a journal or a "
+            "newspaper. Identifier: %s. Collection: %s. Data source: %s. "
+            "Ask the vendor to say which of the three they mean.",
+            data.title,
+            identifier.urn if identifier is not None else "none",
+            (
+                f"{collection.name} (id={collection.id})"
+                if collection is not None
+                else "none"
+            ),
+            data_source.name,
+        )
+
+    def _update_periodical(
+        self,
+        db: Session,
+        edition: Edition,
+        data_source: DataSource,
+        collection: Collection | None,
+    ) -> Periodical | None:
+        """Link this edition to the serial it is an issue of.
+
+        The periodical and its volume are created the first time they are seen
+        and reused afterwards, so importing a second issue of a magazine adds
+        an issue rather than another magazine.
+
+        :param db: Database session.
+        :param edition: The issue being imported.
+        :param data_source: Where this metadata came from.
+        :param collection: The collection being imported into, used only when
+            reporting a serial whose kind we had to guess.
+        :return: The periodical this edition is an issue of, or None if the
+            source did not say it is one.
+        """
+        data = self.periodical
+        if data is None:
+            # Most publications are books, so this is the usual answer.
+            return None
+
+        identifier = data.identifier.load(db)[0] if data.identifier else None
+        sort_title = TitleProcessor.sort_title_for(data.sort_title or data.title)
+
+        if identifier is None and not sort_title:
+            self.log.warning(
+                "Ignoring the serial an issue from %s belongs to: the feed gave "
+                "it neither an identifier nor a title, so there would be "
+                "nothing to recognize it by and every import would create "
+                "another row.",
+                data_source.name,
+            )
+            return None
+
+        periodical, is_new = Periodical.lookup(db, identifier, data_source, sort_title)
+
+        if is_new:
+            periodical.title = data.title
+            periodical.sort_title = sort_title
+            periodical.serial_type = data.serial_type
+            periodical.publisher = data.publisher
+            periodical.language = data.language
+            periodical.data_source = data_source
+            if data.serial_type_guessed:
+                self._report_guessed_serial_type(
+                    data, identifier, data_source, collection
+                )
+        elif data.serial_type is not None and not data.serial_type_guessed:
+            # A kind the feed actually named beats one we inferred from the
+            # schema:Periodical key, whichever arrived first.
+            periodical.serial_type = data.serial_type
+
+        volume = None
+        if data.volume_label:
+            # There is no unique constraint behind this pair, so two issues of
+            # the same volume imported at the same moment can each create a
+            # row. See the note in the pull request.
+            volume, _ = get_one_or_create(
+                db,
+                PeriodicalVolume,
+                periodical=periodical,
+                label=data.volume_label,
+                create_method_kwargs={"position": data.volume_position},
+            )
+
+        # The position is stored as the extractor worked it out, which means a
+        # volume mixing issues a feed numbered with issues we placed by their
+        # date sorts wrongly: the first are small numbers and the second are
+        # dates like 20261101. `PeriodicalData.issue_position_from_date` says
+        # which are which, but bringing them onto one scale means seeing a
+        # whole volume at once, and each issue is applied in its own task.
+        # That belongs in a job that runs over a finished volume.
+        edition.set_periodical(periodical, volume, data.issue_position)
+
+        return periodical
+
+    def _refresh_periodical_cover(
+        self, db: Session, periodical: Periodical, edition: Edition
+    ) -> None:
+        """Show the periodical the cover of its most recent issue.
+
+        Issues are ordered by the date they came out, then by where they sit in
+        their volume, then by id so that the answer never flaps between two
+        issues we cannot tell apart. An issue with no date sorts behind one
+        that has a date.
+
+        The periodical's row is shared by every issue in an import, so it is
+        only written when the cover actually moves. Re-importing an old issue
+        emits no update at all, which keeps workers from queueing up behind
+        each other on the one row.
+
+        :param db: Database session.
+        :param periodical: The periodical to update.
+        :param edition: The issue that has just been imported.
+        """
+        if edition.cover_id is None:
+            # An issue with no cover cannot become the periodical's, so there
+            # is nothing to look up.
+            return
+
+        cover_id = (
+            db.query(Edition.cover_id)
+            .filter(
+                Edition.periodical_id == periodical.id,
+                Edition.cover_id.isnot(None),
+            )
+            .order_by(
+                nullslast(desc(Edition.published)),
+                nullslast(desc(Edition.issue_position)),
+                desc(Edition.id),
+            )
+            .limit(1)
+            .scalar()
+        )
+
+        if cover_id is not None and periodical.cover_id != cover_id:
+            periodical.cover_id = cover_id
+
     def _update_edition_fields(
         self,
         db: Session,
@@ -897,10 +1062,21 @@ class BibliographicData(BaseMutableData):
         # Process thumbnails
         self._process_thumbnails(db, data_source, link_objects)
 
+        # Link this edition to the serial it is an issue of. This happens
+        # before the edition's presentation is calculated, because the link is
+        # part of how an issue is grouped with the other issues of its
+        # magazine.
+        periodical = self._update_periodical(db, edition, data_source, collection)
+
         # Apply edition-level updates by delegating to helper method
         edition_changed = self._update_edition_fields(db, edition, replace)
         if edition_changed:
             work_requires_new_presentation_edition = True
+
+        # The edition's own cover is chosen inside the call above, so the
+        # periodical's cover can only be brought up to date afterwards.
+        if periodical is not None:
+            self._refresh_periodical_cover(db, periodical, edition)
 
         # Apply circulation data
         if self.circulation:

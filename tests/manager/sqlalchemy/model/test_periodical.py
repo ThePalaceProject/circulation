@@ -1,6 +1,8 @@
 import pytest
 from sqlalchemy.exc import IntegrityError
 
+from palace.util.exceptions import PalaceValueError
+
 from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.periodical import (
@@ -219,6 +221,110 @@ class TestPeriodical:
         assert periodical.editions == [edition]
         assert volume.editions == [edition]
         assert edition.issue_position == 3
+
+    def test_lookup_by_identifier(self, db: DatabaseTransactionFixture) -> None:
+        # A periodical is found by its identifier, and created the first time.
+        identifier, _ = Identifier.for_foreign_id(
+            db.session, Identifier.ISSN, "0317-8471"
+        )
+        source = DataSource.lookup(db.session, DataSource.GUTENBERG, autocreate=True)
+
+        periodical, is_new = Periodical.lookup(
+            db.session, identifier, source, "Palace Review, The"
+        )
+        assert is_new is True
+        assert periodical.identifier == identifier
+
+        # Asking again gives the same row back.
+        again, is_new = Periodical.lookup(
+            db.session, identifier, source, "Palace Review, The"
+        )
+        assert is_new is False
+        assert again == periodical
+
+    def test_lookup_by_identifier_ignores_the_data_source(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        # The same ISSN arriving from two distributors is one magazine, which
+        # is the whole point of storing the identifier.
+        identifier, _ = Identifier.for_foreign_id(
+            db.session, Identifier.ISSN, "0378-5955"
+        )
+        source = DataSource.lookup(db.session, DataSource.GUTENBERG, autocreate=True)
+        other_source = DataSource.lookup(
+            db.session, DataSource.OVERDRIVE, autocreate=True
+        )
+
+        first, _ = Periodical.lookup(
+            db.session, identifier, source, "Palace Review, The"
+        )
+        second, is_new = Periodical.lookup(
+            db.session, identifier, other_source, "A different name"
+        )
+
+        assert is_new is False
+        assert second == first
+
+    def test_lookup_without_an_identifier(self, db: DatabaseTransactionFixture) -> None:
+        # With no identifier we fall back to the data source and the sort
+        # title, because that is all we have to go on.
+        source = DataSource.lookup(db.session, DataSource.GUTENBERG, autocreate=True)
+        other_source = DataSource.lookup(
+            db.session, DataSource.OVERDRIVE, autocreate=True
+        )
+
+        first, is_new = Periodical.lookup(
+            db.session, None, source, "Palace Review, The"
+        )
+        assert is_new is True
+
+        again, is_new = Periodical.lookup(
+            db.session, None, source, "Palace Review, The"
+        )
+        assert is_new is False
+        assert again == first
+
+        # The same title from another source stays a separate row: without an
+        # identifier there is no way to tell that they are the same magazine.
+        other, is_new = Periodical.lookup(
+            db.session, None, other_source, "Palace Review, The"
+        )
+        assert is_new is True
+        assert other != first
+
+    def test_lookup_without_an_identifier_skips_rows_that_have_one(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        # The unique index behind the fallback covers only the rows with no
+        # identifier, so the lookup has to ignore the rows that have one.
+        # Otherwise a magazine with an ISSN would be handed back to an issue
+        # that only knows a title, and the two would be merged on a title match
+        # the database never promised was unique.
+        identifier, _ = Identifier.for_foreign_id(
+            db.session, Identifier.ISSN, "2049-3630"
+        )
+        source = DataSource.lookup(db.session, DataSource.GUTENBERG, autocreate=True)
+
+        identified, _ = Periodical.lookup(
+            db.session, identifier, source, "Palace Review, The"
+        )
+        identified.data_source = source
+        identified.sort_title = "Palace Review, The"
+        db.session.flush()
+
+        anonymous, is_new = Periodical.lookup(
+            db.session, None, source, "Palace Review, The"
+        )
+        assert is_new is True
+        assert anonymous != identified
+        assert anonymous.identifier is None
+
+    def test_lookup_needs_something_to_go_on(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        source = DataSource.lookup(db.session, DataSource.GUTENBERG, autocreate=True)
+        with pytest.raises(PalaceValueError, match="nothing to recognize it by"):
+            Periodical.lookup(db.session, None, source, None)
 
     def test_repr(self, db: DatabaseTransactionFixture) -> None:
         periodical = Periodical(title="The Palace Review")
