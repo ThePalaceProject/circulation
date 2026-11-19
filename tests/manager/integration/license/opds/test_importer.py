@@ -27,7 +27,7 @@ from palace.manager.integration.license.opds.odl.importer import (
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.util.http.exception import BadResponseException
 from tests.fixtures.database import DatabaseTransactionFixture
-from tests.fixtures.files import OPDS2FilesFixture
+from tests.fixtures.files import OPDS2FilesFixture, PeriodicalFilesFixture
 from tests.fixtures.http import MockAsyncClientFixture
 from tests.fixtures.services import ServicesFixture
 
@@ -288,6 +288,38 @@ class TestOpdsImporter:
         assert len(failures) == 1
         failed_publication = failures[0]
         assert failed_publication.error_message == "Error validating publication"
+
+    def test__validate_and_filter_publications_keeps_periodicals(
+        self,
+        db: DatabaseTransactionFixture,
+        services_fixture: ServicesFixture,
+        periodical_files_fixture: PeriodicalFilesFixture,
+    ) -> None:
+        """An issue of a magazine is not dropped before it reaches the extractor.
+
+        Nothing in this phase knows about serials: it drops a publication that
+        will not parse, one whose identifier cannot be read, and one whose
+        identifier type the collection ignores. An issue is none of those, so
+        it comes through like any other publication.
+        """
+        collection = db.collection(
+            protocol=OPDS2WithODLApi,
+            settings=db.opds2_odl_settings(data_source="test collection"),
+        )
+        registry = services_fixture.services.integration_registry().license_providers()
+        importer = importer_from_collection(collection, registry)
+
+        feed = PublicationFeedNoValidation.model_validate_json(
+            periodical_files_fixture.sample_data("magazine_with_volume.json")
+        )
+
+        valid_results, failures = importer._validate_and_filter_publications(feed)
+
+        assert failures == []
+        assert len(valid_results) == 1
+        identifier, _, _ = valid_results[0]
+        assert identifier.type == Identifier.URI
+        assert identifier.identifier == "urn:uuid:9f2a1b7c-6a1e-4d33-9f0b-2c6a8e4f1d55"
 
     def test__fetch_all_license_documents(
         self,

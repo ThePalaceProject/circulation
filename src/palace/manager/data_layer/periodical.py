@@ -21,8 +21,8 @@ class PeriodicalData(BaseFrozenData):
     only that an issue belongs to a magazine called "Harper's" gives us a
     title and nothing else.
 
-    Nothing reads this yet. The OPDS 2.0 extractor fills it in from
-    ``belongsTo`` in a later change.
+    The OPDS 2.0 extractor fills this in from ``belongsTo``. Nothing reads it
+    yet; the importer that creates the rows comes in a later change.
     """
 
     serial_type: SerialType | None = None
@@ -30,6 +30,22 @@ class PeriodicalData(BaseFrozenData):
 
     ``SerialType.PERIODICAL`` means the source said it comes out in issues but
     not what kind of thing it is. ``None`` means it did not say at all.
+    """
+
+    serial_type_guessed: bool = False
+    """True when the kind above is a guess rather than something the source said.
+
+    A feed may name the serial with the schema.org ``schema:Periodical`` key,
+    which is the one name schema.org has for magazines, journals and
+    newspapers alike. We read it as a magazine, because that is the likeliest
+    of the three and it is the reading the feed profile gives vendors, but a
+    journal sent that way is recorded as a magazine and nothing in the feed
+    gets the difference back.
+
+    The extractor is the only place that can see this, so it records it here.
+    Whatever creates a ``Periodical`` from this reports it, so that a feed we
+    have read the wrong way can be found and its vendor asked to say which of
+    the three it means.
     """
 
     identifier: IdentifierData | None = None
@@ -67,6 +83,19 @@ class PeriodicalData(BaseFrozenData):
     This allows a decimal, because an issue sitting between two numbered
     issues (#0, a half issue, #14.1) needs one to sort in the right place.
     The value is only ever a sort key, so we keep whichever we were given.
+    """
+
+    issue_position_from_date: bool = False
+    """True when the position above was worked out from the issue's date.
+
+    A source that numbers its issues gives small numbers: 1, 2, 3. A source
+    that only dates them gives us nothing to sort by, so we build a number out
+    of the date instead, which is large: 20261101. The two are not comparable,
+    so a volume holding some of each would sort wrongly.
+
+    Whatever creates a volume from this sees every issue in it at once, which
+    is the only place the two can be brought onto one scale. This says which
+    issues would need rewriting there.
     """
 
     @field_validator("language")

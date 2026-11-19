@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable, Generator, Iterable, Sequence
 from datetime import date, datetime
-from typing import Any
+from typing import Any, Final
 from urllib.parse import urljoin
 
 from frozendict import frozendict
@@ -18,6 +19,7 @@ from palace.opds.opds2 import (
     BasePublicationFeed,
     PublicationFeedNoValidation,
 )
+from palace.opds.util import obj_or_tuple_to_tuple
 from palace.util.exceptions import PalaceValueError
 
 from palace.manager.data_layer.bibliographic import BibliographicData
@@ -27,6 +29,7 @@ from palace.manager.data_layer.format import FormatData
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.data_layer.license import LicenseData
 from palace.manager.data_layer.link import LinkData
+from palace.manager.data_layer.periodical import PeriodicalData
 from palace.manager.data_layer.subject import SubjectData
 from palace.manager.integration.license.opds.bearer_token_drm import BearerTokenDrmMixin
 from palace.manager.integration.license.opds.data import FailedPublication
@@ -44,8 +47,16 @@ from palace.manager.sqlalchemy.model.licensing import (
     LicensePoolType,
     RightsStatus,
 )
+from palace.manager.sqlalchemy.model.periodical import SerialType
 from palace.manager.sqlalchemy.model.resource import Hyperlink
 from palace.manager.util import first_or_default
+
+_NUMERIC_VOLUME_RE: Final = re.compile(r"[0-9]+")
+"""A volume label we can sort on, for example "2026" or "12".
+
+This deliberately does not accept digits from other scripts, which look like a
+number here but would sort somewhere nobody expects.
+"""
 
 
 class OPDS2WithODLExtractor[PublicationType: opds2.BasePublication](
@@ -61,6 +72,21 @@ class OPDS2WithODLExtractor[PublicationType: opds2.BasePublication](
         }
         | {role.lower(): role for role in Contributor.Role}
     )
+
+    _SERIAL_TYPE_MAPPING: frozendict[rwpm.SerialType, SerialType] = frozendict(
+        {
+            rwpm.SerialType.MAGAZINE: SerialType.MAGAZINE,
+            rwpm.SerialType.JOURNAL: SerialType.JOURNAL,
+            rwpm.SerialType.NEWSPAPER: SerialType.NEWSPAPER,
+            rwpm.SerialType.PERIODICAL: SerialType.PERIODICAL,
+        }
+    )
+    """What a kind of serial in a feed is called in our own database.
+
+    The feed models and the database have a serial type each, because
+    palace-opds does not depend on palace-manager, so the two are mapped here
+    rather than shared.
+    """
 
     def __init__(
         self,
@@ -890,9 +916,17 @@ class OPDS2WithODLExtractor[PublicationType: opds2.BasePublication](
         # FIXME: There are no measurements in OPDS 2.0
         measurements: list[Any] = []
 
-        # FIXME: There is no series information in OPDS 2.0
+        # FIXME: We do not read a series out of OPDS 2.0 yet. `belongsTo`
+        # does carry one and the feed model parses it, so the information is
+        # there for the taking, but reading it would start filling in a series
+        # on books that are already imported, which changes how they are
+        # grouped and displayed. That needs a change of its own.
         series = None
         series_position = None
+
+        periodical = self._extract_periodical_data(
+            publication, publisher=publisher, language=languages, published=published
+        )
 
         last_opds_update = publication.metadata.modified
 
@@ -914,10 +948,147 @@ class OPDS2WithODLExtractor[PublicationType: opds2.BasePublication](
             measurements=measurements,
             series=series,
             series_position=series_position,
+            periodical=periodical,
             links=links,
             updated_at=last_opds_update,
             duration=duration,
         )
+
+    def _extract_periodical_data(
+        self,
+        publication: opds2.BasePublication,
+        publisher: str | None,
+        language: str | None,
+        published: date | None,
+    ) -> PeriodicalData | None:
+        """Read the serial a publication is an issue of out of its ``belongsTo``.
+
+        :param publication: The publication being imported.
+        :param publisher: The issue's publisher. A serial reference has no
+            place to put one, and an issue is published by whoever publishes
+            the serial, so the issue's is the best we have.
+        :param language: The issue's language, for the same reason.
+        :param published: The date the issue came out, used to work out where
+            it sorts when the feed does not number its issues.
+        :return: What the feed said about the serial, or None if it did not say
+            the publication is an issue of one. Most publications are books,
+            so None is the usual answer.
+        """
+        belongs_to = publication.metadata.belongs_to
+        serial = belongs_to.serial
+        if serial is None:
+            return None
+
+        serial_type = belongs_to.serial_type
+        volume_label = belongs_to.volume
+        issue_position = self._issue_position(serial.position, published)
+
+        return PeriodicalData(
+            serial_type=(
+                self._SERIAL_TYPE_MAPPING[serial_type]
+                if serial_type is not None
+                else None
+            ),
+            serial_type_guessed=self._serial_type_guessed(belongs_to),
+            identifier=self._extract_serial_identifier(serial),
+            title=str(serial.name),
+            sort_title=serial.sort_as,
+            publisher=publisher,
+            language=language,
+            volume_label=volume_label,
+            volume_position=self._volume_position(volume_label),
+            issue_position=issue_position,
+            issue_position_from_date=(
+                issue_position is not None and serial.position is None
+            ),
+        )
+
+    def _extract_serial_identifier(
+        self, serial: rwpm.SerialReference
+    ) -> IdentifierData | None:
+        """Read the serial's own identifier, normally its ISSN.
+
+        This is the identifier of the magazine, not of the issue.
+
+        A serial we cannot identify is still worth having, so an identifier we
+        cannot read is logged and left out rather than failing the issue.
+        """
+        if serial.identifier is None:
+            return None
+        try:
+            return IdentifierData.parse_urn(serial.identifier)
+        except ValueError:
+            self.log.warning(
+                f"Could not read {serial.identifier!r}, the identifier of the "
+                f"serial {str(serial.name)!r}. Importing the issue without it."
+            )
+            return None
+
+    @staticmethod
+    def _serial_type_guessed(belongs_to: rwpm.BelongsTo) -> bool:
+        """Did we have to guess what kind of serial this is?
+
+        The ``schema:Periodical`` key is read as a magazine. Schema.org has one
+        name for magazines, journals and newspapers alike, so a feed using it
+        has already lost the difference between the three and nothing in the
+        feed gets it back. Magazine is the likeliest of them, so that is what
+        we record, and it can be wrong.
+
+        A feed can send ``schema:Periodical`` next to a key that does name the
+        kind. The more specific key wins, and then nothing was guessed. So this
+        asks whether the serial we actually used came from that key, rather
+        than whether the key was there at all.
+        """
+        from_schema_key = len(obj_or_tuple_to_tuple(belongs_to.schema_periodical))
+        return from_schema_key > 0 and len(belongs_to.serials) == from_schema_key
+
+    @staticmethod
+    def _issue_position(
+        provider_position: int | float | None, published: date | None
+    ) -> int | float | None:
+        """Work out where an issue sorts within its volume. Lower comes first.
+
+        A feed that numbers its issues is taken at its word. A feed that only
+        dates them gives us nothing to sort by, so the date is turned into a
+        number: 1 November 2026 becomes 20261101. Later dates give larger
+        numbers, so issues sort into the order they came out.
+
+        The two are not on the same scale -- a numbered issue is 11 where a
+        dated one is 20261101 -- so a volume holding some of each sorts
+        wrongly. The feeds we have seen use one or the other throughout, and
+        this is the only place that sees a single issue, so the position is
+        recorded as-is together with
+        :attr:`~palace.manager.data_layer.periodical.PeriodicalData.issue_position_from_date`.
+        Whatever builds a volume sees all of its issues at once and can bring
+        them onto one scale.
+
+        :param provider_position: The position the feed gave, if it gave one.
+        :param published: The date the issue came out, if the feed gave one.
+        :return: A sort key, or None if the feed gave us neither.
+        """
+        if provider_position is not None:
+            return provider_position
+        if published is not None:
+            return published.year * 10000 + published.month * 100 + published.day
+        return None
+
+    @staticmethod
+    def _volume_position(volume_label: str | None) -> int | None:
+        """Work out where a volume sorts within its serial. Lower comes first.
+
+        A volume label is free text, and only a label that is purely a number
+        tells us anything about order. "2026" and "12" sort; "Winter" and
+        "Series II" do not, and get no position rather than a made-up one.
+
+        :param volume_label: What the feed calls the volume, if it named one.
+        :return: A sort key, or None if the label is not a number.
+        """
+        if volume_label is None:
+            return None
+        label = volume_label.strip()
+        if _NUMERIC_VOLUME_RE.fullmatch(label):
+            return int(label)
+        return None
 
     @classmethod
     def feed_parse(cls, feed: bytes) -> PublicationFeedNoValidation:
