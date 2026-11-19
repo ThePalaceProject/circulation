@@ -838,9 +838,12 @@ class BibliographicData(BaseMutableData):
 
         volume = None
         if data.volume_label:
-            # There is no unique constraint behind this pair, so two issues of
-            # the same volume imported at the same moment can each create a
-            # row. See the note in the pull request.
+            # A volume is named once within its periodical, so two issues of
+            # the same volume arriving at the same moment do not each create a
+            # row: the second one's insert is refused and it picks up the row
+            # the first one made. A volume with no label is never created here,
+            # which matters because the database cannot tell two of those
+            # apart.
             volume, _ = get_one_or_create(
                 db,
                 PeriodicalVolume,
