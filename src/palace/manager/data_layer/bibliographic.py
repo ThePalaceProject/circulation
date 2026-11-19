@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime
 from collections import defaultdict
-from typing import Any, Literal, Self, overload
+from typing import Any, Final, Literal, Self, overload
 
 from pydantic import Field, field_validator, model_validator
 from sqlalchemy import and_
@@ -17,6 +17,7 @@ from palace.manager.data_layer.contributor import ContributorData
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.data_layer.link import LinkData
 from palace.manager.data_layer.measurement import MeasurementData
+from palace.manager.data_layer.periodical import PeriodicalData
 from palace.manager.data_layer.policy.presentation import PresentationCalculationPolicy
 from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.data_layer.subject import SubjectData
@@ -55,6 +56,20 @@ _BASIC_EDITION_FIELDS: list[str] = [
     "issue_position",
 ]
 
+_PERIODICAL_FIELDS: Final[frozenset[str]] = frozenset(
+    {
+        "periodical",
+        "periodical_id",
+        "periodical_volume_id",
+        "issue_position",
+    }
+)
+"""The fields that only mean anything for an issue of a periodical.
+
+Kept together because the fingerprint leaves out whichever of them are unset,
+and a new one added without being listed here would quietly undo that.
+"""
+
 _REL_REQUIRES_NEW_PRESENTATION_EDITION: list[str] = [
     LinkRelations.IMAGE,
     LinkRelations.THUMBNAIL_IMAGE,
@@ -72,9 +87,29 @@ class BibliographicData(BaseMutableData):
     medium: str | None = None
     series: str | None = None
     series_position: int | None = None
+    periodical: PeriodicalData | None = None
+    """The serial this is an issue of, as the source described it.
+
+    This is the unresolved side of the periodical fields: what a feed said,
+    before anything has been looked up or created. An importer reads it and
+    fills in the three fields below. The fields below are the resolved side,
+    database ids that are copied from edition to edition when source editions
+    are merged into a presentation edition, and nothing fills them in from a
+    feed.
+    """
+
     periodical_id: int | None = None
     periodical_volume_id: int | None = None
     issue_position: int | float | None = None
+    """Where this issue sorts within its volume, once resolved.
+
+    This allows a decimal for the same reason
+    :attr:`~palace.manager.data_layer.periodical.PeriodicalData.issue_position`
+    does, and because this is the field an importer assigns to: the basic
+    edition fields are copied onto the edition from here, and assignment is
+    validated, so a narrower type here would reject a decimal position rather
+    than store it.
+    """
     publisher: str | None = None
     imprint: str | None = None
     issued: datetime.date | None = None
@@ -125,8 +160,23 @@ class BibliographicData(BaseMutableData):
         returned here is applied by ``model_dump(exclude=...)`` to top-level names
         only. Including ``circulation`` would pull a nested, always-changing timestamp
         into the fingerprint and re-import every book on every run.
+
+        The periodical fields are left out as well, but only while they are
+        unset, which is why this is worked out per object rather than being a
+        fixed set. A book that is not an issue of anything hashes exactly as it
+        did before those fields existed, so adding them does not change the
+        fingerprint of every title already stored and does not send every title
+        through a needless re-apply the next time an import touches it. An
+        issue of a magazine does carry them, so a change to one is still a
+        change worth re-importing.
+
+        This is a trade: a little work on every hash, against having to
+        invalidate every stored fingerprint whenever these fields change.
         """
-        return super().fields_excluded_from_hash().union({"circulation"})
+        excluded = super().fields_excluded_from_hash().union({"circulation"})
+        return excluded | {
+            field for field in _PERIODICAL_FIELDS if getattr(self, field) is None
+        }
 
     @classmethod
     def from_edition(cls, edition: Edition) -> BibliographicData:

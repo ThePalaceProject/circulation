@@ -13,6 +13,7 @@ from palace.util.exceptions import PalaceValueError
 from palace.manager.core.classifier import NO_NUMBER, NO_VALUE
 from palace.manager.data_layer.bibliographic import (
     _BASIC_EDITION_FIELDS,
+    _PERIODICAL_FIELDS,
     BibliographicData,
 )
 from palace.manager.data_layer.circulation import CirculationData
@@ -21,6 +22,7 @@ from palace.manager.data_layer.format import FormatData
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.data_layer.link import LinkData
 from palace.manager.data_layer.measurement import MeasurementData
+from palace.manager.data_layer.periodical import PeriodicalData
 from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.data_layer.subject import SubjectData
 from palace.manager.sqlalchemy.model.classification import Subject
@@ -33,8 +35,10 @@ from palace.manager.sqlalchemy.model.licensing import (
     RightsStatus,
 )
 from palace.manager.sqlalchemy.model.measurement import Measurement
+from palace.manager.sqlalchemy.model.periodical import SerialType
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.sqlalchemy.model.work import Work
+from palace.manager.util.json import json_hash
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.mocks.mock import LogCaptureHandler
 
@@ -452,6 +456,92 @@ class TestBibliographicData:
         # about an item's medium.
         bibliographic = BibliographicData(data_source_name=DataSource.OCLC)
         assert None == bibliographic.medium
+
+        # Nothing is assumed about a periodical either. The unresolved
+        # periodical and the resolved fields alongside it all start empty, and
+        # so do the series fields, which are unaffected by them.
+        assert bibliographic.periodical is None
+        assert bibliographic.periodical_id is None
+        assert bibliographic.periodical_volume_id is None
+        assert bibliographic.issue_position is None
+        assert bibliographic.series is None
+        assert bibliographic.series_position is None
+
+    def test_periodical(self) -> None:
+        # A PeriodicalData is carried through unchanged.
+        periodical = PeriodicalData(
+            serial_type=SerialType.MAGAZINE, title="Harper's Magazine"
+        )
+        bibliographic = BibliographicData(
+            data_source_name=DataSource.OCLC, periodical=periodical
+        )
+        assert bibliographic.periodical == periodical
+
+        # It is part of the bibliographic data, so a change to it is a change
+        # worth re-importing.
+        without = BibliographicData(data_source_name=DataSource.OCLC)
+        assert without.calculate_hash() != bibliographic.calculate_hash()
+
+    def test_unset_periodical_fields_are_left_out_of_the_hash(self) -> None:
+        # A title that is not an issue of anything hashes as though the
+        # periodical fields were not there at all, so adding them does not
+        # invalidate every fingerprint already stored.
+        bibliographic = BibliographicData(
+            data_source_name=DataSource.OCLC, title="A book"
+        )
+        assert _PERIODICAL_FIELDS <= bibliographic.fields_excluded_from_hash()
+
+        without_the_fields = json_hash(
+            bibliographic.model_dump(
+                mode="json",
+                exclude={"created_at", "updated_at", "circulation"}
+                | _PERIODICAL_FIELDS,
+            )
+        )
+        assert bibliographic.calculate_hash() == without_the_fields
+
+    def test_set_periodical_fields_are_kept_in_the_hash(self) -> None:
+        # An issue does carry them, so a change to one is still a change worth
+        # re-importing. Each field is judged on its own.
+        bibliographic = BibliographicData(
+            data_source_name=DataSource.OCLC,
+            title="An issue",
+            periodical=PeriodicalData(title="Harper's Magazine"),
+            issue_position=3,
+        )
+        excluded = bibliographic.fields_excluded_from_hash()
+        assert "periodical" not in excluded
+        assert "issue_position" not in excluded
+        # The two that are still unset stay out.
+        assert "periodical_id" in excluded
+        assert "periodical_volume_id" in excluded
+
+        third_issue = bibliographic.calculate_hash()
+        bibliographic.issue_position = 4
+        fourth_issue = bibliographic.calculate_hash()
+
+        # Clearing a field puts it back out of the hash, and losing the value
+        # is itself a change, so that is still detected too.
+        bibliographic.issue_position = None
+        assert "issue_position" in bibliographic.fields_excluded_from_hash()
+        no_issue = bibliographic.calculate_hash()
+
+        assert len({third_issue, fourth_issue, no_issue}) == 3
+
+    def test_issue_position_accepts_a_decimal(self) -> None:
+        # An importer resolves a PeriodicalData by assigning to the fields the
+        # edition is updated from, so a decimal issue position has to survive
+        # that assignment rather than fail validation.
+        bibliographic = BibliographicData(data_source_name=DataSource.OCLC)
+        bibliographic.issue_position = 14.1
+        assert bibliographic.issue_position == 14.1
+
+        assert (
+            BibliographicData(
+                data_source_name=DataSource.OCLC, issue_position=14.1
+            ).issue_position
+            == 14.1
+        )
 
     def test_from_edition(self, db: DatabaseTransactionFixture):
         session = db.session
