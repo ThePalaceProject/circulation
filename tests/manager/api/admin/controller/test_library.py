@@ -1331,7 +1331,7 @@ class TestLibrarySettings:
         flask_app_fixture: FlaskAppFixture,
         controller: LibrarySettingsController,
         db: DatabaseTransactionFixture,
-    ):
+    ) -> None:
         """The optional lane, availability and content filter settings are applied."""
         payload = self.import_library_payload(
             name="Filtered Library",
@@ -1362,7 +1362,7 @@ class TestLibrarySettings:
         flask_app_fixture: FlaskAppFixture,
         controller: LibrarySettingsController,
         db: DatabaseTransactionFixture,
-    ):
+    ) -> None:
         """Leaving the optional settings out keeps the LibrarySettings defaults."""
         payload = self.import_library_payload(name="Plain Library", short_name="plain")
         assert "featured_lane_size" not in payload
@@ -1387,12 +1387,17 @@ class TestLibrarySettings:
         "field,value,expected_in_error",
         [
             pytest.param(
-                "featured_lane_size", 0, "greater than 0", id="featured_lane_size_zero"
+                "featured_lane_size",
+                0,
+                "'Maximum number of books in the 'featured' lanes' validation "
+                "error: Input should be greater than 0",
+                id="featured_lane_size_zero",
             ),
             pytest.param(
                 "featured_lane_size",
                 -5,
-                "greater than 0",
+                "'Maximum number of books in the 'featured' lanes' validation "
+                "error: Input should be greater than 0",
                 id="featured_lane_size_negative",
             ),
             pytest.param(
@@ -1441,7 +1446,7 @@ class TestLibrarySettings:
         field: str,
         value: Any,
         expected_in_error: str,
-    ):
+    ) -> None:
         """Bad values for the optional settings are reported, and no library is created."""
         payload = self.import_library_payload(
             name="Bad Settings Library", short_name="bad_settings"
@@ -1467,7 +1472,7 @@ class TestLibrarySettings:
         flask_app_fixture: FlaskAppFixture,
         controller: LibrarySettingsController,
         db: DatabaseTransactionFixture,
-    ):
+    ) -> None:
         """The accepted categories are the genre names the database stores."""
         genre_names = sorted(name for (name,) in db.session.query(Genre.name).all())
         assert genre_names, "expected the test database to be seeded with genres"
@@ -1493,7 +1498,7 @@ class TestLibrarySettings:
         flask_app_fixture: FlaskAppFixture,
         controller: LibrarySettingsController,
         db: DatabaseTransactionFixture,
-    ):
+    ) -> None:
         """Every audience the classifier defines is a legal CSV value."""
         audiences = sorted(Classifier.AUDIENCES)
         payload = self.import_library_payload(
@@ -1511,6 +1516,44 @@ class TestLibrarySettings:
         library = get_one(db.session, Library, short_name="all_audiences")
         assert library is not None
         assert library.settings.filtered_audiences == audiences
+
+    def test_import_libraries_reports_an_unexpected_settings_error(
+        self,
+        flask_app_fixture: FlaskAppFixture,
+        controller: LibrarySettingsController,
+        db: DatabaseTransactionFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A failure that carries no problem detail still reaches the operator."""
+
+        # LibrarySettings reports validation failures as ProblemDetailExceptions,
+        # which the import unpacks. Anything else falls back to str(), which is
+        # the only thing left to show.
+        def explode(**kwargs: Any) -> None:
+            raise RuntimeError("the database went away")
+
+        monkeypatch.setattr(
+            "palace.manager.api.admin.controller.library_settings.LibrarySettings",
+            explode,
+        )
+
+        payload = self.import_library_payload(
+            name="Unlucky Library", short_name="unlucky"
+        )
+
+        with flask_app_fixture.test_request_context_system_admin(
+            "/", method="POST", json={"libraries": [payload]}
+        ):
+            response = controller.import_libraries()
+            assert response.status_code == 207
+            result = response.get_json()
+            assert isinstance(result, dict)
+
+            assert len(result["created"]) == 0
+            assert len(result["errors"]) == 1
+            assert "the database went away" in result["errors"][0]["error"]
+
+        assert get_one(db.session, Library, short_name="unlucky") is None
 
     def test_import_libraries_mixed_success_and_errors(
         self,

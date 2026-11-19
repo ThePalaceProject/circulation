@@ -11,7 +11,7 @@ from flask import Response
 from flask_babel import lazy_gettext as _
 from PIL import Image, UnidentifiedImageError
 from PIL.Image import DecompressionBombError, Resampling
-from pydantic import BaseModel, PositiveInt, ValidationError
+from pydantic import BaseModel, ValidationError
 from werkzeug.datastructures import FileStorage
 
 from palace.manager.api.admin.announcement_list_validator import (
@@ -58,7 +58,11 @@ class LibraryImportInfo(BaseModel):
     small_collection_languages: list[str]
     facets_default_order: str
     enabled_entry_points: list[str]
-    featured_lane_size: PositiveInt | None = None
+    # A plain int, not a PositiveInt: the "greater than zero" rule belongs to
+    # LibrarySettings.featured_lane_size. Checking it here as well would state
+    # it twice, and a bad size would be reported as a raw pydantic error rather
+    # than in the same form as the other settings.
+    featured_lane_size: int | None = None
     facets_default_available: str | None = None
     filtered_audiences: list[str] | None = None
     # Named for the "Filtered categories" label the admin interface shows. The
