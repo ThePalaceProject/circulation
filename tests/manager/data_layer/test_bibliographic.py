@@ -2,11 +2,13 @@ import datetime
 import logging
 from copy import deepcopy
 from functools import partial
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from freezegun import freeze_time
 
+from palace.opds import opds2
+from palace.opds.opds2 import PublicationFeedNoValidation
 from palace.util.datetime_helpers import utc_now
 from palace.util.exceptions import PalaceValueError
 
@@ -24,6 +26,9 @@ from palace.manager.data_layer.measurement import MeasurementData
 from palace.manager.data_layer.periodical import PeriodicalData
 from palace.manager.data_layer.policy.replacement import ReplacementPolicy
 from palace.manager.data_layer.subject import SubjectData
+from palace.manager.integration.license.opds.odl.extractor import (
+    OPDS2WithODLExtractor,
+)
 from palace.manager.sqlalchemy.model.classification import Subject
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.datasource import DataSource
@@ -34,11 +39,54 @@ from palace.manager.sqlalchemy.model.licensing import (
     RightsStatus,
 )
 from palace.manager.sqlalchemy.model.measurement import Measurement
-from palace.manager.sqlalchemy.model.periodical import SerialType
-from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
+from palace.manager.sqlalchemy.model.periodical import (
+    Periodical,
+    PeriodicalVolume,
+    SerialType,
+)
+from palace.manager.sqlalchemy.model.resource import (
+    Hyperlink,
+    Representation,
+    Resource,
+)
 from palace.manager.sqlalchemy.model.work import Work
 from tests.fixtures.database import DatabaseTransactionFixture
+from tests.fixtures.files import PeriodicalFilesFixture
 from tests.mocks.mock import LogCaptureHandler
+
+# A feed brings its own data source along, and it is not one of the named
+# sources: those pin the kind of identifier their licence pools are keyed to,
+# and a feed identifies its publications however it likes.
+_FEED_SOURCE = "Example Feed"
+_OTHER_FEED_SOURCE = "Another Example Feed"
+
+
+def _issue_from_feed(
+    files: PeriodicalFilesFixture,
+    filename: str,
+    data_source_name: str = _FEED_SOURCE,
+) -> BibliographicData:
+    """Read the first publication of a periodical feed file.
+
+    Goes through the real extractor, so these tests see the same
+    ``PeriodicalData`` an import would produce rather than one built by hand.
+
+    :param files: The periodical feed files.
+    :param filename: Which feed file to read.
+    :param data_source_name: Which source to pretend the feed came from.
+    :return: The first publication in the feed.
+    """
+    feed = PublicationFeedNoValidation.model_validate_json(files.sample_data(filename))
+    publication = opds2.Publication.model_validate(feed.publications[0])
+    extractor: OPDS2WithODLExtractor = OPDS2WithODLExtractor(
+        parse_publication=MagicMock(),
+        base_url="http://example.org",
+        data_source=data_source_name,
+    )
+    return extractor.publication_bibliographic(
+        identifier=IdentifierData.parse_urn(publication.metadata.identifier),
+        publication=publication,
+    )
 
 
 class TestBibliographicData:
@@ -1400,3 +1448,405 @@ class TestBibliographicData:
         )
         assert thumbnail.resource.representation is None
         assert [] == image.resource.representation.thumbnails
+
+    # Periodicals: turning what a feed said about a magazine into rows, and
+    # linking the issue to them.
+
+    @pytest.mark.parametrize(
+        "filename,serial_type_guessed",
+        [
+            pytest.param("magazine_with_volume.json", False, id="magazine-key"),
+            pytest.param(
+                "schema_periodical_flattened_volume.json", True, id="schema-key"
+            ),
+        ],
+    )
+    def test_apply_creates_periodical_and_volume(
+        self,
+        db: DatabaseTransactionFixture,
+        periodical_files_fixture: PeriodicalFilesFixture,
+        filename: str,
+        serial_type_guessed: bool,
+    ) -> None:
+        # Both of the ways a vendor writes a magazine issue reach the same
+        # rows. The two feed files describe the same issue of the same
+        # magazine, one through the `magazine` key and one flattened onto
+        # `schema:Periodical`.
+        bibliographic = _issue_from_feed(periodical_files_fixture, filename)
+        edition, _ = bibliographic.edition(db.session)
+
+        bibliographic.apply(db.session, edition, None)
+        db.session.flush()
+
+        [periodical] = db.session.query(Periodical).all()
+        assert periodical.title == "Example Science Monthly"
+        assert periodical.sort_title == "Example Science Monthly"
+        assert periodical.serial_type == SerialType.MAGAZINE
+        assert periodical.publisher == "Example Publishing Co."
+        assert periodical.language == "eng"
+        assert periodical.identifier is not None
+        assert periodical.identifier.type == Identifier.ISSN
+        assert periodical.identifier.identifier == "1234-5679"
+        assert periodical.data_source.name == _FEED_SOURCE
+
+        [volume] = db.session.query(PeriodicalVolume).all()
+        assert volume.periodical == periodical
+        assert volume.label == "2026"
+        assert volume.position == 2026
+
+        # All three edition columns are filled in.
+        assert edition.periodical == periodical
+        assert edition.periodical_volume == volume
+        assert edition.issue_position == 11
+
+    def test_apply_without_a_volume(
+        self,
+        db: DatabaseTransactionFixture,
+        periodical_files_fixture: PeriodicalFilesFixture,
+    ) -> None:
+        # Most consumer magazines have no volume, and we never make one up.
+        bibliographic = _issue_from_feed(
+            periodical_files_fixture, "magazine_without_volume.json"
+        )
+        edition, _ = bibliographic.edition(db.session)
+
+        bibliographic.apply(db.session, edition, None)
+        db.session.flush()
+
+        [periodical] = db.session.query(Periodical).all()
+        assert periodical.title == "Example Weekly"
+        assert db.session.query(PeriodicalVolume).count() == 0
+
+        assert edition.periodical == periodical
+        assert edition.periodical_volume is None
+        # The issue still knows where it sorts.
+        assert edition.issue_position == 12
+
+    def test_apply_merges_one_issn_from_two_sources(
+        self,
+        db: DatabaseTransactionFixture,
+        periodical_files_fixture: PeriodicalFilesFixture,
+    ) -> None:
+        # The same magazine arriving from two distributors is one row. This is
+        # what the identifier is for, and why the data source is not part of
+        # identity when there is one.
+        for filename, source_name in (
+            ("magazine_with_volume.json", _FEED_SOURCE),
+            ("schema_periodical_flattened_volume.json", _OTHER_FEED_SOURCE),
+        ):
+            bibliographic = _issue_from_feed(
+                periodical_files_fixture, filename, source_name
+            )
+            edition, _ = bibliographic.edition(db.session)
+            bibliographic.apply(db.session, edition, None)
+        db.session.flush()
+
+        assert db.session.query(Periodical).count() == 1
+        assert db.session.query(PeriodicalVolume).count() == 1
+
+        # The first source to arrive is the one recorded, because the data
+        # source is only ever provenance.
+        [periodical] = db.session.query(Periodical).all()
+        assert periodical.data_source.name == _FEED_SOURCE
+
+    def test_apply_keeps_untitled_sources_apart(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        # Two magazines with the same name and no identifier stay separate,
+        # because there is nothing to say they are the same magazine.
+        periodical = PeriodicalData(
+            serial_type=SerialType.MAGAZINE, title="The Example Review"
+        )
+
+        for source_name in (DataSource.GUTENBERG, DataSource.OVERDRIVE):
+            edition = db.edition(data_source_name=source_name)
+            bibliographic = BibliographicData(
+                data_source_name=source_name,
+                primary_identifier_data=IdentifierData.from_identifier(
+                    edition.primary_identifier
+                ),
+                periodical=periodical,
+            )
+            bibliographic.apply(db.session, edition, None)
+        db.session.flush()
+
+        first, second = db.session.query(Periodical).order_by(Periodical.id).all()
+        assert first != second
+        # The leading article is moved to the end, the same way an edition's
+        # sort title is built, so "The Example Review" and "Example Review,
+        # The" from one source are one magazine rather than two.
+        assert first.sort_title == "Example Review, The"
+        assert second.sort_title == "Example Review, The"
+        assert first.data_source.name != second.data_source.name
+
+    def test_apply_is_idempotent(
+        self,
+        db: DatabaseTransactionFixture,
+        periodical_files_fixture: PeriodicalFilesFixture,
+    ) -> None:
+        # Re-importing the same feed adds nothing.
+        bibliographic = _issue_from_feed(
+            periodical_files_fixture, "magazine_with_volume.json"
+        )
+        edition, _ = bibliographic.edition(db.session)
+
+        policy = ReplacementPolicy(even_if_not_apparently_updated=True)
+        bibliographic.apply(db.session, edition, None, replace=policy)
+        bibliographic.apply(db.session, edition, None, replace=policy)
+        db.session.flush()
+
+        assert db.session.query(Periodical).count() == 1
+        assert db.session.query(PeriodicalVolume).count() == 1
+
+    def test_apply_ignores_a_serial_we_cannot_name(
+        self, db: DatabaseTransactionFixture, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        # Without an identifier or a title there is nothing to recognize the
+        # magazine by, so a row would be created again on every import.
+        caplog.set_level(logging.WARNING)
+        edition = db.edition()
+        bibliographic = BibliographicData(
+            data_source_name=edition.data_source.name,
+            primary_identifier_data=IdentifierData.from_identifier(
+                edition.primary_identifier
+            ),
+            periodical=PeriodicalData(serial_type=SerialType.MAGAZINE),
+        )
+
+        bibliographic.apply(db.session, edition, None)
+        db.session.flush()
+
+        assert db.session.query(Periodical).count() == 0
+        assert edition.periodical is None
+        assert "neither an identifier nor a title" in caplog.text
+
+    def test_apply_prefers_a_serial_type_the_feed_named(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        # A kind the feed actually named beats one we inferred from the
+        # schema:Periodical key, whichever of the two arrived first.
+        guessed = PeriodicalData(
+            serial_type=SerialType.MAGAZINE,
+            serial_type_guessed=True,
+            identifier=IdentifierData(type=Identifier.ISSN, identifier="0317-8471"),
+            title="Example Journal",
+        )
+        stated = guessed.model_copy(
+            update={"serial_type": SerialType.JOURNAL, "serial_type_guessed": False}
+        )
+
+        for data in (guessed, stated):
+            edition = db.edition()
+            bibliographic = BibliographicData(
+                data_source_name=edition.data_source.name,
+                primary_identifier_data=IdentifierData.from_identifier(
+                    edition.primary_identifier
+                ),
+                periodical=data,
+            )
+            bibliographic.apply(db.session, edition, None)
+        db.session.flush()
+
+        [periodical] = db.session.query(Periodical).all()
+        assert periodical.serial_type == SerialType.JOURNAL
+
+        # A later guess does not undo it.
+        edition = db.edition()
+        BibliographicData(
+            data_source_name=edition.data_source.name,
+            primary_identifier_data=IdentifierData.from_identifier(
+                edition.primary_identifier
+            ),
+            periodical=guessed,
+        ).apply(db.session, edition, None)
+        db.session.flush()
+        assert periodical.serial_type == SerialType.JOURNAL
+
+    def test_apply_reports_a_guessed_serial_type_once(
+        self,
+        db: DatabaseTransactionFixture,
+        periodical_files_fixture: PeriodicalFilesFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        # A feed that names its magazine with the schema:Periodical key has
+        # already lost the difference between a magazine, a journal and a
+        # newspaper, so we say so loudly enough to go back to the vendor --
+        # but only once for each magazine, not once for each issue.
+        caplog.set_level(logging.WARNING)
+
+        def import_issue() -> None:
+            bibliographic = _issue_from_feed(
+                periodical_files_fixture, "schema_periodical_flattened_volume.json"
+            )
+            edition, _ = bibliographic.edition(db.session)
+            bibliographic.apply(
+                db.session,
+                edition,
+                db.default_collection(),
+                replace=ReplacementPolicy(even_if_not_apparently_updated=True),
+            )
+            db.session.flush()
+
+        import_issue()
+        [report] = [r for r in caplog.records if "schema:Periodical" in r.message]
+        message = report.getMessage()
+        assert "Example Science Monthly" in message
+        assert "urn:issn:1234-5679" in message
+        assert db.default_collection().name in message
+        assert _FEED_SOURCE in message
+
+        # A second issue of the same magazine says nothing. A weekly title
+        # would otherwise write this line fifty-two times a year.
+        caplog.clear()
+        import_issue()
+        assert [r for r in caplog.records if "schema:Periodical" in r.message] == []
+
+    def test_apply_does_not_report_a_serial_type_the_feed_named(
+        self,
+        db: DatabaseTransactionFixture,
+        periodical_files_fixture: PeriodicalFilesFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        caplog.set_level(logging.WARNING)
+        bibliographic = _issue_from_feed(
+            periodical_files_fixture, "magazine_with_volume.json"
+        )
+        edition, _ = bibliographic.edition(db.session)
+        bibliographic.apply(db.session, edition, None)
+
+        assert [r for r in caplog.records if "schema:Periodical" in r.message] == []
+
+    def test_refresh_periodical_cover(self, db: DatabaseTransactionFixture) -> None:
+        # The periodical shows the cover of its most recent issue.
+        periodical = Periodical(title="Example Science Monthly")
+        db.session.add(periodical)
+
+        def issue(published: datetime.date | None, position: float | None) -> Edition:
+            edition = db.edition()
+            edition.published = published
+            edition.cover = Resource(url=f"http://example.com/{published}-{position}")
+            edition.set_periodical(periodical, issue_position=position)
+            return edition
+
+        november = issue(datetime.date(2026, 11, 1), 11)
+        db.session.flush()
+        BibliographicData(
+            data_source_name=DataSource.GUTENBERG
+        )._refresh_periodical_cover(db.session, periodical, november)
+        assert periodical.cover_id == november.cover_id
+
+        # An older issue does not take the cover away from it.
+        october = issue(datetime.date(2026, 10, 1), 10)
+        db.session.flush()
+        BibliographicData(
+            data_source_name=DataSource.GUTENBERG
+        )._refresh_periodical_cover(db.session, periodical, october)
+        assert periodical.cover_id == november.cover_id
+
+        # A newer one does.
+        december = issue(datetime.date(2026, 12, 1), 12)
+        db.session.flush()
+        BibliographicData(
+            data_source_name=DataSource.GUTENBERG
+        )._refresh_periodical_cover(db.session, periodical, december)
+        assert periodical.cover_id == december.cover_id
+
+    def test_refresh_periodical_cover_orders_undated_issues_by_position(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        # An issue with no date sorts behind one that has a date, and undated
+        # issues are placed by where they sit in their volume.
+        periodical = Periodical(title="Example Science Monthly")
+        db.session.add(periodical)
+        bibliographic = BibliographicData(data_source_name=DataSource.GUTENBERG)
+
+        first = db.edition()
+        first.cover = Resource(url="http://example.com/first")
+        first.set_periodical(periodical, issue_position=1)
+
+        second = db.edition()
+        second.cover = Resource(url="http://example.com/second")
+        second.set_periodical(periodical, issue_position=2)
+        db.session.flush()
+
+        bibliographic._refresh_periodical_cover(db.session, periodical, first)
+        assert periodical.cover_id == second.cover_id
+
+        dated = db.edition()
+        dated.published = datetime.date(2020, 1, 1)
+        dated.cover = Resource(url="http://example.com/dated")
+        dated.set_periodical(periodical, issue_position=0)
+        db.session.flush()
+
+        bibliographic._refresh_periodical_cover(db.session, periodical, dated)
+        assert periodical.cover_id == dated.cover_id
+
+    def test_refresh_periodical_cover_writes_nothing_when_unchanged(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        # The periodical's row is shared by every issue in an import, so it is
+        # only written when the cover actually moves. Without this, every
+        # worker in a run would queue up behind the others on one row.
+        periodical = Periodical(title="Example Science Monthly")
+        db.session.add(periodical)
+        bibliographic = BibliographicData(data_source_name=DataSource.GUTENBERG)
+
+        edition = db.edition()
+        edition.published = datetime.date(2026, 11, 1)
+        edition.cover = Resource(url="http://example.com/cover")
+        edition.set_periodical(periodical, issue_position=11)
+        db.session.flush()
+
+        bibliographic._refresh_periodical_cover(db.session, periodical, edition)
+        db.session.flush()
+
+        with db.record_statements() as statements:
+            bibliographic._refresh_periodical_cover(db.session, periodical, edition)
+            db.session.flush()
+        assert [s for s in statements if s.startswith("UPDATE periodicals")] == []
+
+        # An issue with no cover of its own is not even looked up.
+        coverless = db.edition()
+        coverless.set_periodical(periodical, issue_position=12)
+        db.session.flush()
+        with db.record_statements() as statements:
+            bibliographic._refresh_periodical_cover(db.session, periodical, coverless)
+        assert statements == []
+
+    def test_apply_query_count_does_not_grow_with_the_periodical(
+        self,
+        db: DatabaseTransactionFixture,
+        periodical_files_fixture: PeriodicalFilesFixture,
+    ) -> None:
+        # Each issue is applied on its own, so what matters is that the cost
+        # of one issue stays the same however many issues the magazine already
+        # has. Measuring one import against another, rather than against a
+        # fixed number, keeps this from breaking every time an unrelated query
+        # moves.
+        def import_one_issue(urn: str) -> int:
+            bibliographic = _issue_from_feed(
+                periodical_files_fixture, "magazine_with_volume.json"
+            )
+            bibliographic.primary_identifier_data = IdentifierData.parse_urn(urn)
+            edition, _ = bibliographic.edition(db.session)
+            db.session.flush()
+            db.session.expire_all()
+            with db.record_statements() as statements:
+                bibliographic.apply(db.session, edition, None)
+                db.session.flush()
+            return len(statements)
+
+        # Warm up, so the first import's one-off work -- creating the
+        # periodical, the volume and the data source -- is not counted.
+        import_one_issue("urn:uuid:00000000-0000-4000-8000-000000000000")
+
+        with_one_issue = import_one_issue(
+            "urn:uuid:00000000-0000-4000-8000-000000000001"
+        )
+        for i in range(2, 12):
+            import_one_issue(f"urn:uuid:00000000-0000-4000-8000-{i:012d}")
+        with_twelve_issues = import_one_issue(
+            "urn:uuid:00000000-0000-4000-8000-0000000000ff"
+        )
+
+        assert with_twelve_issues == with_one_issue
