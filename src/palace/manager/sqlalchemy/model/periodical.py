@@ -160,6 +160,23 @@ class PeriodicalVolume(Base):
         "Edition", back_populates="periodical_volume", uselist=True
     )
 
+    @property
+    def name_for_permanent_work_id(self) -> str | None:
+        """A stable name for this volume, for a permanent work ID.
+
+        We prefer the position, which is a plain number, over the label, which
+        is text a source wrote and two sources may word differently.
+
+        This lives here because an issue's permanent work ID is worked out in
+        two places — from an :class:`Edition` and from a ``BibliographicData``
+        — and the two have to agree. One copy of the rule cannot drift from
+        the other.
+        """
+        if self.position is not None:
+            return str(self.position)
+        label: str | None = self.label
+        return label
+
     def __repr__(self) -> str:
         return (
             f"<PeriodicalVolume id={self.id} periodical_id={self.periodical_id} "

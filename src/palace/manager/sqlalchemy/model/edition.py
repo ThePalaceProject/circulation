@@ -710,17 +710,14 @@ class Edition(Base, EditionConstants):
         """A stable name for the volume this issue belongs to.
 
         An issue position only counts within a volume, so the volume has to go
-        into the permanent work ID alongside it. We prefer the volume's
-        position, which is a plain number, over its label, which is text a
-        source wrote and two sources may word differently.
+        into the permanent work ID alongside it. The naming rule itself lives
+        on :class:`PeriodicalVolume`, because ``BibliographicData`` has to
+        reach the same answer from its own copy of the fields.
         """
         volume = self.periodical_volume
         if volume is None:
             return None
-        if volume.position is not None:
-            return str(volume.position)
-        label: str | None = volume.label
-        return label
+        return volume.name_for_permanent_work_id
 
     def calculate_permanent_work_id(self, debug: bool = False) -> None:
         title = self.title_for_permanent_work_id

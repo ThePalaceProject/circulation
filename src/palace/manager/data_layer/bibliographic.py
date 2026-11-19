@@ -28,6 +28,7 @@ from palace.manager.sqlalchemy.model.datasource import DataSource
 from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import LicensePool, RightsStatus
+from palace.manager.sqlalchemy.model.periodical import PeriodicalVolume
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Resource
 from palace.manager.sqlalchemy.util import get_one, get_one_or_create
 from palace.manager.util.languages import LanguageCodes
@@ -214,9 +215,9 @@ class BibliographicData(BaseMutableData):
 
         This has to match what :meth:`Edition.calculate_permanent_work_id`
         works out for the same item, so it asks the same question about the
-        medium. An issue of a periodical gets a grouping category of its own
-        that includes the publication date, so that issues of one periodical
-        don't all share a permanent work ID.
+        medium and hands over the same fields. An issue of a periodical gets a
+        grouping category of its own, so that issues of one periodical don't
+        all share a permanent work ID.
         """
         primary_author = self.primary_author
 
@@ -226,13 +227,21 @@ class BibliographicData(BaseMutableData):
         if not self.title:
             return None
 
-        # We can't tell an Edition's issue position from here, so a periodical
-        # is told apart by its publication date alone. When the medium is
-        # missing we treat the item as a book, which is what we did before we
-        # looked at the medium at all.
+        # An issue with no publication date is told apart by its position
+        # within its volume, so both have to go across, the same ones the
+        # Edition hands over. When the medium is missing we treat the item as
+        # a book, which is what we did before we looked at the medium at all.
+        volume = (
+            _db.get(PeriodicalVolume, self.periodical_volume_id)
+            if self.periodical_volume_id is not None
+            else None
+        )
         grouping_category = (
             Edition.grouping_category_for_permanent_work_id(
-                self.medium, published=self.published
+                self.medium,
+                published=self.published,
+                issue_position=self.issue_position,
+                volume=volume.name_for_permanent_work_id if volume else None,
             )
             or BOOK_GROUPING_CATEGORY
         )

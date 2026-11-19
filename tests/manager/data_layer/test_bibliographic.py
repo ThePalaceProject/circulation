@@ -33,6 +33,7 @@ from palace.manager.sqlalchemy.model.licensing import (
     RightsStatus,
 )
 from palace.manager.sqlalchemy.model.measurement import Measurement
+from palace.manager.sqlalchemy.model.periodical import Periodical, PeriodicalVolume
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.sqlalchemy.model.work import Work
 from tests.fixtures.database import DatabaseTransactionFixture
@@ -996,6 +997,8 @@ class TestBibliographicData:
         medium: str | None = None,
         published: datetime.date | None = None,
         title: str = "The Palace Review",
+        issue_position: int | float | None = None,
+        periodical_volume_id: int | None = None,
     ) -> BibliographicData:
         return BibliographicData(
             data_source_name=DataSource.GUTENBERG,
@@ -1003,6 +1006,8 @@ class TestBibliographicData:
             title=title,
             medium=medium,
             published=published,
+            issue_position=issue_position,
+            periodical_volume_id=periodical_volume_id,
             contributors=[
                 ContributorData(
                     sort_name="Palace, Editors",
@@ -1034,9 +1039,9 @@ class TestBibliographicData:
                 == edition.permanent_work_id
             )
 
-        # A periodical is the one medium where BibliographicData reads a second
-        # field, the publication date, so it is the one most likely to drift
-        # away from what Edition works out.
+        # A periodical is the one medium where BibliographicData reads more
+        # than the medium, so it is the one most likely to drift away from
+        # what Edition works out.
         published = datetime.date(2024, 3, 1)
         issue = self._bibliographic_for_pwid(
             db, medium=Edition.PERIODICAL_MEDIUM, published=published
@@ -1049,6 +1054,36 @@ class TestBibliographicData:
         assert (
             issue.calculate_permanent_work_id(db.session) == edition.permanent_work_id
         )
+
+        # The harder case: an issue with no date at all, told apart by where it
+        # sits in its volume. Both sides have to look the volume up and name it
+        # the same way.
+        periodical = Periodical(title="The Palace Review")
+        volume = PeriodicalVolume(periodical=periodical, label="Volume 1", position=1)
+        db.session.add_all([periodical, volume])
+        db.session.flush()
+
+        undated = self._bibliographic_for_pwid(
+            db,
+            medium=Edition.PERIODICAL_MEDIUM,
+            issue_position=3,
+            periodical_volume_id=volume.id,
+        )
+        edition = db.edition(title="The Palace Review", authors="Palace, Editors")
+        edition.medium = Edition.PERIODICAL_MEDIUM
+        edition.set_periodical(periodical, volume, issue_position=3)
+        edition.calculate_permanent_work_id()
+
+        assert (
+            undated.calculate_permanent_work_id(db.session) == edition.permanent_work_id
+        )
+
+        # And the position really did reach the ID: an issue of the same
+        # periodical with no position and no date falls back to the bare
+        # category, so the two cannot come out the same. Without this, the
+        # assertion above would hold even if both sides ignored the volume.
+        bare = self._bibliographic_for_pwid(db, medium=Edition.PERIODICAL_MEDIUM)
+        assert undated.permanent_work_id != bare.calculate_permanent_work_id(db.session)
 
     def test_calculate_permanent_work_id_without_a_medium(
         self, db: DatabaseTransactionFixture
