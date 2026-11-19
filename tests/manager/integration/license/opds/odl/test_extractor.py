@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+import logging
 from unittest.mock import MagicMock
 
 import pytest
@@ -20,8 +21,10 @@ from palace.manager.integration.license.opds.odl.constants import FEEDBOOKS_AUDI
 from palace.manager.integration.license.opds.odl.extractor import OPDS2WithODLExtractor
 from palace.manager.sqlalchemy.constants import EditionConstants, MediaTypes
 from palace.manager.sqlalchemy.model.contributor import Contributor
+from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import DeliveryMechanism, RightsStatus
-from tests.fixtures.files import OPDS2FilesFixture
+from palace.manager.sqlalchemy.model.periodical import SerialType
+from tests.fixtures.files import OPDS2FilesFixture, PeriodicalFilesFixture
 
 
 class ODLExtractorTestFixture:
@@ -86,6 +89,35 @@ class ODLExtractorTestFixture:
             ],
             links=[],
             licenses=[license],
+        )
+
+    def opds2_publication(
+        self,
+        type: str = "http://schema.org/Book",
+        title: str = "Test Book",
+        belongs_to: rwpm.BelongsTo | None = None,
+    ) -> opds2.Publication:
+        """Create a plain OPDS 2.0 Publication, with no ODL licenses."""
+        return opds2.Publication(
+            metadata=opds2.PublicationMetadata(
+                type=type,
+                identifier=self.publication_identifier,
+                title=title,
+                belongs_to=belongs_to or rwpm.BelongsTo(),
+            ),
+            images=[
+                opds2.Link(
+                    href="http://example.org/cover.jpg",
+                    type="image/jpeg",
+                )
+            ],
+            links=[
+                opds2.Link(
+                    rel=opds2.AcquisitionLinkRelations.borrow,
+                    href="http://example.org/borrow",
+                    type="application/webpub+json",
+                )
+            ],
         )
 
     def extractor(
@@ -528,3 +560,176 @@ class TestOPDS2WithODLExtractor:
         assert "5-12" in identifiers  # from typical_age_range
         assert "Children" in identifiers  # from audience_type
         assert "6-11" in identifiers  # from suggested ages
+
+    @pytest.mark.parametrize(
+        "provider_position,published,expected",
+        [
+            pytest.param(11, datetime.date(2026, 11, 1), 11, id="numbered-issue"),
+            pytest.param(None, datetime.date(2026, 11, 1), 20261101, id="dated-issue"),
+            pytest.param(20261124, None, 20261124, id="position-is-itself-a-date"),
+            pytest.param(None, None, None, id="neither"),
+            pytest.param(14.1, None, 14.1, id="half-issue"),
+        ],
+    )
+    def test__issue_position(
+        self,
+        provider_position: int | float | None,
+        published: datetime.date | None,
+        expected: int | float | None,
+    ) -> None:
+        assert (
+            OPDS2WithODLExtractor._issue_position(provider_position, published)
+            == expected
+        )
+
+    @pytest.mark.parametrize(
+        "volume_label,expected",
+        [
+            pytest.param("2026", 2026, id="year"),
+            pytest.param("12", 12, id="number"),
+            pytest.param(" 12 ", 12, id="padded"),
+            pytest.param("Winter", None, id="not-a-number"),
+            pytest.param("Series II", None, id="roman-numeral"),
+            # These are digits as far as str.isdigit() is concerned, but they
+            # are not a volume anyone would sort on.
+            pytest.param("١٢", None, id="digits-from-another-script"),
+            pytest.param("", None, id="empty"),
+            pytest.param(None, None, id="no-volume"),
+        ],
+    )
+    def test__volume_position(
+        self, volume_label: str | None, expected: int | None
+    ) -> None:
+        assert OPDS2WithODLExtractor._volume_position(volume_label) == expected
+
+    @pytest.mark.parametrize(
+        "filename,serial_type_guessed",
+        [
+            pytest.param("magazine_with_volume.json", False, id="magazine-key"),
+            pytest.param(
+                "schema_periodical_flattened_volume.json",
+                True,
+                id="schema-periodical-key",
+            ),
+        ],
+    )
+    def test__extract_periodical_data_from_feed(
+        self,
+        odl_extractor_fixture: ODLExtractorTestFixture,
+        periodical_files_fixture: PeriodicalFilesFixture,
+        filename: str,
+        serial_type_guessed: bool,
+    ) -> None:
+        """Both of the ways a vendor writes a magazine issue reach the same place."""
+        feed = PublicationFeedNoValidation.model_validate_json(
+            periodical_files_fixture.sample_data(filename)
+        )
+        publication = opds2.Publication.model_validate(feed.publications[0])
+        extractor = odl_extractor_fixture.extractor()
+
+        bibliographic = extractor.publication_bibliographic(
+            identifier=IdentifierData.parse_urn(publication.metadata.identifier),
+            publication=publication,
+        )
+
+        periodical = bibliographic.periodical
+        assert periodical is not None
+        assert periodical.serial_type == SerialType.MAGAZINE
+        assert periodical.serial_type_guessed is serial_type_guessed
+        assert periodical.title == "Example Science Monthly"
+        assert periodical.sort_title == "Example Science Monthly"
+        assert periodical.identifier == IdentifierData(
+            type=Identifier.ISSN, identifier="1234-5679"
+        )
+        # A serial reference carries neither of these, so they come from the
+        # issue, which is published by whoever publishes the magazine.
+        assert periodical.publisher == "Example Publishing Co."
+        assert periodical.language == "eng"
+        assert periodical.volume_label == "2026"
+        assert periodical.volume_position == 2026
+        # The feed numbers this issue, so its date is not used.
+        assert periodical.issue_position == 11
+        assert periodical.issue_position_from_date is False
+
+    def test__extract_periodical_data_no_belongs_to(
+        self, odl_extractor_fixture: ODLExtractorTestFixture
+    ) -> None:
+        """A book says nothing about a serial, and gets no PeriodicalData."""
+        publication = odl_extractor_fixture.opds2_publication()
+        extractor = odl_extractor_fixture.extractor()
+
+        assert (
+            extractor._extract_periodical_data(
+                publication, publisher=None, language=None, published=None
+            )
+            is None
+        )
+
+    def test__extract_periodical_data_dated_issue(
+        self, odl_extractor_fixture: ODLExtractorTestFixture
+    ) -> None:
+        """An issue the feed does not number is placed by the date it came out."""
+        publication = odl_extractor_fixture.opds2_publication(
+            type="https://schema.org/PublicationIssue",
+            title="November 2026",
+            belongs_to=rwpm.BelongsTo(
+                journal=rwpm.SerialReference(name="Example Journal"),
+            ),
+        )
+        extractor = odl_extractor_fixture.extractor()
+
+        periodical = extractor._extract_periodical_data(
+            publication,
+            publisher=None,
+            language=None,
+            published=datetime.date(2026, 11, 1),
+        )
+
+        assert periodical is not None
+        assert periodical.serial_type == SerialType.JOURNAL
+        assert periodical.serial_type_guessed is False
+        assert periodical.identifier is None
+        assert periodical.volume_label is None
+        assert periodical.volume_position is None
+        assert periodical.issue_position == 20261101
+        assert periodical.issue_position_from_date is True
+
+    def test__extract_periodical_data_unreadable_identifier(
+        self,
+        odl_extractor_fixture: ODLExtractorTestFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A serial whose ISSN we cannot read is still imported, without it."""
+        publication = odl_extractor_fixture.opds2_publication(
+            type="https://schema.org/PublicationIssue",
+            title="November 2026",
+            belongs_to=rwpm.BelongsTo(
+                magazine=rwpm.SerialReference(
+                    name="Example Science Monthly",
+                    identifier="urn:issn:1234-5678",
+                ),
+            ),
+        )
+        extractor = odl_extractor_fixture.extractor()
+
+        with caplog.at_level(logging.WARNING):
+            periodical = extractor._extract_periodical_data(
+                publication, publisher=None, language=None, published=None
+            )
+
+        assert periodical is not None
+        assert periodical.title == "Example Science Monthly"
+        assert periodical.identifier is None
+        assert "urn:issn:1234-5678" in caplog.text
+
+    def test__serial_type_guessed_more_specific_key_wins(self) -> None:
+        """A feed sending both keys has not made us guess anything."""
+        belongs_to = rwpm.BelongsTo.model_validate(
+            {
+                "magazine": {"name": "Example Science Monthly"},
+                "schema:Periodical": {"name": "Example Science Monthly"},
+            }
+        )
+
+        assert belongs_to.serial_type == rwpm.SerialType.MAGAZINE
+        assert OPDS2WithODLExtractor._serial_type_guessed(belongs_to) is False
