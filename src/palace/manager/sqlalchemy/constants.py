@@ -1,11 +1,19 @@
 # DataSourceConstants, EditionConstants, IdentifierConstants, LinkRelations,
 # MediaTypes
 
+import datetime
 import re
 from collections import OrderedDict
+from decimal import Decimal
 from enum import Enum
 
 from bidict import frozenbidict
+
+from palace.manager.util.permanent_work_id import (
+    BOOK_GROUPING_CATEGORY,
+    PERIODICAL_GROUPING_CATEGORY,
+    periodical_grouping_category,
+)
 
 
 class DataSourceConstants:
@@ -116,14 +124,52 @@ class EditionConstants:
     # Map the medium constants to the strings used when generating
     # permanent work IDs.
     medium_for_permanent_work_id = {
-        BOOK_MEDIUM: "book",
-        AUDIO_MEDIUM: "book",
+        BOOK_MEDIUM: BOOK_GROUPING_CATEGORY,
+        AUDIO_MEDIUM: BOOK_GROUPING_CATEGORY,
         MUSIC_MEDIUM: "music",
-        PERIODICAL_MEDIUM: "book",
+        PERIODICAL_MEDIUM: PERIODICAL_GROUPING_CATEGORY,
         VIDEO_MEDIUM: "movie",
         IMAGE_MEDIUM: "image",
         COURSEWARE_MEDIUM: "courseware",
     }
+
+    @classmethod
+    def grouping_category_for_permanent_work_id(
+        cls,
+        medium: str | None,
+        published: datetime.date | None = None,
+        issue_position: int | float | Decimal | None = None,
+        volume: str | None = None,
+    ) -> str | None:
+        """Work out the third ingredient of a permanent work ID: what kind of
+        thing this is.
+
+        Title and author make up the other two. For most media the answer is
+        just the medium, looked up in :attr:`medium_for_permanent_work_id`. One
+        issue of a periodical also needs to say which issue it is, or every
+        issue of a periodical ends up with the same permanent work ID and the
+        whole run collapses into a single Work.
+
+        :param medium: The medium of the item, one of the ``*_MEDIUM``
+            constants.
+        :param published: The date the item was published. Only used for
+            periodicals.
+        :param issue_position: Where this issue sorts within its volume. Only
+            used for periodicals.
+        :param volume: A stable name for the volume this issue belongs to.
+            Only used for periodicals.
+        :return: A grouping category, or None if we don't know the medium.
+        """
+        if not medium:
+            return None
+        category = cls.medium_for_permanent_work_id.get(medium)
+        if category == PERIODICAL_GROUPING_CATEGORY:
+            return periodical_grouping_category(
+                published=published,
+                issue_position=issue_position,
+                volume=volume,
+            )
+        return category
 
 
 class IdentifierConstants:

@@ -1,0 +1,97 @@
+import datetime
+
+from palace.manager.util.permanent_work_id import (
+    PERIODICAL_GROUPING_CATEGORY,
+    periodical_grouping_category,
+)
+
+
+class TestPermanentWorkId:
+    def test_publication_date_is_used_when_we_have_one(self):
+        # The date tells one issue from another.
+        assert (
+            periodical_grouping_category(published=datetime.date(2024, 3, 1))
+            == "periodical/2024-03-01"
+        )
+
+        # Two issues published on different days get different categories.
+        assert periodical_grouping_category(
+            published=datetime.date(2024, 3, 1)
+        ) != periodical_grouping_category(published=datetime.date(2024, 4, 1))
+
+    def test_time_of_day_is_dropped(self):
+        # Two sources are unlikely to agree on a time of day, so a datetime is
+        # cut down to its date and still matches the same issue from a source
+        # that only gave us a date.
+        assert periodical_grouping_category(
+            published=datetime.datetime(2024, 3, 1, 9, 30)
+        ) == periodical_grouping_category(published=datetime.date(2024, 3, 1))
+
+    def test_issue_position_is_used_when_there_is_no_date(self):
+        assert periodical_grouping_category(issue_position=3) == "periodical/3"
+
+    def test_a_whole_number_position_reads_the_same_either_way(self) -> None:
+        # The database stores a position as a fraction, so an issue that
+        # started out as number 3 comes back as 3.0. It has to give the same
+        # permanent work ID either way, or one issue becomes two Works.
+        assert periodical_grouping_category(
+            issue_position=3.0
+        ) == periodical_grouping_category(issue_position=3)
+
+    def test_a_fractional_position_is_kept(self) -> None:
+        # An issue sitting between two numbered issues is its own issue, and
+        # must not be folded into the one before it.
+        assert periodical_grouping_category(issue_position=14.1) == "periodical/14.1"
+        assert periodical_grouping_category(
+            issue_position=14.1
+        ) != periodical_grouping_category(issue_position=14)
+
+    def test_the_date_wins_over_the_position(self):
+        # We only ever use one of the two, so that an issue that reached us
+        # with both still matches the same issue from a source that only gave
+        # us the date.
+        with_both = periodical_grouping_category(
+            published=datetime.date(2024, 3, 1), issue_position=3
+        )
+        assert with_both == periodical_grouping_category(
+            published=datetime.date(2024, 3, 1)
+        )
+
+    def test_nothing_to_go_on(self):
+        # With no date and no position we have nothing to tell issues apart.
+        assert periodical_grouping_category() == PERIODICAL_GROUPING_CATEGORY
+
+    def test_volume_goes_in_front_of_the_issue_position(self):
+        # An issue position only counts within a volume, so position 3 of two
+        # different volumes must not come out the same.
+        first = periodical_grouping_category(issue_position=3, volume="1")
+        second = periodical_grouping_category(issue_position=3, volume="2")
+        assert first != second
+        assert first == "periodical/v1/3"
+
+    def test_volume_on_its_own(self):
+        # Knowing only the volume still keeps one volume apart from the next.
+        assert periodical_grouping_category(volume="12") == "periodical/v12"
+
+    def test_a_volume_is_not_an_issue_position(self):
+        # The volume is marked, so volume 12 and issue 12 don't collide.
+        assert periodical_grouping_category(
+            volume="12"
+        ) != periodical_grouping_category(issue_position=12)
+
+    def test_the_date_still_wins_over_the_volume(self):
+        # The date is used on its own, so an issue that came with a date, a
+        # volume and a position still matches one that came with the date
+        # alone.
+        assert periodical_grouping_category(
+            published=datetime.date(2024, 3, 1), issue_position=3, volume="1"
+        ) == periodical_grouping_category(published=datetime.date(2024, 3, 1))
+
+    def test_a_periodical_is_never_a_book(self):
+        for category in (
+            periodical_grouping_category(),
+            periodical_grouping_category(published=datetime.date(2024, 3, 1)),
+            periodical_grouping_category(issue_position=3),
+        ):
+            assert category != "book"
+            assert category.startswith(PERIODICAL_GROUPING_CATEGORY)

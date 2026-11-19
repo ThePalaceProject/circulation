@@ -32,6 +32,7 @@ from palace.manager.sqlalchemy.model.resource import Hyperlink, Resource
 from palace.manager.sqlalchemy.util import get_one, get_one_or_create
 from palace.manager.util.languages import LanguageCodes
 from palace.manager.util.median import median
+from palace.manager.util.permanent_work_id import BOOK_GROUPING_CATEGORY
 
 _BASIC_EDITION_FIELDS: list[str] = [
     "title",
@@ -237,7 +238,14 @@ class BibliographicData(BaseMutableData):
                 setattr(self, "contributors", new_value)
 
     def calculate_permanent_work_id(self, _db: Session) -> str | None:
-        """Try to calculate a permanent work ID from this BibliographicData."""
+        """Try to calculate a permanent work ID from this BibliographicData.
+
+        This has to match what :meth:`Edition.calculate_permanent_work_id`
+        works out for the same item, so it asks the same question about the
+        medium. An issue of a periodical gets a grouping category of its own
+        that includes the publication date, so that issues of one periodical
+        don't all share a permanent work ID.
+        """
         primary_author = self.primary_author
 
         if not primary_author:
@@ -246,9 +254,20 @@ class BibliographicData(BaseMutableData):
         if not self.title:
             return None
 
+        # We can't tell an Edition's issue position from here, so a periodical
+        # is told apart by its publication date alone. When the medium is
+        # missing we treat the item as a book, which is what we did before we
+        # looked at the medium at all.
+        grouping_category = (
+            Edition.grouping_category_for_permanent_work_id(
+                self.medium, published=self.published
+            )
+            or BOOK_GROUPING_CATEGORY
+        )
+
         sort_author = primary_author.sort_name
         pwid = Edition.calculate_permanent_work_id_for_title_and_author(
-            self.title, sort_author, "book"
+            self.title, sort_author, grouping_category
         )
         self.permanent_work_id = pwid
         return pwid

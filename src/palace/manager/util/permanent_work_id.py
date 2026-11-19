@@ -1,6 +1,75 @@
+import datetime
 import re
 import unicodedata
+from decimal import Decimal
 from hashlib import md5
+
+# The grouping category used for books, and for anything else we treat like a
+# book when we work out a permanent work ID.
+BOOK_GROUPING_CATEGORY = "book"
+
+# The grouping category used for one issue of a periodical.
+PERIODICAL_GROUPING_CATEGORY = "periodical"
+
+
+def periodical_grouping_category(
+    published: datetime.date | None = None,
+    issue_position: int | float | Decimal | None = None,
+    volume: str | None = None,
+) -> str:
+    """Work out the grouping category for a single issue of a periodical.
+
+    Every issue of a periodical carries the same title and the same author as
+    the periodical itself, so title and author on their own give every issue
+    the same permanent work ID and collapse a whole run of issues into one
+    Work. The grouping category is where we say which issue this is.
+
+    The publication date is the best thing to say it with, so we use it alone
+    whenever we have one. Failing that we use the position of the issue, which
+    only counts within a volume, so the volume goes in front of it: position 3
+    of volume 1 and position 3 of volume 2 are different issues. A volume on
+    its own is still better than nothing, since it at least keeps one year of a
+    periodical apart from the next.
+
+    All of these come from the issue itself rather than from our database, so
+    the same issue from two different sources still works out to the same
+    permanent work ID and the two still count as one Work.
+
+    The date is used on its own and never joined with the rest. If we joined
+    them, an issue that reached us with a date and a position would not match
+    the same issue from a source that only gave us the date.
+
+    With nothing at all to go on, every issue falls back to the same category,
+    as they did before. Guessing here would be worse: it would split issues
+    that are really the same.
+
+    :param published: The date this issue was published.
+    :param issue_position: Where this issue sorts within its volume. May be
+        a fraction, for an issue sitting between two numbered ones.
+    :param volume: A stable name for the volume this issue belongs to.
+    :return: A grouping category to pass to :meth:`WorkIDCalculator.permanent_id`.
+    """
+    if published is not None:
+        # A datetime would carry a time of day, which two sources are unlikely
+        # to agree on. Only the date matters here.
+        if isinstance(published, datetime.datetime):
+            published = published.date()
+        return f"{PERIODICAL_GROUPING_CATEGORY}/{published.isoformat()}"
+
+    parts = [PERIODICAL_GROUPING_CATEGORY]
+    if volume is not None:
+        # The "v" keeps a volume apart from an issue position of the same
+        # number.
+        parts.append(f"v{volume}")
+    if issue_position is not None:
+        # A position is a whole number when we have just read it from a feed,
+        # and a fraction once it has been through the database, which stores
+        # it as one. Write 3 and 3.0 the same way, or the same issue would get
+        # a different permanent work ID depending on where it came from.
+        if issue_position == int(issue_position):
+            issue_position = int(issue_position)
+        parts.append(str(issue_position))
+    return "/".join(parts)
 
 
 class WorkIDCalculator:
