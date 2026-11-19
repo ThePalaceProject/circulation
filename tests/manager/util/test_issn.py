@@ -3,7 +3,7 @@ import pytest
 from palace.manager.util.issn import InvalidISSNError, is_valid_issn, normalize_issn
 
 
-class TestNormalizeISSN:
+class TestISSN:
     @pytest.mark.parametrize(
         "value,expected",
         [
@@ -16,7 +16,7 @@ class TestNormalizeISSN:
             pytest.param("2434561x", "2434-561X", id="no_hyphen_and_lowercase_x"),
         ],
     )
-    def test_valid(self, value: str, expected: str) -> None:
+    def test_normalize_issn(self, value: str, expected: str) -> None:
         assert normalize_issn(value) == expected
 
     @pytest.mark.parametrize(
@@ -37,7 +37,7 @@ class TestNormalizeISSN:
             ),
         ],
     )
-    def test_malformed(self, value: str) -> None:
+    def test_normalize_issn_rejects_malformed(self, value: str) -> None:
         with pytest.raises(InvalidISSNError) as excinfo:
             normalize_issn(value)
         assert f'"{value}" is not a valid ISSN.' in str(excinfo.value)
@@ -51,7 +51,7 @@ class TestNormalizeISSN:
             pytest.param("0317-847X", "1", id="x_where_digit_belongs"),
         ],
     )
-    def test_bad_check_character(
+    def test_normalize_issn_rejects_bad_check_character(
         self, value: str, expected_check_character: str
     ) -> None:
         with pytest.raises(InvalidISSNError) as excinfo:
@@ -60,13 +60,11 @@ class TestNormalizeISSN:
             excinfo.value
         )
 
-    def test_error_is_a_value_error(self) -> None:
+    def test_invalid_issn_error_is_a_value_error(self) -> None:
         # Callers that only know about ValueError still catch a bad ISSN.
         with pytest.raises(ValueError):
             normalize_issn("nope")
 
-
-class TestIsValidISSN:
     @pytest.mark.parametrize(
         "value,expected",
         [
