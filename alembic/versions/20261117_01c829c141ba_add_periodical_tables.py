@@ -79,11 +79,16 @@ def upgrade() -> None:
         sa.Column("updated", sa.DateTime(timezone=True), nullable=True),
         sa.ForeignKeyConstraint(["periodical_id"], ["periodicals.id"]),
         sa.PrimaryKeyConstraint("id"),
-    )
-    op.create_index(
-        op.f("ix_periodical_volumes_periodical_id"),
-        "periodical_volumes",
-        ["periodical_id"],
+        # A volume is named once within its periodical, so two workers
+        # importing issues of the same volume at the same moment cannot each
+        # create a row for it. Volumes with no label are exempt: nulls are
+        # distinct here, and we have nothing to tell two unlabelled volumes
+        # apart by.
+        #
+        # The index behind this constraint leads with `periodical_id`, so it
+        # also serves lookups by periodical and there is no separate index on
+        # that column.
+        sa.UniqueConstraint("periodical_id", "label"),
     )
 
     op.add_column("editions", sa.Column("periodical_id", sa.Integer(), nullable=True))
@@ -133,9 +138,6 @@ def downgrade() -> None:
     op.drop_column("editions", "periodical_volume_id")
     op.drop_column("editions", "periodical_id")
 
-    op.drop_index(
-        op.f("ix_periodical_volumes_periodical_id"), table_name="periodical_volumes"
-    )
     op.drop_table("periodical_volumes")
 
     op.drop_index("ix_periodicals_data_source_id_sort_title", table_name="periodicals")

@@ -12,6 +12,7 @@ from sqlalchemy import (
     Index,
     Integer,
     Unicode,
+    UniqueConstraint,
     text,
 )
 from sqlalchemy.orm import Mapped, relationship
@@ -139,8 +140,10 @@ class PeriodicalVolume(Base):
 
     id: Mapped[int] = Column(Integer, primary_key=True)
 
+    # Not indexed on its own: the unique constraint below leads with this
+    # column, so its index already serves lookups by periodical.
     periodical_id: Mapped[int] = Column(
-        Integer, ForeignKey("periodicals.id"), index=True, nullable=False
+        Integer, ForeignKey("periodicals.id"), nullable=False
     )
     periodical: Mapped[Periodical] = relationship(
         "Periodical", back_populates="volumes"
@@ -159,6 +162,16 @@ class PeriodicalVolume(Base):
     editions: Mapped[list[Edition]] = relationship(
         "Edition", back_populates="periodical_volume", uselist=True
     )
+
+    # A volume is named once within its periodical. Without this, two issues of
+    # the same volume imported at the same moment by different workers each
+    # create a row, because `get_one_or_create` only recovers from a concurrent
+    # insert when the second one raises.
+    #
+    # A volume with no label is exempt, because Postgres treats nulls as
+    # distinct here: we have nothing to tell two unlabelled volumes apart by,
+    # so there is nothing to enforce.
+    __table_args__ = (UniqueConstraint("periodical_id", "label"),)
 
     def __repr__(self) -> str:
         return (

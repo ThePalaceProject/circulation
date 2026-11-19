@@ -250,6 +250,49 @@ class TestPeriodicalVolume:
         db.session.flush()
         assert volume.updated is not None
 
+    def test_label_is_unique_within_a_periodical(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        # Two workers importing issues of the same volume at the same moment
+        # must not each get a row for it.
+        periodical = Periodical(title="The Palace Review")
+        other = Periodical(title="The Palace Quarterly")
+        db.session.add_all(
+            [
+                periodical,
+                other,
+                PeriodicalVolume(periodical=periodical, label="Volume 1"),
+            ]
+        )
+        db.session.flush()
+
+        # The same label under a different periodical is a different volume.
+        db.session.add(PeriodicalVolume(periodical=other, label="Volume 1"))
+        db.session.flush()
+
+        # The same label under the same periodical is the same volume.
+        db.session.add(PeriodicalVolume(periodical=periodical, label="Volume 1"))
+        with pytest.raises(IntegrityError):
+            db.session.flush()
+
+    def test_volumes_without_a_label_do_not_collide(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        # Postgres treats nulls as distinct, so the constraint does not apply
+        # to unlabelled volumes. There is nothing to tell them apart by, so
+        # there is nothing to enforce.
+        periodical = Periodical(title="The Palace Review")
+        db.session.add_all(
+            [
+                periodical,
+                PeriodicalVolume(periodical=periodical, position=1),
+                PeriodicalVolume(periodical=periodical, position=2),
+            ]
+        )
+        db.session.flush()
+
+        assert len(periodical.volumes) == 2
+
     def test_periodical_is_required(self, db: DatabaseTransactionFixture) -> None:
         volume = PeriodicalVolume(label="2026")
         db.session.add(volume)
