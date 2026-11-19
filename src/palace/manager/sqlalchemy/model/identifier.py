@@ -49,7 +49,7 @@ from palace.manager.sqlalchemy.model.licensing import (
 )
 from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.sqlalchemy.util import create, get_one, get_one_or_create
-from palace.manager.util.issn import is_valid_issn, normalize_issn
+from palace.manager.util.issn import normalize_issn
 from palace.manager.util.summary import SummaryEvaluator
 
 if TYPE_CHECKING:
@@ -455,14 +455,11 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
         invalid (e.g. all Overdrive IDs look like UUIDs, but we
         currently don't enforce that). We only reject an ID out of
         hand if it will cause problems with a third-party API.
-        ISSNs are the exception: an ISSN carries a check character, so
-        we can tell a mistyped one from a real one, and we don't give it
-        the benefit of the doubt.
-        """
-        if type == Identifier.ISSN:
-            # A bad ISSN would quietly split one magazine into two.
-            return is_valid_issn(id)
 
+        An ISSN is checked before it gets here, in
+        :meth:`prepare_foreign_type_and_identifier`, which normalizes it
+        and raises if its check character doesn't match.
+        """
         forbidden_characters = ""
         if type == Identifier.BIBLIOTHECA_ID:
             # IDs are joined with commas and provided as a URL path

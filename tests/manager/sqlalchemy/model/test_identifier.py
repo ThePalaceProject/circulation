@@ -133,14 +133,6 @@ class TestIdentifier:
         assert True == m(Identifier.BIBLIOTHECA_ID, "0015142259")
         assert False == m(Identifier.BIBLIOTHECA_ID, "0015142259,0015187940")
 
-        # An ISSN carries a check character, so we can tell a real one from a
-        # mistyped one.
-        assert True == m(Identifier.ISSN, "0317-8471")
-        assert True == m(Identifier.ISSN, "03178471")
-        assert True == m(Identifier.ISSN, "2434-561X")
-        assert False == m(Identifier.ISSN, "0317-8470")
-        assert False == m(Identifier.ISSN, "notanissn")
-
     def test_for_foreign_id_without_autocreate(self, db: DatabaseTransactionFixture):
         identifier_type = Identifier.ISBN
         isbn = db.fresh_str()
