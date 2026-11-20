@@ -31,6 +31,7 @@ from palace.manager.sqlalchemy.model.licensing import (
     LicensePoolStatus,
     LicensePoolType,
 )
+from palace.manager.sqlalchemy.model.periodical import Periodical
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation, Resource
 from palace.manager.sqlalchemy.model.work import (
     Work,
@@ -57,6 +58,26 @@ from tests.fixtures.search import (
 
 
 class TestWork:
+    def test_periodical(self, db: DatabaseTransactionFixture) -> None:
+        work = db.work(with_license_pool=True)
+        edition = work.presentation_edition
+
+        # A work that is not an issue of anything has no periodical.
+        assert work.periodical is None
+
+        # Once its presentation edition belongs to a periodical, the work
+        # reports that periodical.
+        periodical = Periodical(title="The Palace Review")
+        db.session.add(periodical)
+        edition.set_periodical(periodical)
+        db.session.flush()
+
+        assert work.periodical == periodical
+
+        # With no presentation edition there is nothing to report.
+        work.presentation_edition = None
+        assert work.periodical is None
+
     def test_all_identifier_ids(self, db: DatabaseTransactionFixture):
         work = db.work(with_license_pool=True)
         lp = work.license_pools[0]

@@ -30,6 +30,10 @@ from palace.manager.sqlalchemy.model.licensing import (
     RightsStatus,
 )
 from palace.manager.sqlalchemy.model.patron import Hold, Loan
+from palace.manager.sqlalchemy.model.periodical import (
+    Periodical,
+    PeriodicalVolume,
+)
 from palace.manager.sqlalchemy.model.resource import Hyperlink, Representation
 from palace.manager.sqlalchemy.util import create
 from palace.manager.util import first_or_default
@@ -1088,6 +1092,40 @@ class TestLicensePool:
         assert pool.last_updated is not None
         assert work.last_update_time is not None
         assert (utc_now() - pool.last_updated) < datetime.timedelta(seconds=2)
+
+    def test_set_presentation_edition_keeps_the_periodical_link(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        # An issue with more than one source edition gets a combined
+        # presentation edition built for it. The link to the magazine has to
+        # survive that, or `Work.periodical` comes back empty for an issue
+        # that plainly belongs to one.
+        od, pool = db.edition(
+            data_source_name=DataSource.OVERDRIVE, with_license_pool=True
+        )
+        mw = db.edition(
+            data_source_name=DataSource.METADATA_WRANGLER, with_license_pool=False
+        )
+        mw.primary_identifier = pool.identifier
+
+        periodical = Periodical(title="The Palace Review")
+        volume = PeriodicalVolume(periodical=periodical, label="Volume 1", position=1)
+        db.session.add_all([periodical, volume])
+        od.set_periodical(periodical, volume, issue_position=3)
+        db.session.flush()
+
+        pool.set_presentation_edition()
+        presentation = pool.presentation_edition
+
+        # The presentation edition is a new, combined Edition...
+        assert presentation != od
+        assert presentation != mw
+
+        # ...and it carries the magazine, the volume and the issue's place in
+        # that volume.
+        assert presentation.periodical == periodical
+        assert presentation.periodical_volume == volume
+        assert presentation.issue_position == 3
 
     def test_set_presentation_edition(self, db: DatabaseTransactionFixture):
         """

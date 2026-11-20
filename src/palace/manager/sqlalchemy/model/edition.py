@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING, Literal, overload
 
 from sqlalchemy import (
+    CheckConstraint,
     Column,
     Date,
     DateTime,
@@ -24,6 +25,7 @@ from sqlalchemy.orm import Mapped, Query, relationship
 from sqlalchemy.orm.session import Session
 
 from palace.util.datetime_helpers import utc_now
+from palace.util.exceptions import PalaceValueError
 
 from palace.manager.data_layer.policy.presentation import (
     PresentationCalculationPolicy,
@@ -46,6 +48,10 @@ from palace.manager.util.permanent_work_id import WorkIDCalculator
 
 if TYPE_CHECKING:
     from palace.manager.sqlalchemy.model.customlist import CustomListEntry
+    from palace.manager.sqlalchemy.model.periodical import (
+        Periodical,
+        PeriodicalVolume,
+    )
     from palace.manager.sqlalchemy.model.resource import Resource
     from palace.manager.sqlalchemy.model.work import Work
 
@@ -121,6 +127,57 @@ class Edition(Base, EditionConstants):
     series = Column(Unicode, index=True)
     series_position = Column(Integer)
 
+    # When this Edition is an issue of a magazine, journal or newspaper,
+    # the following five fields (periodical_id, periodical,
+    # periodical_volume_id, periodical_volume, and issue_position) define
+    # the periodical relationship.
+    #
+    # They are separate from `series` and `series_position` above, which
+    # are left alone: a book that is part of a series is not a serial, and
+    # nothing about those two columns changes.
+    periodical_id = Column(
+        Integer, ForeignKey("periodicals.id"), index=True, nullable=True
+    )
+    periodical: Mapped[Periodical | None] = relationship(
+        "Periodical", back_populates="editions"
+    )
+
+    periodical_volume_id = Column(
+        Integer,
+        ForeignKey("periodical_volumes.id"),
+        index=True,
+        nullable=True,
+    )
+    periodical_volume: Mapped[PeriodicalVolume | None] = relationship(
+        "PeriodicalVolume", back_populates="editions"
+    )
+
+    # Where this issue sorts within its volume. Not indexed on its own:
+    # issues are only ever ordered within a periodical or a volume, so this
+    # column alone would not serve that lookup, and it is NULL for nearly
+    # every row in a very large table. `series_position` is not indexed
+    # either. An ordered lookup would want a composite index on
+    # (periodical_volume_id, issue_position).
+    #
+    # Not a whole number: an issue that sits between two numbered issues (a
+    # half issue, #14.1) needs a fraction to sort in the right place, and the
+    # feed profile allows one. Double precision rather than numeric because a
+    # position arrives from a feed as a JSON number and stays an `int | float`
+    # all the way through the parser and the data layer; it is only ever
+    # compared and ordered, never added up, so there is nothing to gain by
+    # converting it at every boundary.
+    issue_position = Column(Float)
+
+    # A volume only means anything together with its periodical: an issue is
+    # in a volume *of* a magazine. Without the periodical, `Work.periodical`
+    # would be None for an issue that plainly belongs to one.
+    __table_args__ = (
+        CheckConstraint(
+            "periodical_volume_id IS NULL OR periodical_id IS NOT NULL",
+            name="ck_editions_periodical_volume_requires_periodical",
+        ),
+    )
+
     # This is not a foreign key per se; it's a calculated UUID-like
     # identifier for this work based on its title and author, used to
     # group together different editions of the same work.
@@ -175,6 +232,46 @@ class Edition(Base, EditionConstants):
 
     # Hash of the BibliographicData last used to create/update this Edition.
     updated_at_data_hash = Column(String, default=None)
+
+    def set_periodical(
+        self,
+        periodical: Periodical | None,
+        volume: PeriodicalVolume | None = None,
+        issue_position: int | float | None = None,
+    ) -> None:
+        """Record that this Edition is an issue of a periodical.
+
+        Set the three periodical fields through this method rather than one at
+        a time, so they cannot end up disagreeing with each other.
+
+        :param periodical: The magazine, journal or newspaper this edition is
+            an issue of. Pass None to clear all three fields.
+        :param volume: The volume of that periodical this issue belongs to.
+        :param issue_position: Where this issue sorts within its volume. May
+            be a fraction, for an issue that sits between two numbered ones.
+        :raises PalaceValueError: If a volume is given without a periodical,
+            or if the volume belongs to a different periodical.
+        """
+        if periodical is None:
+            if volume is not None:
+                raise PalaceValueError(
+                    "Can't put an edition in a periodical volume "
+                    "without also giving it a periodical."
+                )
+            self.periodical = None
+            self.periodical_volume = None
+            self.issue_position = None
+            return
+
+        if volume is not None and volume.periodical != periodical:
+            raise PalaceValueError(
+                f"Periodical volume {volume.label!r} belongs to a different "
+                f"periodical than {periodical.title!r}."
+            )
+
+        self.periodical = periodical
+        self.periodical_volume = volume
+        self.issue_position = issue_position
 
     def __repr__(self) -> str:
         id_repr = repr(self.primary_identifier)
