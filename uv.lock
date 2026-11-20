@@ -2349,7 +2349,7 @@ requires-dist = [
     { name = "pyinstrument", specifier = ">=5.1.3,<6" },
     { name = "pyjwt", specifier = ">=2.13,<3" },
     { name = "pyld", specifier = "==3.0.0" },
-    { name = "pymarc", specifier = "==5.4.0" },
+    { name = "pymarc", specifier = "==5.4.1" },
     { name = "pyopenssl", specifier = ">=26.0.0,<27" },
     { name = "pyspellchecker", specifier = "==0.9.1" },
     { name = "python-dateutil", specifier = "==2.9.0.post0" },
@@ -2987,11 +2987,11 @@ wheels = [
 
 [[package]]
 name = "pymarc"
-version = "5.4.0"
+version = "5.4.1"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/19/77/f0e5774845a3c60b26da5dab344e391e9941eeb811a1685fb2ff01ae90c7/pymarc-5.4.0.tar.gz", hash = "sha256:b2016b1674d1956636c99b9bf95b31840c5cb8f22645672a660e66326371b2f3", size = 76224964, upload-time = "2026-07-02T12:12:51.002Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b5/c2/2987c000770079430c61c633dfc4534b42c212c0da7ea30f7c790cc7c9f1/pymarc-5.4.1.tar.gz", hash = "sha256:533271a4ce665fe3605d1be5625f9a349db2cfb67fb6e2db6b363677d3bc3a82", size = 76224586, upload-time = "2026-11-11T22:18:27.296Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f9/41/ed8ad9925859d66fe7135f64690ecb5c766e2969e9a52c23d1123df9eaf5/pymarc-5.4.0-py3-none-any.whl", hash = "sha256:10549ce513c191f77b081e5e505c02aca76f6b9f1164c47a326bb635b24a77eb", size = 161390, upload-time = "2026-07-02T12:12:55.949Z" },
+    { url = "https://files.pythonhosted.org/packages/81/71/ff14ba5b013ecdf492daf84fb1538128f9abd676b56c7f6ce693539c247e/pymarc-5.4.1-py3-none-any.whl", hash = "sha256:f63c38cde9f52706523d000c910bd9efcfc009b01be0895fa12573c3a6f2c59a", size = 159718, upload-time = "2026-11-11T22:18:02.032Z" },
 ]
 
 [[package]]
