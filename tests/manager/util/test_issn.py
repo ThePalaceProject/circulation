@@ -31,13 +31,36 @@ class TestISSN:
             pytest.param("0317--8471", id="doubled_hyphen"),
             pytest.param("2434-561Y", id="letter_other_than_x"),
             pytest.param("978-0-306-40615-7", id="isbn"),
-            pytest.param(
-                "\uff10\uff13\uff11\uff17-\uff18\uff14\uff17\uff11",
-                id="full_width_digits",
-            ),
         ],
     )
     def test_normalize_issn_rejects_malformed(self, value: str) -> None:
+        with pytest.raises(InvalidISSNError) as excinfo:
+            normalize_issn(value)
+        assert f'"{value}" is not a valid ISSN.' in str(excinfo.value)
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            pytest.param(
+                "\uff10\uff13\uff11\uff17-\uff18\uff14\uff17\uff11",
+                id="full_width",
+            ),
+            pytest.param(
+                "\u0660\u0663\u0661\u0667-\u0668\u0664\u0667\u0661",
+                id="arabic_indic",
+            ),
+            pytest.param(
+                "\u0966\u0969\u0967\u096d-\u096e\u096a\u096d\u0967",
+                id="devanagari",
+            ),
+            pytest.param("0317-847\u0661", id="non_ascii_check_character"),
+        ],
+    )
+    def test_normalize_issn_rejects_non_ascii_digits(self, value: str) -> None:
+        # The pattern matches [0-9] rather than \d on purpose. A digit from
+        # another script reads as an ordinary ISSN on screen but is a different
+        # string, so accepting one would give the same magazine two identifiers.
+        # The last case is the right check character written in the wrong script.
         with pytest.raises(InvalidISSNError) as excinfo:
             normalize_issn(value)
         assert f'"{value}" is not a valid ISSN.' in str(excinfo.value)
