@@ -135,6 +135,7 @@ class IdentifierConstants:
     ELIB_ID = "eLiburutegia ID"
     ASIN = "ASIN"
     ISBN = "ISBN"
+    ISSN = "ISSN"
     NOVELIST_ID = "NoveList ID"
     OCLC_WORK = "OCLC Work ID"
     OCLC_NUMBER = "OCLC Number"
@@ -160,6 +161,7 @@ class IdentifierConstants:
 
     URN_SCHEME_PREFIX = "urn:librarysimplified.org/terms/id/"
     ISBN_URN_SCHEME_PREFIX = "urn:isbn:"
+    ISSN_URN_SCHEME_PREFIX = "urn:issn:"
     GUTENBERG_URN_SCHEME_PREFIX = "http://www.gutenberg.org/ebooks/"
     GUTENBERG_URN_SCHEME_RE = re.compile(GUTENBERG_URN_SCHEME_PREFIX + "([0-9]+)")
     OTHER_URN_SCHEME_PREFIX = "urn:"
@@ -179,6 +181,7 @@ class IdentifierType(Enum):
     ELIB_ID = IdentifierConstants.ELIB_ID
     ASIN = IdentifierConstants.ASIN
     ISBN = IdentifierConstants.ISBN
+    ISSN = IdentifierConstants.ISSN
     NOVELIST_ID = IdentifierConstants.NOVELIST_ID
     OCLC_WORK = IdentifierConstants.OCLC_WORK
     OCLC_NUMBER = IdentifierConstants.OCLC_NUMBER

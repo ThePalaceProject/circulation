@@ -49,6 +49,7 @@ from palace.manager.sqlalchemy.model.licensing import (
 )
 from palace.manager.sqlalchemy.model.measurement import Measurement
 from palace.manager.sqlalchemy.util import create, get_one, get_one_or_create
+from palace.manager.util.issn import normalize_issn
 from palace.manager.util.summary import SummaryEvaluator
 
 if TYPE_CHECKING:
@@ -98,6 +99,40 @@ class ISBNURNIdentifierParser(IdentifierParser):
         self.log.debug(
             'Finished parsing identifier string "{}". It does not contain a '
             "ISBN URN ID".format(identifier_string)
+        )
+
+        return None
+
+
+class ISSNURNIdentifierParser(IdentifierParser):
+    """Parser for ISSN URN IDs."""
+
+    def parse(self, identifier_string: str) -> tuple[str, str] | None:
+        """Read an ISSN out of an ISSN URN.
+
+        The prefix may be in any case, and the ISSN itself may be
+        percent-encoded, written with or without its hyphen, and carry an
+        upper- or lowercase "X" check character. We store ISSNs in one
+        canonical form so that a magazine can't end up split across several
+        identifiers.
+
+        :param identifier_string: A string that may be an ISSN URN, such as
+            "urn:issn:0317-8471".
+        :raises InvalidISSNError: If the string is an ISSN URN but the ISSN in
+            it is malformed or its check character doesn't match the rest of
+            the number. This is a kind of ValueError.
+        :return: A 2-tuple of the identifier type and the ISSN in canonical
+            "NNNN-NNNC" form, or None if the string is not an ISSN URN.
+        """
+        self.log.debug(f'Started parsing identifier string "{identifier_string}"')
+
+        if identifier_string.lower().startswith(Identifier.ISSN_URN_SCHEME_PREFIX):
+            issn = unquote(identifier_string[len(Identifier.ISSN_URN_SCHEME_PREFIX) :])
+            return (Identifier.ISSN, normalize_issn(issn))
+
+        self.log.debug(
+            f'Finished parsing identifier string "{identifier_string}". It does '
+            "not contain an ISSN URN ID"
         )
 
         return None
@@ -397,6 +432,11 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
 
         if primary_type in (Identifier.OVERDRIVE_ID, Identifier.BIBLIOTHECA_ID):
             foreign_identifier = foreign_identifier.lower()
+        elif primary_type == Identifier.ISSN:
+            # Store every ISSN the same way, so the same magazine written two
+            # different ways doesn't become two identifiers. An ISSN we can't
+            # make sense of raises an InvalidISSNError, a kind of ValueError.
+            foreign_identifier = normalize_issn(foreign_identifier)
 
         if not cls.valid_as_foreign_identifier(primary_type, foreign_identifier):
             raise ValueError(f'"{foreign_identifier}" is not a valid {primary_type}.')
@@ -415,6 +455,9 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
         invalid (e.g. all Overdrive IDs look like UUIDs, but we
         currently don't enforce that). We only reject an ID out of
         hand if it will cause problems with a third-party API.
+
+        This method does not check ISSNs. They should already be
+        normalized by the time we get them.
         """
         forbidden_characters = ""
         if type == Identifier.BIBLIOTHECA_ID:
@@ -439,6 +482,8 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
         identifier_text = quote(id_value)
         if id_type == Identifier.ISBN:
             return cls.ISBN_URN_SCHEME_PREFIX + identifier_text
+        elif id_type == Identifier.ISSN:
+            return cls.ISSN_URN_SCHEME_PREFIX + identifier_text
         elif id_type == Identifier.URI:
             return id_value
         elif id_type == Identifier.GUTENBERG_ID:
@@ -467,6 +512,7 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
         GutenbergIdentifierParser(),
         URIIdentifierParser(),
         ISBNURNIdentifierParser(),
+        ISSNURNIdentifierParser(),
         URNIdentifierParser(),
         ProQuestIdentifierParser(),
         GenericURNIdentifierParser(),

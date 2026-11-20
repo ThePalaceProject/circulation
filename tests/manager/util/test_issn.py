@@ -1,0 +1,89 @@
+import pytest
+
+from palace.manager.util.issn import InvalidISSNError, normalize_issn
+
+
+class TestISSN:
+    @pytest.mark.parametrize(
+        "value,expected",
+        [
+            pytest.param("0317-8471", "0317-8471", id="already_canonical"),
+            pytest.param("03178471", "0317-8471", id="no_hyphen"),
+            pytest.param("  0378-5955  ", "0378-5955", id="surrounding_whitespace"),
+            pytest.param("2049-3630", "2049-3630", id="zero_check_character"),
+            pytest.param("2434-561X", "2434-561X", id="x_check_character"),
+            pytest.param("2434-561x", "2434-561X", id="lowercase_x_check_character"),
+            pytest.param("2434561x", "2434-561X", id="no_hyphen_and_lowercase_x"),
+        ],
+    )
+    def test_normalize_issn(self, value: str, expected: str) -> None:
+        assert normalize_issn(value) == expected
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            pytest.param("", id="empty"),
+            pytest.param("notanissn", id="not_a_number"),
+            pytest.param("0317-847", id="too_short"),
+            pytest.param("0317-84711", id="too_long"),
+            pytest.param("O317-8471", id="letter_instead_of_digit"),
+            pytest.param("0317 8471", id="space_instead_of_hyphen"),
+            pytest.param("0317--8471", id="doubled_hyphen"),
+            pytest.param("2434-561Y", id="letter_other_than_x"),
+            pytest.param("978-0-306-40615-7", id="isbn"),
+        ],
+    )
+    def test_normalize_issn_rejects_malformed(self, value: str) -> None:
+        with pytest.raises(InvalidISSNError) as excinfo:
+            normalize_issn(value)
+        assert f'"{value}" is not a valid ISSN.' in str(excinfo.value)
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            pytest.param(
+                "\uff10\uff13\uff11\uff17-\uff18\uff14\uff17\uff11",
+                id="full_width",
+            ),
+            pytest.param(
+                "\u0660\u0663\u0661\u0667-\u0668\u0664\u0667\u0661",
+                id="arabic_indic",
+            ),
+            pytest.param(
+                "\u0966\u0969\u0967\u096d-\u096e\u096a\u096d\u0967",
+                id="devanagari",
+            ),
+            pytest.param("0317-847\u0661", id="non_ascii_check_character"),
+        ],
+    )
+    def test_normalize_issn_rejects_non_ascii_digits(self, value: str) -> None:
+        # The pattern matches [0-9] rather than \d on purpose. A digit from
+        # another script reads as an ordinary ISSN on screen but is a different
+        # string, so accepting one would give the same magazine two identifiers.
+        # The last case is the right check character written in the wrong script.
+        with pytest.raises(InvalidISSNError) as excinfo:
+            normalize_issn(value)
+        assert f'"{value}" is not a valid ISSN.' in str(excinfo.value)
+
+    @pytest.mark.parametrize(
+        "value,expected_check_character",
+        [
+            pytest.param("0317-8470", "1", id="wrong_digit"),
+            pytest.param("03178470", "1", id="wrong_digit_no_hyphen"),
+            pytest.param("2434-5611", "X", id="digit_where_x_belongs"),
+            pytest.param("0317-847X", "1", id="x_where_digit_belongs"),
+        ],
+    )
+    def test_normalize_issn_rejects_bad_check_character(
+        self, value: str, expected_check_character: str
+    ) -> None:
+        with pytest.raises(InvalidISSNError) as excinfo:
+            normalize_issn(value)
+        assert f'Its check character should be "{expected_check_character}"' in str(
+            excinfo.value
+        )
+
+    def test_invalid_issn_error_is_a_value_error(self) -> None:
+        # Callers that only know about ValueError still catch a bad ISSN.
+        with pytest.raises(ValueError):
+            normalize_issn("nope")
