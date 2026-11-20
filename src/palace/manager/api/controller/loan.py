@@ -318,6 +318,12 @@ class LoanController(CirculationManagerController):
         if work and work.is_filtered_for_library(library):
             return FILTERED_BY_LIBRARY_POLICY
 
+        # Periodicals are not being shown, so a new borrow of one is refused.
+        # This sits with the check above, and for the same reason: a patron who
+        # already has the issue on loan or hold was handled earlier and keeps it.
+        if work and work.is_hidden_periodical:
+            return FILTERED_BY_LIBRARY_POLICY
+
         # We found a number of LicensePools. Try to locate one that
         # we can actually loan to the patron.
         for pool in pools:
@@ -419,6 +425,15 @@ class LoanController(CirculationManagerController):
         pool = self.load_licensepool(license_pool_id)
         if isinstance(pool, ProblemDetail):
             return pool
+
+        # Periodicals are not being shown. This is checked here, before the
+        # loan is looked up, so that an existing loan does not fulfil either.
+        # That is stricter than borrowing, which lets a patron keep an issue
+        # they already have: the only way to hold a loan on an issue while
+        # periodicals are off is for them to have been turned off again after
+        # being turned on, and that is exactly when access should stop.
+        if pool.work is not None and pool.work.is_hidden_periodical:
+            return FILTERED_BY_LIBRARY_POLICY
 
         loan, loan_license_pool = self.get_patron_loan(patron, [pool])
 
