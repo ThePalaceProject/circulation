@@ -49,9 +49,7 @@ def search_reindex_task_lock_fixture(redis_fixture: RedisFixture):
 
 
 @pytest.fixture
-def mock_search_pointers(
-    services_fixture: ServicesFixture, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def mock_search_pointers(services_fixture: ServicesFixture) -> None:
     """
     Point the mocked search service at a single index at the latest revision.
     """
@@ -59,11 +57,13 @@ def mock_search_pointers(
     revision = MockSearchSchemaRevisionLatest(42)
     index = revision.name_for_index(base_name)
 
-    # The services fixture resets return values between tests, but not attributes we
-    # assign directly, so base_revision_name is set through monkeypatch.
-    monkeypatch.setattr(
-        services_fixture.search_service, "base_revision_name", base_name
-    )
+    # base_revision_name is a property on the real service, so the autospec mock makes
+    # it up on each access rather than storing it. Undoing a monkeypatch of it deletes
+    # it from the mock, and unittest.mock remembers a deleted attribute for good: the
+    # services fixture is shared by the whole test session and reset_mock() does not
+    # bring the attribute back, so every later test using this fixture would fail. Set
+    # it directly instead. Every test that cares about it sets it through this fixture.
+    services_fixture.search_service.base_revision_name = base_name
     services_fixture.search_revision_directory.highest.return_value = revision
     services_fixture.search_service.read_pointer.return_value = SearchPointer(
         alias=f"{base_name}-search-read", index=index, version=revision.version
