@@ -44,6 +44,7 @@ from palace.manager.data_layer.policy.presentation import (
 from palace.manager.search.service import SearchDocument
 from palace.manager.service.redis.exception import TRANSIENT_REDIS_ERRORS
 from palace.manager.service.redis.redis import Redis
+from palace.manager.service.sitewide import periodicals_enabled
 from palace.manager.sqlalchemy.constants import (
     DataSourceConstants,
     IntegrationConfigurationConstants,
@@ -850,6 +851,22 @@ class Work(Base, LoggerMixin):
         return self.is_filtered_by(
             settings.filtered_audiences, settings.filtered_genres
         )
+
+    @property
+    def is_hidden_periodical(self) -> bool:
+        """Return whether this Work is a periodical that is not being shown.
+
+        Periodicals are imported and indexed whether or not they are being
+        shown, so this is what keeps one from being reached directly by URN, by
+        permalink, or by borrowing or fulfilling it, while search and the feeds
+        leave it out.
+
+        :return: True if the work should be refused, False otherwise.
+        """
+        edition = self.presentation_edition
+        if edition is None or edition.medium != Edition.PERIODICAL_MEDIUM:
+            return False
+        return not periodicals_enabled()
 
     def set_presentation_edition(self, new_presentation_edition):
         """Sets presentation edition and lets owned pools and editions know.

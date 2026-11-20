@@ -59,6 +59,7 @@ from palace.manager.sqlalchemy.constants import MediaTypes
 from palace.manager.sqlalchemy.model.classification import Genre
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.datasource import DataSource
+from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import (
     DeliveryMechanism,
@@ -548,6 +549,77 @@ class TestLoanController:
 
         loan = get_one(loan_fixture.db.session, Loan, license_pool=loan_fixture.pool)
         assert loan is None
+
+    def test_borrow_periodical_is_refused_while_periodicals_are_off(
+        self, loan_fixture: LoanFixture, services_fixture: ServicesFixture
+    ) -> None:
+        # Periodicals are hidden from the feeds and from search, so borrowing
+        # one directly has to be refused too, or the identifier is a way round
+        # them being hidden.
+        loan_fixture.english_1.presentation_edition.medium = Edition.PERIODICAL_MEDIUM
+
+        headers = {"Authorization": loan_fixture.valid_auth}
+        with loan_fixture.request_context_with_library("/", headers=headers):
+            loan_fixture.manager.loans.authenticated_patron_from_request()
+            response = loan_fixture.manager.loans.borrow(
+                loan_fixture.identifier_type, loan_fixture.identifier_identifier
+            )
+
+        assert isinstance(response, ProblemDetail)
+        assert response.status_code == FILTERED_BY_LIBRARY_POLICY.status_code
+        assert response.uri == FILTERED_BY_LIBRARY_POLICY.uri
+
+        loan = get_one(loan_fixture.db.session, Loan, license_pool=loan_fixture.pool)
+        assert loan is None
+
+    def test_borrow_periodical_is_allowed_when_periodicals_are_on(
+        self, loan_fixture: LoanFixture, services_fixture: ServicesFixture
+    ) -> None:
+        # The same request succeeds once periodicals are turned on, with no
+        # other change of any kind.
+        loan_fixture.english_1.presentation_edition.medium = Edition.PERIODICAL_MEDIUM
+        services_fixture.set_sitewide_config_option("periodicals_enabled", True)
+        loan_fixture.manager.d_circulation.queue_checkout(
+            loan_fixture.pool,
+            LoanInfo.from_license_pool(
+                loan_fixture.pool,
+                start_date=utc_now(),
+                end_date=utc_now() + datetime.timedelta(seconds=3600),
+            ),
+        )
+
+        headers = {"Authorization": loan_fixture.valid_auth}
+        with loan_fixture.request_context_with_library("/", headers=headers):
+            loan_fixture.manager.loans.authenticated_patron_from_request()
+            response = loan_fixture.manager.loans.borrow(
+                loan_fixture.identifier_type, loan_fixture.identifier_identifier
+            )
+
+        assert isinstance(response, OPDSEntryResponse)
+        assert response.status_code == 201
+
+        loan = get_one(loan_fixture.db.session, Loan, license_pool=loan_fixture.pool)
+        assert loan is not None
+
+    def test_fulfill_periodical_is_refused_even_with_a_loan(
+        self, loan_fixture: LoanFixture, services_fixture: ServicesFixture
+    ) -> None:
+        # Fulfillment is refused outright, including for a patron who already
+        # has the issue on loan. That is stricter than borrowing, which lets a
+        # patron keep what they already have: the only way to be holding a loan
+        # on an issue while periodicals are off is for them to have been turned
+        # off again, and that is when access should stop.
+        loan_fixture.english_1.presentation_edition.medium = Edition.PERIODICAL_MEDIUM
+        loan_fixture.pool.loan_to(loan_fixture.default_patron)
+
+        headers = {"Authorization": loan_fixture.valid_auth}
+        with loan_fixture.request_context_with_library("/", headers=headers):
+            loan_fixture.manager.loans.authenticated_patron_from_request()
+            response = loan_fixture.manager.loans.fulfill(loan_fixture.pool_id)
+
+        assert isinstance(response, ProblemDetail)
+        assert response.status_code == FILTERED_BY_LIBRARY_POLICY.status_code
+        assert response.uri == FILTERED_BY_LIBRARY_POLICY.uri
 
     def test_borrow_and_fulfill_with_streaming_delivery_mechanism(
         self,

@@ -142,3 +142,15 @@ class AudiobooksEntryPoint(MediumEntryPoint):
 
 
 EntryPoint.register(AudiobooksEntryPoint, "Audiobooks")
+
+
+class PeriodicalsEntryPoint(MediumEntryPoint):
+    INTERNAL_NAME = "Periodical"
+    URI = "http://schema.org/PublicationIssue"
+
+
+# Registered whatever the periodicals setting says, so that a library that
+# already has it in enabled_entry_points keeps that value through a restart
+# with periodicals turned off. Library.entrypoints is what leaves it out while
+# they are off.
+EntryPoint.register(PeriodicalsEntryPoint, "Periodicals")

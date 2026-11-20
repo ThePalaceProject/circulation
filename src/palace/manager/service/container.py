@@ -86,6 +86,7 @@ def wire_container(container: Services) -> None:
             "palace.manager.api.circulation_manager",
             "palace.manager.feed.annotator.circulation",
             "palace.manager.feed.acquisition",
+            "palace.manager.service.sitewide",
             "palace.manager.sqlalchemy.model.lane",
             "palace.manager.sqlalchemy.model.collection",
             "palace.manager.sqlalchemy.model.patron",

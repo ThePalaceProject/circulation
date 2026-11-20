@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from urllib.parse import quote_plus
 
 import flask
@@ -10,6 +11,7 @@ from werkzeug import Response as WerkzeugResponse
 from palace.manager.api.admin.config import Configuration as AdminClientConfig
 from palace.manager.api.admin.controller.base import AdminController
 from palace.manager.api.config import Configuration
+from palace.manager.service.sitewide import periodicals_enabled
 from palace.manager.sqlalchemy.model.library import Library
 from palace.manager.util.problem_detail import ProblemDetail
 
@@ -81,6 +83,16 @@ class ViewController(AdminController):
         admin_js = AdminClientConfig.lookup_asset_url(key="admin_js")
         admin_css = AdminClientConfig.lookup_asset_url(key="admin_css")
 
+        # The admin client reads its feature flags from this one payload, so
+        # the periodicals setting is added to it here. It is not declared on
+        # AdminClientFeatureFlags because it is not an admin client setting:
+        # it decides what patrons are shown, and the search code has to read it
+        # too, so it lives in the sitewide configuration instead.
+        feature_flags = {
+            **AdminClientConfig.admin_feature_flags().model_dump(by_alias=True),
+            "showPeriodicals": periodicals_enabled(),
+        }
+
         response = Response(
             flask.render_template(
                 "admin/app-home-page.html.jinja2",
@@ -96,9 +108,9 @@ class ViewController(AdminController):
                 roles=roles,
                 admin_js=admin_js,
                 admin_css=admin_css,
-                feature_flags=AdminClientConfig.admin_feature_flags().model_dump_json(
-                    by_alias=True
-                ),
+                # Compact separators keep this byte-for-byte what
+                # model_dump_json() used to produce.
+                feature_flags=json.dumps(feature_flags, separators=(",", ":")),
             )
         )
 

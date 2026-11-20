@@ -6,6 +6,7 @@ from palace.manager.core.entrypoint import (
     EntryPoint,
     EverythingEntryPoint,
     MediumEntryPoint,
+    PeriodicalsEntryPoint,
 )
 from palace.manager.search.filter import Filter
 from palace.manager.sqlalchemy.model.edition import Edition
@@ -13,24 +14,32 @@ from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.work import Work
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
+from tests.fixtures.services import ServicesFixture
 
 
 class TestEntryPoint:
     def test_defaults(self):
-        everything, ebooks, audiobooks = EntryPoint.ENTRY_POINTS
+        everything, ebooks, audiobooks, periodicals = EntryPoint.ENTRY_POINTS
         assert EverythingEntryPoint == everything
         assert EbooksEntryPoint == ebooks
         assert AudiobooksEntryPoint == audiobooks
+        assert PeriodicalsEntryPoint == periodicals
 
         display = EntryPoint.DISPLAY_TITLES
         assert "Ebooks" == display[ebooks]
         assert "Audiobooks" == display[audiobooks]
+        assert "Periodicals" == display[periodicals]
 
         assert Edition.BOOK_MEDIUM == EbooksEntryPoint.INTERNAL_NAME
         assert Edition.AUDIO_MEDIUM == AudiobooksEntryPoint.INTERNAL_NAME
+        assert Edition.PERIODICAL_MEDIUM == PeriodicalsEntryPoint.INTERNAL_NAME
+
+        # Periodicals are registered whatever the setting says, but they are
+        # not enabled for a library by default.
+        assert PeriodicalsEntryPoint not in EntryPoint.DEFAULT_ENABLED
 
         assert "http://schema.org/CreativeWork" == everything.URI
-        for ep in (EbooksEntryPoint, AudiobooksEntryPoint):
+        for ep in (EbooksEntryPoint, AudiobooksEntryPoint, PeriodicalsEntryPoint):
             assert ep.URI == Edition.medium_to_additional_type[ep.INTERNAL_NAME]
 
     def test_no_changes(self, db: DatabaseTransactionFixture):
@@ -154,3 +163,24 @@ class TestLibrary:
         # An empty list is a valid value.
         settings.enabled_entry_points = []
         assert [] == list(l.entrypoints)
+
+    def test_periodicals_entrypoint_is_left_out_while_periodicals_are_off(
+        self,
+        db: DatabaseTransactionFixture,
+        library_fixture: LibraryFixture,
+        services_fixture: ServicesFixture,
+    ):
+        # A library can have the periodicals entry point in its settings, but
+        # it is not offered to patrons until periodicals are turned on. The
+        # setting itself is left alone, so turning them on again brings it back.
+        settings = library_fixture.mock_settings()
+        l = library_fixture.library(settings=settings)
+        settings.enabled_entry_points = [
+            EbooksEntryPoint.INTERNAL_NAME,
+            PeriodicalsEntryPoint.INTERNAL_NAME,
+        ]
+
+        assert [EbooksEntryPoint] == list(l.entrypoints)
+
+        services_fixture.set_sitewide_config_option("periodicals_enabled", True)
+        assert [EbooksEntryPoint, PeriodicalsEntryPoint] == list(l.entrypoints)

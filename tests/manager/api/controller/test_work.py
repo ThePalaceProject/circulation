@@ -16,6 +16,7 @@ from palace.util.datetime_helpers import utc_now
 from palace.manager.api.circulation.data import LoanInfo
 from palace.manager.api.circulation.fulfillment import Fulfillment
 from palace.manager.api.problem_details import (
+    FILTERED_BY_LIBRARY_POLICY,
     NO_SUCH_LANE,
     NOT_FOUND_ON_REMOTE,
 )
@@ -39,6 +40,7 @@ from palace.manager.feed.worklist.recommendation import (
 from palace.manager.feed.worklist.series import SeriesLane
 from palace.manager.integration.metadata.novelist import NoveListAPI
 from palace.manager.search.pagination import SortKeyPagination
+from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.sqlalchemy.model.licensing import LicensePool
 from palace.manager.sqlalchemy.model.resource import Resource
@@ -320,6 +322,31 @@ class TestWorkController:
 
         assert isinstance(response, ProblemDetail)
         assert NOT_FOUND_ON_REMOTE == response
+
+    def test_permalink_periodical_is_refused_while_periodicals_are_off(
+        self, work_fixture: WorkFixture, services_fixture: ServicesFixture
+    ):
+        # Periodicals are hidden from the feeds, so the permalink has to refuse
+        # one rather than serve it to anyone who knows the identifier.
+        work_fixture.english_1.presentation_edition.medium = Edition.PERIODICAL_MEDIUM
+
+        with work_fixture.request_context_with_library("/"):
+            assert work_fixture.identifier.type is not None
+            assert work_fixture.identifier.identifier is not None
+            response = work_fixture.manager.work_controller.permalink(
+                work_fixture.identifier.type, work_fixture.identifier.identifier
+            )
+
+        assert isinstance(response, ProblemDetail)
+        assert FILTERED_BY_LIBRARY_POLICY.uri == response.uri
+
+        # Turning periodicals on serves the same permalink.
+        services_fixture.set_sitewide_config_option("periodicals_enabled", True)
+        with work_fixture.request_context_with_library("/"):
+            response = work_fixture.manager.work_controller.permalink(
+                work_fixture.identifier.type, work_fixture.identifier.identifier
+            )
+        assert 200 == response.status_code
 
     @pytest.mark.parametrize(
         *OPDSSerializationTestHelper.PARAMETRIZED_SINGLE_ENTRY_ACCEPT_HEADERS

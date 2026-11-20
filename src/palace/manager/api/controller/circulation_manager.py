@@ -8,6 +8,7 @@ from palace.manager.api.circulation.dispatcher import CirculationApiDispatcher
 from palace.manager.api.controller.base import BaseCirculationManagerController
 from palace.manager.api.problem_details import (
     BAD_DELIVERY_MECHANISM,
+    FILTERED_BY_LIBRARY_POLICY,
     FORBIDDEN_BY_POLICY,
     NO_LICENSES,
     NO_SUCH_LANE,
@@ -177,6 +178,11 @@ class CirculationManagerController(BaseCirculationManagerController):
             # This work is not age-appropriate for the authenticated
             # patron. Don't show it.
             return NOT_AGE_APPROPRIATE
+
+        if work.is_hidden_periodical:
+            # Periodicals are not being shown, so the permalink and the feeds
+            # that hang off it are refused rather than served.
+            return FILTERED_BY_LIBRARY_POLICY
         return work
 
     def load_licensepools(

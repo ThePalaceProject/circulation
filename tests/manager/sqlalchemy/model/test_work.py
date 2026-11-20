@@ -54,6 +54,7 @@ from tests.fixtures.search import (
     ExternalSearchFixtureFake,
     WorkQueueIndexingFixture,
 )
+from tests.fixtures.services import ServicesFixture
 
 
 class TestWork:
@@ -1659,6 +1660,33 @@ class TestWork:
         settings.filtered_audiences = ["Adult"]
         settings.filtered_genres = []
         assert work.is_filtered_for_library(library) is False
+
+    def test_is_hidden_periodical(
+        self, db: DatabaseTransactionFixture, services_fixture: ServicesFixture
+    ):
+        """A periodical is refused by the direct-access paths while periodicals
+        are off, and nothing else ever is."""
+        book = db.work()
+        issue = db.work()
+        issue.presentation_edition.medium = Edition.PERIODICAL_MEDIUM
+
+        # Periodicals are off by default.
+        assert issue.is_hidden_periodical is True
+        assert book.is_hidden_periodical is False
+
+        # Turning them on hides nothing.
+        services_fixture.set_sitewide_config_option("periodicals_enabled", True)
+        assert issue.is_hidden_periodical is False
+        assert book.is_hidden_periodical is False
+
+    def test_is_hidden_periodical_without_a_presentation_edition(
+        self, db: DatabaseTransactionFixture
+    ):
+        # A work with nothing to read the medium from is not a periodical as
+        # far as this is concerned. It has other reasons not to be served.
+        work = db.work()
+        work.presentation_edition = None
+        assert work.is_hidden_periodical is False
 
     def test_unlimited_access_books_are_available_by_default(
         self, db: DatabaseTransactionFixture
