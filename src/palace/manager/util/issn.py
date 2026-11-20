@@ -77,16 +77,3 @@ def normalize_issn(value: str) -> str:
         )
 
     return f"{first}-{second}{expected}"
-
-
-def is_valid_issn(value: str) -> bool:
-    """Is this string an ISSN that we can store?
-
-    :param value: A string that should contain an ISSN.
-    :return: True if `normalize_issn` would accept the string.
-    """
-    try:
-        normalize_issn(value)
-    except InvalidISSNError:
-        return False
-    return True

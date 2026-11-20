@@ -456,9 +456,8 @@ class Identifier(Base, IdentifierConstants, LoggerMixin):
         currently don't enforce that). We only reject an ID out of
         hand if it will cause problems with a third-party API.
 
-        An ISSN is checked before it gets here, in
-        :meth:`prepare_foreign_type_and_identifier`, which normalizes it
-        and raises if its check character doesn't match.
+        This method does not check ISSNs. They should already be
+        normalized by the time we get them.
         """
         forbidden_characters = ""
         if type == Identifier.BIBLIOTHECA_ID:
