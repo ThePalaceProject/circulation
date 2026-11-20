@@ -240,6 +240,76 @@ class TestCollectionSettings:
             "libraries": [{"short_name": "L2"}],
         }
 
+    def test_collections_get_reads_collections_once(
+        self,
+        controller: CollectionSettingsController,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+    ) -> None:
+        """The listing reads the collections once, however many there are.
+
+        Every service in the listing is reported with its collection's
+        marked_for_deletion, export_marc_records and parent. Left lazy that is
+        a query per service, so this test fails if the collection goes back to
+        being read one service at a time.
+        """
+        parent = db.collection(name="Parent Collection", protocol=OverdriveAPI)
+        for i in range(5):
+            child = db.collection(
+                name=f"Child Collection {i}",
+                protocol=OverdriveAPI,
+                settings=db.overdrive_settings(external_account_id=str(i)),
+            )
+            child.parent = parent
+
+        with flask_app_fixture.test_request_context_system_admin("/"):
+            with db.record_statements(expire=True) as statements:
+                services = controller.configured_services
+
+        # Every child reports its parent, which means the parents were loaded too.
+        children = [s for s in services if s["name"].startswith("Child Collection")]
+        assert len(children) == 5
+        assert all(
+            child["parent_id"] == parent.integration_configuration.id
+            for child in children
+        )
+
+        # One query for the collections, and none for the parents: a parent is
+        # a collection in this same listing, so it is already loaded and the
+        # many-to-one resolves without going back to the database. This still
+        # fails if that stops being true -- if the listing later left some
+        # collections out, say.
+        assert len([q for q in statements if q.touches("FROM collections")]) == 1
+
+    def test_collections_get_sorts_libraries_with_no_name_first(
+        self,
+        controller: CollectionSettingsController,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+    ) -> None:
+        """A service's libraries sort by name, with an unnamed library first.
+
+        Library.name is nullable, so a service can hold one with no name at
+        all. Sorting a mix of strings and None raises, which would fail the
+        whole listing rather than just that library.
+        """
+        collection = db.collection(name="Sorted Collection", protocol=OverdriveAPI)
+        named = db.library(name="Zebra Library", short_name="ZZZ")
+        unnamed = db.library(short_name="AAA")
+        unnamed.name = None
+        for library in (named, unnamed):
+            db.integration_library_configuration(
+                collection.integration_configuration,
+                library,
+                OverdriveLibrarySettings(ebook_loan_duration=14),
+            )
+
+        with flask_app_fixture.test_request_context_system_admin("/"):
+            services = controller.configured_services
+
+        [service] = [s for s in services if s["name"] == "Sorted Collection"]
+        assert [l["short_name"] for l in service["libraries"]] == ["AAA", "ZZZ"]
+
     def test_collections_get_reads_library_configurations_once(
         self,
         controller: CollectionSettingsController,

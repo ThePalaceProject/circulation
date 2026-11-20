@@ -4,6 +4,7 @@ from typing import Any
 
 import flask
 from flask import Response
+from sqlalchemy.orm import Query, selectinload
 
 from palace.manager.api.admin.controller.integration_settings import (
     IntegrationSettingsSelfTestsController,
@@ -52,6 +53,29 @@ class CollectionSettingsController(
     LIMITED_SERVICE_INFO_KEYS = frozenset(
         {"id", "name", "protocol", "goal", "marked_for_deletion", "parent_id"}
     )
+
+    def configured_services_query(self) -> Query[IntegrationConfiguration]:
+        """Load each service's collection up front.
+
+        `configured_service_info` reads the collection for every service in the
+        listing. Left lazy, that is a query per service.
+
+        The collection's parent needs no load of its own. It is a license-goal
+        collection too, so this listing has already read it, and a many-to-one
+        resolves from the session without going back to the database.
+
+        The collection's libraries need no load of their own either.
+        `Collection.associated_libraries` proxies through the service's library
+        configurations, which the superclass query already loads, so
+        `can_see_collection` reads them without another query.
+
+        :return: The query from the superclass, with the collection loaded too.
+        """
+        return (
+            super()
+            .configured_services_query()
+            .options(selectinload(IntegrationConfiguration.collection))
+        )
 
     def configured_service_info(
         self, service: IntegrationConfiguration
