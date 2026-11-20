@@ -13,7 +13,7 @@ from collections.abc import Generator, Iterable, Mapping
 from contextlib import contextmanager
 from functools import cached_property
 from textwrap import dedent
-from typing import TYPE_CHECKING, Any, Self
+from typing import TYPE_CHECKING, Any, NamedTuple, Self
 from unittest.mock import patch
 
 import pytest
@@ -469,6 +469,42 @@ def function_database(
             yield db
 
 
+class ExecutedQuery(NamedTuple):
+    """One statement, as the database driver received it.
+
+    `record_statements` yields these. The parameters are kept as well as the
+    statement so that a test can check which rows a query asked for, not just
+    that it ran.
+    """
+
+    statement: str
+    parameters: Any
+
+    def touches(self, table: str) -> bool:
+        """Does this statement name ``table``?
+
+        :param table: The text to look for, e.g. a table name, or ``"FROM
+            libraries"`` to exclude statements that only join to it.
+        :return: True if the statement contains ``table``.
+        """
+        return table in self.statement
+
+    @property
+    def values(self) -> list[Any]:
+        """The values this statement was executed with.
+
+        Parameter names differ between drivers and between a plain statement
+        and an expanded ``IN``, so only the values are returned. A list rather
+        than a set, because a parameter may be a dict or a list -- a JSON
+        column, or the rows of an ``executemany`` -- which a set cannot hold.
+
+        :return: The parameter values, or an empty list if there were none.
+        """
+        if isinstance(self.parameters, dict):
+            return list(self.parameters.values())
+        return list(self.parameters or ())
+
+
 class DatabaseTransactionFixture:
     """A fixture representing a single transaction. The transaction is automatically rolled back."""
 
@@ -529,7 +565,7 @@ class DatabaseTransactionFixture:
         self._default_inactive_collection = inactive_collection
 
     @contextmanager
-    def record_statements(self) -> Generator[list[str]]:
+    def record_statements(self, expire: bool = False) -> Generator[list[ExecutedQuery]]:
         """Collect the SQL statements emitted inside this block.
 
         Useful for pinning down a query count, so that an N+1 that has been
@@ -539,10 +575,19 @@ class DatabaseTransactionFixture:
                 do_the_thing()
             assert len(statements) <= 2
 
+        :param expire: Flush pending changes and expire the identity map before
+            recording, so that objects the test's own setup loaded don't hide
+            the queries under test. Off by default, because the refresh
+            statements it causes would be counted against a block that only
+            means to count its own.
         :return: A list that is appended to as statements are executed. It is
             complete once the block exits.
         """
-        statements: list[str] = []
+        if expire:
+            self.session.flush()
+            self.session.expire_all()
+
+        statements: list[ExecutedQuery] = []
 
         def record(
             conn: Connection,
@@ -552,7 +597,7 @@ class DatabaseTransactionFixture:
             context: Any,
             executemany: bool,
         ) -> None:
-            statements.append(statement)
+            statements.append(ExecutedQuery(statement, parameters))
 
         bind = self.session.get_bind()
         event.listen(bind, "before_cursor_execute", record)
