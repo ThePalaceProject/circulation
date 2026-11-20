@@ -620,6 +620,21 @@ class LibrarySettings(BaseSettings):
             )
         return value
 
+    @field_validator("facets_default_available")
+    @classmethod
+    def validate_facets_default_available(cls, value: str) -> str:
+        """Ensure the default availability filter is one of the allowed options."""
+        valid_facets = set(FacetConstants.AVAILABILITY_FACETS)
+        if value not in valid_facets:
+            field_label = cls.get_form_field_label("facets_default_available")
+            valid_display = ", ".join(sorted(valid_facets))
+            raise SettingsValidationError(
+                problem_detail=INVALID_CONFIGURATION_OPTION.detailed(
+                    f"'{field_label}' must be one of: {valid_display}."
+                )
+            )
+        return value
+
     @field_validator("enabled_entry_points")
     @classmethod
     def validate_enabled_entry_points(cls, value: list[str]) -> list[str]:

@@ -4,6 +4,7 @@ from functools import partial
 import pytest
 
 from palace.manager.core.classifier import Classifier
+from palace.manager.feed.facets.constants import FacetConstants
 from palace.manager.integration.configuration.library import LibrarySettings
 from palace.manager.util.problem_detail import ProblemDetailException
 
@@ -164,3 +165,42 @@ class TestFilteredGenres:
             library_settings(filtered_genres=["romance"])  # lowercase
         assert excinfo.value.problem_detail.detail is not None
         assert "romance" in excinfo.value.problem_detail.detail
+
+
+def test_facets_default_available_valid(
+    library_settings: LibrarySettingsFixture,
+) -> None:
+    """Every availability facet is accepted."""
+    for facet in FacetConstants.AVAILABILITY_FACETS:
+        settings = library_settings(facets_default_available=facet)
+        assert settings.facets_default_available == facet
+
+
+def test_facets_default_available_default(
+    library_settings: LibrarySettingsFixture,
+) -> None:
+    """The setting falls back to showing everything."""
+    settings = library_settings()
+    assert settings.facets_default_available == FacetConstants.AVAILABLE_ALL
+
+
+def test_facets_default_available_invalid(
+    library_settings: LibrarySettingsFixture,
+) -> None:
+    """An unrecognized value raises a validation error listing the options."""
+    with pytest.raises(ProblemDetailException) as excinfo:
+        library_settings(facets_default_available="whenever")
+    detail = excinfo.value.problem_detail.detail
+    assert detail is not None
+    assert "Default Availability" in detail
+    for facet in FacetConstants.AVAILABILITY_FACETS:
+        assert facet in detail
+
+
+def test_facets_default_available_rejects_qa_only_facet(
+    library_settings: LibrarySettingsFixture,
+) -> None:
+    """AVAILABLE_NOT_NOW exists but is only for QA feeds, so it is not an option."""
+    with pytest.raises(ProblemDetailException) as excinfo:
+        library_settings(facets_default_available=FacetConstants.AVAILABLE_NOT_NOW)
+    assert excinfo.value.problem_detail.detail is not None
