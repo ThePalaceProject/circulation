@@ -6,7 +6,7 @@ from typing import Any, NamedTuple
 
 import flask
 from flask import Response
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Query, Session, selectinload
 from werkzeug.datastructures import ImmutableMultiDict
 
 from palace.util.log import LoggerMixin
@@ -126,19 +126,38 @@ class IntegrationSettingsController[T: HasIntegrationConfiguration[BaseSettings]
         library_info.update(library_configuration.settings_dict)
         return library_info
 
+    def configured_services_query(self) -> Query[IntegrationConfiguration]:
+        """The query whose services `configured_services` reports on.
+
+        Override this to load whatever an overridden `configured_service_info`
+        reads off a service, so that it is fetched along with the services
+        rather than one query per service.
+        """
+        return (
+            self._db.query(IntegrationConfiguration)
+            .filter(IntegrationConfiguration.goal == self.registry.goal)
+            # The library configurations, and the library each one belongs to,
+            # are read for every service below. Left lazy, they would be two
+            # queries per service plus one per library configuration.
+            .options(
+                selectinload(
+                    IntegrationConfiguration.library_configurations
+                ).selectinload(IntegrationLibraryConfiguration.library)
+            )
+            .order_by(IntegrationConfiguration.name)
+        )
+
     @property
     def configured_services(self) -> list[dict[str, Any]]:
         """Return a list of all currently configured services for the controller's goal.
 
         If you need to add additional information to the service info dict that gets returned to the
-        admin UI, override the configured_service_info method instead of this one.
+        admin UI, override the configured_service_info method instead of this one. If that
+        information comes off a relationship, override configured_services_query as well, so that
+        it isn't fetched one service at a time.
         """
         configured_services = []
-        for service in (
-            self._db.query(IntegrationConfiguration)
-            .filter(IntegrationConfiguration.goal == self.registry.goal)
-            .order_by(IntegrationConfiguration.name)
-        ):
+        for service in self.configured_services_query():
             service_info = self.configured_service_info(service)
             if service_info is None:
                 continue
@@ -147,7 +166,10 @@ class IntegrationSettingsController[T: HasIntegrationConfiguration[BaseSettings]
             if issubclass(api, HasLibraryIntegrationConfiguration):
                 libraries = []
                 for library_settings in sorted(
-                    service.library_configurations, key=lambda x: x.library.name
+                    service.library_configurations,
+                    # A library's name is nullable, and sorting a mix of
+                    # strings and None raises.
+                    key=lambda x: x.library.name or "",
                 ):
                     library_info = self.configured_service_library_info(
                         library_settings

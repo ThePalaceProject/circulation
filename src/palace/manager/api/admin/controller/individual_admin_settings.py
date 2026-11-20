@@ -6,7 +6,7 @@ from flask import Response
 from flask_babel import lazy_gettext as _
 from pydantic import EmailStr, TypeAdapter
 from sqlalchemy.exc import ProgrammingError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from palace.manager.api.admin.controller.base import AdminPermissionsControllerMixin
 from palace.manager.api.admin.exceptions import AdminNotAuthorized
@@ -81,7 +81,15 @@ class IndividualAdminSettingsController(AdminPermissionsControllerMixin):
             roles.append(role_dict)
 
         admins: list[dict[str, Any]] = []
-        for admin in self._db.query(Admin).order_by(Admin.email):
+        for admin in (
+            self._db.query(Admin)
+            # Every admin's roles, and the library each role is for, are read
+            # below. Left lazy, they would be a query per admin plus one per
+            # library.
+            .options(
+                selectinload(Admin.roles).selectinload(AdminRole.library)
+            ).order_by(Admin.email)
+        ):
             roles: list[dict[str, Any]] = []
             show_admin = True
             for role in admin.roles:
@@ -351,7 +359,11 @@ class IndividualAdminSettingsController(AdminPermissionsControllerMixin):
         else:
             user = get_request_admin()
 
-        old_roles = admin.roles
+        # Take a snapshot. Both loops below change `admin.roles` as they go --
+        # `add_role` appends to it and `remove_role` detaches from it -- and
+        # removing from the list being iterated would skip the element after
+        # each removal, leaving the admin holding a role the form took away.
+        old_roles = list(admin.roles)
         old_roles_set = {(role.role, role.library) for role in old_roles}
 
         for role in roles:

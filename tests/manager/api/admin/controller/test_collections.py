@@ -240,6 +240,134 @@ class TestCollectionSettings:
             "libraries": [{"short_name": "L2"}],
         }
 
+    def test_collections_get_reads_collections_once(
+        self,
+        controller: CollectionSettingsController,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+    ) -> None:
+        """The listing reads the collections once, however many there are.
+
+        Every service in the listing is reported with its collection's
+        marked_for_deletion, export_marc_records and parent. Left lazy that is
+        a query per service, so this test fails if the collection goes back to
+        being read one service at a time.
+        """
+        parent = db.collection(name="Parent Collection", protocol=OverdriveAPI)
+        for i in range(5):
+            child = db.collection(
+                name=f"Child Collection {i}",
+                protocol=OverdriveAPI,
+                settings=db.overdrive_settings(external_account_id=str(i)),
+            )
+            child.parent = parent
+
+        with flask_app_fixture.test_request_context_system_admin("/"):
+            with db.record_statements(expire=True) as statements:
+                services = controller.configured_services
+
+        # Every child reports its parent, which means the parents were loaded too.
+        children = [s for s in services if s["name"].startswith("Child Collection")]
+        assert len(children) == 5
+        assert all(
+            child["parent_id"] == parent.integration_configuration.id
+            for child in children
+        )
+
+        # One query for the collections, and none for the parents: a parent is
+        # a collection in this same listing, so it is already loaded and the
+        # many-to-one resolves without going back to the database. This still
+        # fails if that stops being true -- if the listing later left some
+        # collections out, say.
+        assert len([q for q in statements if q.touches("FROM collections")]) == 1
+
+    def test_collections_get_sorts_libraries_with_no_name_first(
+        self,
+        controller: CollectionSettingsController,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+    ) -> None:
+        """A service's libraries sort by name, with an unnamed library first.
+
+        Library.name is nullable, so a service can hold one with no name at
+        all. Sorting a mix of strings and None raises, which would fail the
+        whole listing rather than just that library.
+        """
+        collection = db.collection(name="Sorted Collection", protocol=OverdriveAPI)
+        named = db.library(name="Zebra Library", short_name="ZZZ")
+        unnamed = db.library(short_name="AAA")
+        unnamed.name = None
+        for library in (named, unnamed):
+            db.integration_library_configuration(
+                collection.integration_configuration,
+                library,
+                OverdriveLibrarySettings(ebook_loan_duration=14),
+            )
+
+        with flask_app_fixture.test_request_context_system_admin("/"):
+            services = controller.configured_services
+
+        [service] = [s for s in services if s["name"] == "Sorted Collection"]
+        assert [l["short_name"] for l in service["libraries"]] == ["AAA", "ZZZ"]
+
+    def test_collections_get_reads_library_configurations_once(
+        self,
+        controller: CollectionSettingsController,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+    ) -> None:
+        """The listing reads each service's libraries once, however many there are.
+
+        A collection can be associated with every library on the circulation
+        manager, and the listing reports each association. Left to lazy
+        loading that is a query for the service's library configurations plus
+        one per configuration for the library it names, so this test fails if
+        either relationship goes back to being loaded that way.
+        """
+        # Several collections, each associated with several libraries, so that
+        # the assertions below fail if either relationship goes back to being
+        # loaded per service or per library configuration.
+        libraries = [db.library(short_name=f"L{i}") for i in range(5)]
+        for collection_index in range(3):
+            collection = db.collection(
+                name=f"Shared Collection {collection_index}",
+                protocol=OverdriveAPI,
+                settings=db.overdrive_settings(
+                    external_account_id=str(collection_index)
+                ),
+            )
+            for library in libraries:
+                db.integration_library_configuration(
+                    collection.integration_configuration,
+                    library,
+                    OverdriveLibrarySettings(ebook_loan_duration=14),
+                )
+
+        with flask_app_fixture.test_request_context_system_admin("/"):
+            with db.record_statements(expire=True) as statements:
+                services = controller.configured_services
+
+        shared_services = [
+            s for s in services if s["name"].startswith("Shared Collection")
+        ]
+        assert len(shared_services) == 3
+        for service in shared_services:
+            assert sorted(l["short_name"] for l in service["libraries"]) == [
+                f"L{i}" for i in range(5)
+            ]
+        assert (
+            len(
+                [
+                    q
+                    for q in statements
+                    if q.touches("integration_library_configurations")
+                ]
+            )
+            == 1
+        )
+        # The libraries themselves are loaded in one query too.
+        assert len([q for q in statements if q.touches("FROM libraries")]) == 1
+
     @pytest.mark.parametrize("role, library_scoped", NON_SYSTEM_ADMIN_ROLES)
     def test_collections_get_limits_info_for_non_system_admins(
         self,
@@ -298,6 +426,58 @@ class TestCollectionSettings:
             "libraries": [{"short_name": "L1"}],
         }
         assert all("settings" not in c for c in collections)
+
+    def test_collections_get_checks_roles_once_for_non_system_admins(
+        self,
+        controller: CollectionSettingsController,
+        flask_app_fixture: FlaskAppFixture,
+        db: DatabaseTransactionFixture,
+    ) -> None:
+        """The listing reads the admin's roles once, however many libraries it sees.
+
+        A consortium manager associates its collections with every member
+        library, and the listing asks whether the admin may see each one. When
+        that question went to the database per library, the endpoint issued
+        enough queries to time out for any admin who wasn't a system admin,
+        who alone is answered without a per-library check.
+        """
+        library = db.library(short_name="L1")
+        collection = db.collection(
+            name="Consortium Collection", protocol=OverdriveAPI, library=library
+        )
+        collection.associated_libraries += [db.library() for _ in range(10)]
+
+        # A second collection the admin has no role for. The listing asks
+        # `can_see_collection` about each collection and stops at the first
+        # library the admin is a librarian of, so a collection the admin *can*
+        # see settles on its first library and leaves the rest of the loop
+        # unrun. Only a collection the admin cannot see walks every library,
+        # which is where the per-library role lookups accumulated.
+        unassociated = db.collection(
+            name="Unassociated Collection", protocol=OverdriveAPI
+        )
+        unassociated.associated_libraries += [db.library() for _ in range(10)]
+
+        admin = flask_app_fixture.admin_user(
+            email="librarian@example.org", role=AdminRole.LIBRARIAN, library=library
+        )
+        db.session.flush()
+
+        with db.record_statements() as statements:
+            with flask_app_fixture.test_request_context("/", admin=admin):
+                response = controller.process_get()
+
+        assert response.status_code == 200
+        data = response.json
+        assert isinstance(data, dict)
+        # The collection the admin has no role for is walked in full and
+        # withheld, so the role checks below cover both of the listing's
+        # paths and not just the one that short-circuits.
+        names = {c["name"] for c in data.get("collections", [])}
+        assert names == {"Consortium Collection"}
+
+        role_queries = [q for q in statements if q.touches("adminroles")]
+        assert len(role_queries) <= 1
 
     @pytest.mark.parametrize(
         "post_data,expected,detailed",
@@ -980,11 +1160,11 @@ class TestCollectionSettings:
         self,
         db: DatabaseTransactionFixture,
         flask_app_fixture: FlaskAppFixture,
-        services_fixture: ServicesFixture,
     ):
-        registry: LicenseProvidersRegistry = (
-            services_fixture.services.integration_registry.license_providers()
-        )
+        # A registry of this test's own. The one on the services container is
+        # shared by every test in the process, so registering a mock protocol
+        # on it leaks into whatever runs next.
+        registry = LicenseProvidersRegistry()
         registry.register(object, canonical="mock_api")  # type: ignore[arg-type]
         collection = db.collection(protocol="mock_api")
         controller = CollectionSettingsController(db.session, registry)
@@ -1073,11 +1253,11 @@ class TestCollectionSettings:
     def test_collection_self_tests_run_self_tests_unsupported_collection(
         self,
         db: DatabaseTransactionFixture,
-        services_fixture: ServicesFixture,
     ):
-        registry: LicenseProvidersRegistry = (
-            services_fixture.services.integration_registry.license_providers()
-        )
+        # A registry of this test's own. The one on the services container is
+        # shared by every test in the process, so registering a mock protocol
+        # on it leaks into whatever runs next.
+        registry = LicenseProvidersRegistry()
         registry.register(object, canonical="mock_api")  # type: ignore[arg-type]
         collection = db.collection(protocol="mock_api")
         manager = MagicMock()
@@ -1089,7 +1269,6 @@ class TestCollectionSettings:
     def test_collection_self_tests_post(
         self,
         db: DatabaseTransactionFixture,
-        services_fixture: ServicesFixture,
     ):
         mock = MagicMock()
 
@@ -1102,9 +1281,10 @@ class TestCollectionSettings:
             def collection(self) -> None:
                 return None
 
-        registry: LicenseProvidersRegistry = (
-            services_fixture.services.integration_registry.license_providers()
-        )
+        # A registry of this test's own. The one on the services container is
+        # shared by every test in the process, so registering a mock protocol
+        # on it leaks into whatever runs next.
+        registry = LicenseProvidersRegistry()
         registry.register(MockApi, canonical="Foo")  # type: ignore[arg-type]
 
         collection = db.collection(protocol="Foo")

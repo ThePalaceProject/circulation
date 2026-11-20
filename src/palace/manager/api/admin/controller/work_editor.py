@@ -667,7 +667,7 @@ class WorkController(CirculationManagerController, AdminPermissionsControllerMix
         return [
             entry.customlist
             for entry in work.custom_list_entries
-            if entry.customlist and entry.customlist.library == library
+            if entry.customlist and entry.customlist.is_owned_by(library)
         ]
 
     def _custom_lists_get(self, library: Library, work: Work) -> dict[str, Any]:

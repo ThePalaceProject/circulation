@@ -641,3 +641,39 @@ def test_stats_parent_collection_permissions(
     # No exceptions were thrown
     assert child.id in collection_ids
     assert parent.name not in collection_ids
+
+
+def test_stats_query_count_is_independent_of_library_count(
+    admin_statistics_session: AdminStatisticsSessionFixture,
+) -> None:
+    """The number of statements issued must not grow with the number of libraries.
+
+    `_authorized_collections` used to resolve `Library.associated_collections` one
+    library at a time, which added a statement per library.
+    """
+    session = admin_statistics_session
+    admin = session.admin
+    db = session.db
+
+    admin.add_role(AdminRole.SYSTEM_ADMIN)
+
+    collection = db.collection(name="Shared Collection")
+
+    def statement_count_for(library_count: int) -> int:
+        while len(collection.associated_libraries) < library_count:
+            index = len(collection.associated_libraries)
+            library = db.library(f"Library {index}", f"library-{index}")
+            collection.associated_libraries += [library]
+        with db.record_statements(expire=True) as statements:
+            # Warm up first, so that one-off lazy loads of expired state (the
+            # admin's roles, say) are not counted against the endpoint itself.
+            session.get_statistics()
+            statements.clear()
+            response = session.get_statistics()
+        assert len(response.libraries) == library_count
+        return len(statements)
+
+    with_one_library = statement_count_for(1)
+    with_many_libraries = statement_count_for(10)
+
+    assert with_many_libraries == with_one_library

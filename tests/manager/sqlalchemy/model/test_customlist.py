@@ -390,6 +390,36 @@ class TestCustomList:
         shared.library = None
         assert shared in db.session.scalars(CustomList.shared_with_library(other)).all()
 
+    @pytest.mark.parametrize(
+        "owner, shared, expected_owned, expected_usable",
+        [
+            pytest.param("same", False, True, True, id="own-unshared"),
+            pytest.param("same", True, True, True, id="own-shared"),
+            pytest.param("other", False, False, False, id="other-unshared"),
+            pytest.param("other", True, False, True, id="other-shared"),
+            pytest.param(None, False, False, False, id="ownerless-unshared"),
+            pytest.param(None, True, False, True, id="ownerless-shared"),
+        ],
+    )
+    def test_is_owned_by_and_is_usable_by(
+        self,
+        db: DatabaseTransactionFixture,
+        owner: str | None,
+        shared: bool,
+        expected_owned: bool,
+        expected_usable: bool,
+    ):
+        library = db.library("same")
+        libraries = {"same": library, "other": db.library("other")}
+
+        custom_list, _ = db.customlist(num_entries=0)
+        custom_list.library = libraries[owner] if owner else None
+        custom_list.shared_locally = shared
+        db.session.flush()
+
+        assert custom_list.is_owned_by(library) is expected_owned
+        assert custom_list.is_usable_by(library) is expected_usable
+
 
 class TestCustomListEntry:
     def test_set_work(self, db: DatabaseTransactionFixture):

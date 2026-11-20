@@ -1,4 +1,10 @@
-from palace.manager.util.personal_names import display_name_to_sort_name
+import pytest
+
+from palace.manager.util.personal_names import (
+    display_name_to_sort_name,
+    normalize_contributor_name_for_matching,
+    sort_name_to_display_name,
+)
 
 
 class TestNameConversions:
@@ -86,3 +92,52 @@ class TestNameConversions:
         # retain proper period
         sort_name = display_name_to_sort_name("Bitshifter, B.")
         assert "Bitshifter, B." == sort_name
+
+    @pytest.mark.parametrize(
+        "sort_name, expected",
+        [
+            pytest.param(None, None, id="none"),
+            pytest.param("", None, id="empty"),
+            pytest.param("Bitshifter, Bob", "Bob Bitshifter", id="family-given"),
+            pytest.param("Prince", "Prince", id="single-name"),
+            pytest.param(
+                "Bitshifter, Dr. Bob Q., Jr.",
+                "Dr. Bob Q. Bitshifter Jr.",
+                id="title-middle-suffix",
+            ),
+            pytest.param(
+                'Bitshifter, Robert "Bob" Q.',
+                "Robert (Bob) Q. Bitshifter",
+                id="quoted-nickname",
+            ),
+            pytest.param(
+                "Bitshifter, Bob (Bobby)",
+                "Bob (Bobby) Bitshifter",
+                id="parenthesized-nickname",
+            ),
+        ],
+    )
+    def test_sort_name_to_display_name(
+        self, sort_name: str | None, expected: str | None
+    ) -> None:
+        assert sort_name_to_display_name(sort_name) == expected
+
+    @pytest.mark.parametrize(
+        "name, expected",
+        [
+            pytest.param("Bob Bitshifter", "bob bitshifter", id="given-family"),
+            pytest.param(
+                "Dr. Robert 'Bob' Q. Bitshifter Jr.",
+                "dr robert q bitshifter jr bob",
+                id="all-parts",
+            ),
+            pytest.param(
+                "Mary Queen of the Scots", "mary queen of scots", id="of-the-joiner"
+            ),
+            pytest.param("Боб Битшифтер", "боб битшифтер", id="non-latin"),
+        ],
+    )
+    def test_normalize_contributor_name_for_matching(
+        self, name: str, expected: str
+    ) -> None:
+        assert normalize_contributor_name_for_matching(name) == expected

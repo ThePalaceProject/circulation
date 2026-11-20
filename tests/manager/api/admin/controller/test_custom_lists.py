@@ -1,4 +1,5 @@
 import json
+from contextlib import nullcontext
 from typing import Any, Literal
 from unittest import mock
 
@@ -11,6 +12,7 @@ from werkzeug.datastructures import ImmutableMultiDict
 from palace.manager.api.admin.exceptions import AdminNotAuthorized
 from palace.manager.api.admin.model.custom_lists import CustomListPostRequest
 from palace.manager.api.admin.problem_details import (
+    ADMIN_NOT_AUTHORIZED,
     AUTO_UPDATE_CUSTOM_LIST_CANNOT_HAVE_ENTRIES,
     CANNOT_CHANGE_LIBRARY_FOR_CUSTOM_LIST,
     COLLECTION_NOT_ACTIVE_FOR_LIST_LIBRARY,
@@ -114,6 +116,68 @@ class TestCustomListsController:
                 AdminNotAuthorized,
                 admin_librarian_fixture.manager.admin_custom_lists_controller.custom_lists,
             )
+
+    def test_custom_lists_get_reads_collections_once(
+        self,
+        admin_librarian_fixture: AdminLibrarianFixture,
+    ) -> None:
+        """The listing reads the lists' collections once, however many lists there are.
+
+        A list's collections, and the integration configuration that holds a
+        collection's name and protocol, are loaded with the lists -- for the
+        library's own lists and for the ones shared with it. Left lazy they
+        are a query per list plus one per collection.
+        """
+        db = admin_librarian_fixture.ctrl.db
+        library = db.default_library()
+
+        # Each list gets a collection of its own. A collection's integration
+        # configuration is a many-to-one, so a lazy load of it costs one query
+        # per distinct collection: were every list to share one collection,
+        # the lazy count would not grow with the number of lists and this test
+        # would pin nothing.
+        collections_by_list_name: dict[str, Collection] = {}
+        for i in range(5):
+            name = f"Owned list {i}"
+            custom_list, _ = create(db.session, CustomList, name=name, library=library)
+            collections_by_list_name[name] = db.collection()
+            custom_list.collections = [collections_by_list_name[name]]
+
+        # A list another library shared, to cover that branch too.
+        shared, _ = create(
+            db.session, CustomList, name="Shared list", library=db.library()
+        )
+        collections_by_list_name["Shared list"] = db.collection()
+        shared.collections = [collections_by_list_name["Shared list"]]
+        shared.shared_locally = True
+
+        with admin_librarian_fixture.request_context_with_library_and_admin("/"):
+            with db.record_statements(expire=True) as statements:
+                response = (
+                    admin_librarian_fixture.manager.admin_custom_lists_controller.custom_lists()
+                )
+
+        assert isinstance(response, dict)
+        lists_by_name = {l["name"]: l for l in response["custom_lists"]}
+        assert set(lists_by_name) >= set(collections_by_list_name)
+        # Every list reports its own collection, by name and protocol.
+        for name, collection in collections_by_list_name.items():
+            assert lists_by_name[name]["collections"] == [
+                {
+                    "id": collection.id,
+                    "name": collection.name,
+                    "protocol": collection.protocol,
+                }
+            ]
+
+        # Two queries per branch (owned and shared): one for the lists'
+        # collections and one for the integration configurations that name
+        # them. Neither grows with the number of lists.
+        assert len([q for q in statements if q.touches("collections_customlists")]) == 2
+        assert (
+            len([q for q in statements if q.touches("FROM integration_configurations")])
+            == 2
+        )
 
     def test_custom_lists_post_errors(
         self, admin_librarian_fixture: AdminLibrarianFixture
@@ -838,6 +902,7 @@ class TestCustomListsController:
             admin_librarian_fixture.ctrl.db.session,
             CustomList,
             name=admin_librarian_fixture.ctrl.db.fresh_str(),
+            library=admin_librarian_fixture.ctrl.db.default_library(),
             data_source=data_source,
         )
         with admin_librarian_fixture.request_context_with_library_and_admin(
@@ -848,6 +913,24 @@ class TestCustomListsController:
                 admin_librarian_fixture.manager.admin_custom_lists_controller.custom_list,
                 list.id,
             )
+
+        # A librarian who is not a library manager gets the same answer for
+        # another library's list as for a list that does not exist.
+        other_library_list, ignore = create(
+            admin_librarian_fixture.ctrl.db.session,
+            CustomList,
+            name=admin_librarian_fixture.ctrl.db.fresh_str(),
+            library=admin_librarian_fixture.ctrl.db.library(),
+            data_source=data_source,
+        )
+        with admin_librarian_fixture.request_context_with_library_and_admin(
+            "/", method="DELETE"
+        ):
+            assert isinstance(other_library_list.id, int)
+            response = admin_librarian_fixture.manager.admin_custom_lists_controller.custom_list(
+                other_library_list.id
+            )
+            assert MISSING_CUSTOM_LIST == response
 
         admin_librarian_fixture.admin.add_role(
             AdminRole.LIBRARY_MANAGER, admin_librarian_fixture.ctrl.db.default_library()
@@ -872,6 +955,79 @@ class TestCustomListsController:
             )
             assert response == CANNOT_DELETE_SHARED_LIST
 
+    @pytest.mark.parametrize(
+        "method, has_owner, shared, allowed",
+        [
+            pytest.param("GET", True, False, False, id="get-unshared-other-library"),
+            pytest.param("GET", True, True, True, id="get-shared-other-library"),
+            pytest.param("GET", False, False, False, id="get-unshared-ownerless"),
+            pytest.param("GET", False, True, True, id="get-shared-ownerless"),
+            pytest.param(
+                "DELETE", True, False, False, id="delete-unshared-other-library"
+            ),
+            pytest.param("DELETE", True, True, False, id="delete-shared-other-library"),
+            pytest.param("DELETE", False, False, False, id="delete-unshared-ownerless"),
+            pytest.param("DELETE", False, True, False, id="delete-shared-ownerless"),
+        ],
+    )
+    def test_custom_list_not_owned_by_request_library(
+        self,
+        admin_librarian_fixture: AdminLibrarianFixture,
+        method: str,
+        has_owner: bool,
+        shared: bool,
+        allowed: bool,
+    ):
+        """A library can read only the lists it may use, and delete only its own."""
+        db = admin_librarian_fixture.ctrl.db
+        admin_librarian_fixture.admin.add_role(
+            AdminRole.LIBRARY_MANAGER, db.default_library()
+        )
+
+        other_library = db.library()
+        custom_list, _ = create(
+            db.session,
+            CustomList,
+            name=db.fresh_str(),
+            library=other_library if has_owner else None,
+            data_source=DataSource.lookup(db.session, DataSource.LIBRARY_STAFF),
+            shared_locally=shared,
+        )
+        custom_list.add_entry(db.work(with_license_pool=True))
+        list_id = custom_list.id
+        assert isinstance(list_id, int)
+
+        # This lane draws only on the list, so a delete of the list would take
+        # the lane with it.
+        lane = db.lane(library=other_library)
+        lane.customlists = [custom_list]
+        lane_id = lane.id
+
+        with admin_librarian_fixture.request_context_with_library_and_admin(
+            "/", method=method
+        ):
+            response = admin_librarian_fixture.manager.admin_custom_lists_controller.custom_list(
+                list_id
+            )
+
+        if allowed:
+            assert isinstance(response, flask.Response)
+            assert response.status_code == 200
+            feed = feedparser.parse(response.get_data())
+            assert feed.feed.title == custom_list.name
+            assert len(feed.entries) == 1
+        else:
+            assert response == MISSING_CUSTOM_LIST
+
+        assert get_one(db.session, CustomList, id=list_id) is not None
+        assert get_one(db.session, Lane, id=lane_id) is not None
+        assert (
+            db.session.query(CustomListEntry)
+            .filter(CustomListEntry.list_id == list_id)
+            .count()
+            == 1
+        )
+
     @define
     class ShareLocallySetup:
         shared_with: Library | None = None
@@ -884,6 +1040,7 @@ class TestCustomListsController:
         primary_library = admin_librarian_fixture.ctrl.db.library("primary")
         collection1 = admin_librarian_fixture.ctrl.db.collection("c1")
         collection1.associated_libraries.append(primary_library)
+        admin_librarian_fixture.admin.add_role(AdminRole.LIBRARIAN, primary_library)
 
         data_source = DataSource.lookup(
             admin_librarian_fixture.ctrl.db.session, DataSource.LIBRARY_STAFF
@@ -938,6 +1095,96 @@ class TestCustomListsController:
         assert response["successes"] == 2
         assert response["failures"] == 0
         assert s.list.shared_locally is True
+
+    @pytest.mark.parametrize(
+        "list_exists",
+        [
+            pytest.param(False, id="nonexistent-list"),
+            pytest.param(True, id="not-a-staff-list"),
+        ],
+    )
+    def test_share_locally_missing_list(
+        self,
+        admin_librarian_fixture: AdminLibrarianFixture,
+        list_exists: bool,
+    ):
+        """Only an existing list created by library staff can be shared."""
+        db = admin_librarian_fixture.ctrl.db
+
+        # The request library owns this list, but library staff did not create it.
+        custom_list, _ = db.customlist(data_source_name=DataSource.NYT, num_entries=0)
+        custom_list.library = db.default_library()
+        assert isinstance(custom_list.id, int)
+        list_id = custom_list.id if list_exists else custom_list.id + 1000
+
+        with admin_librarian_fixture.request_context_with_library_and_admin(
+            "/", method="POST"
+        ):
+            response = admin_librarian_fixture.manager.admin_custom_lists_controller.share_locally(
+                list_id
+            )
+
+        assert response == MISSING_CUSTOM_LIST
+        assert custom_list.shared_locally is False
+
+    @pytest.mark.parametrize(
+        "method, from_owner_library",
+        [
+            pytest.param("POST", True, id="post-no-role-on-owner-library"),
+            pytest.param("DELETE", True, id="delete-no-role-on-owner-library"),
+            pytest.param("POST", False, id="post-from-other-library"),
+            pytest.param("DELETE", False, id="delete-from-other-library"),
+        ],
+    )
+    def test_share_locally_not_authorized(
+        self,
+        admin_librarian_fixture: AdminLibrarianFixture,
+        method: str,
+        from_owner_library: bool,
+    ):
+        """Only a librarian of the owning library can share or unshare a list."""
+        db = admin_librarian_fixture.ctrl.db
+        s = self._setup_share_locally(admin_librarian_fixture)
+        assert s.list is not None and s.primary_library is not None
+
+        # An unshare request starts from a shared list, so that a request which
+        # got through would change the flag.
+        initially_shared = method == "DELETE"
+        s.list.shared_locally = initially_shared
+        db.session.flush()
+
+        # A request through the owning library comes from an admin with no role
+        # there, which raises. A request through a library where the admin is a
+        # librarian fails the ownership check, which returns a problem detail.
+        if from_owner_library:
+            admin_librarian_fixture.admin.remove_role(
+                AdminRole.LIBRARIAN, s.primary_library
+            )
+        request_library = (
+            s.primary_library if from_owner_library else db.default_library()
+        )
+        context_manager = (
+            pytest.raises(AdminNotAuthorized) if from_owner_library else nullcontext()
+        )
+
+        response = None
+        with (
+            admin_librarian_fixture.request_context_with_library_and_admin(
+                "/", library=request_library, method=method
+            ),
+            context_manager,
+        ):
+            response = admin_librarian_fixture.manager.admin_custom_lists_controller.share_locally(
+                s.list.id
+            )
+
+        if not from_owner_library:
+            assert isinstance(response, ProblemDetail)
+            assert response.uri == ADMIN_NOT_AUTHORIZED.uri
+            assert response.status_code == 403
+
+        db.session.refresh(s.list)
+        assert s.list.shared_locally is initially_shared
 
     def test_share_locally_without_licensed_works(
         self, admin_librarian_fixture: AdminLibrarianFixture

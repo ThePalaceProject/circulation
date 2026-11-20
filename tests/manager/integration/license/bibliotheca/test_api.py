@@ -116,15 +116,62 @@ class TestBibliothecaAPI:
             "/cirrus/library/%s/foo" % id
         )
 
-    def test_full_url(self, bibliotheca_fixture: BibliothecaAPITestFixture):
-        id = bibliotheca_fixture.api.library_id
-        assert (
-            "https://partner.yourcloudlibrary.com/cirrus/library/%s/foo" % id
-            == bibliotheca_fixture.api.full_url("foo")
+    @pytest.mark.parametrize(
+        "settings, expected_base",
+        [
+            pytest.param({}, "https://partner.yourcloudlibrary.com", id="unset"),
+            pytest.param(
+                {"server_url": ""}, "https://partner.yourcloudlibrary.com", id="blank"
+            ),
+            pytest.param(
+                {"server_url": "https://partnerqa.yourcloudlibrary.com"},
+                "https://partnerqa.yourcloudlibrary.com",
+                id="configured",
+            ),
+            pytest.param(
+                {"server_url": "https://partnerqa.yourcloudlibrary.com/"},
+                "https://partnerqa.yourcloudlibrary.com",
+                id="trailing-slash",
+            ),
+            pytest.param(
+                {"url": "https://legacy.example.com"},
+                "https://partner.yourcloudlibrary.com",
+                id="legacy-url-key-ignored",
+            ),
+        ],
+    )
+    def test_full_url(
+        self,
+        bibliotheca_fixture: BibliothecaAPITestFixture,
+        settings: dict[str, str],
+        expected_base: str,
+    ):
+        api = bibliotheca_fixture.api_with_settings(settings)
+        expected = f"{expected_base}/cirrus/library/{api.library_id}/foo"
+        assert api.full_url("foo") == expected
+        assert api.full_url("/foo") == expected
+        assert api.full_url(f"/cirrus/library/{api.library_id}/foo") == expected
+
+    def test_request_uses_server_url(
+        self, bibliotheca_fixture: BibliothecaAPITestFixture
+    ):
+        api = bibliotheca_fixture.api_with_settings(
+            {"server_url": "https://partnerqa.yourcloudlibrary.com"}
         )
+        default_api = bibliotheca_fixture.api
+        for a in (api, default_api):
+            a.queue_response(200)
+            a.request("some_url")
+        [[_, url, _, kwargs]] = api.requests
+        [[_, _, _, default_kwargs]] = default_api.requests
+        assert url == (
+            "https://partnerqa.yourcloudlibrary.com"
+            f"/cirrus/library/{api.library_id}/some_url"
+        )
+        # The signature covers only the path, so the server URL does not change it.
         assert (
-            "https://partner.yourcloudlibrary.com/cirrus/library/%s/foo" % id
-            == bibliotheca_fixture.api.full_url("/foo")
+            kwargs["headers"]["3mcl-Authorization"]
+            == default_kwargs["headers"]["3mcl-Authorization"]
         )
 
     def test_request_signing(self, bibliotheca_fixture: BibliothecaAPITestFixture):

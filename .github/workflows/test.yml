@@ -30,9 +30,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # See comment here: https://github.com/actions/runner-images/issues/1187#issuecomment-686735760
       - name: Disable network offload
-        run: sudo ethtool -K eth0 tx off rx off
+        uses: ./.github/actions/disable-network-offload
 
       - name: Set up Python
         uses: actions/setup-python@v7
@@ -90,9 +89,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # See comment here: https://github.com/actions/runner-images/issues/1187#issuecomment-686735760
       - name: Disable network offload
-        run: sudo ethtool -K eth0 tx off rx off
+        uses: ./.github/actions/disable-network-offload
 
       - name: Set up Python
         uses: actions/setup-python@v7
