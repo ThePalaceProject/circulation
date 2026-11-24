@@ -84,8 +84,9 @@ class ErrorResponse(BaseOverdriveModel, LoggerMixin):
             error = cls.model_validate_json(response.text)
         except Exception as e:
             cls.logger().exception(
-                f"Error parsing Overdrive response. "
-                f"Status code: {response.status_code}. Response: {response.text}. Error: {e}"
+                "Error parsing Overdrive response. "
+                f"Status code: {response.status_code}. URL: {response.url}. "
+                f"Response: {response.text}. Error: {e}"
             )
             error = None
         return error
@@ -97,6 +98,14 @@ class ErrorResponse(BaseOverdriveModel, LoggerMixin):
         """
         Raise an appropriate exception based on the Overdrive error code
         and message in the given response.
+
+        An error code with no specific exception is logged as a warning,
+        with the status code, URL, and Overdrive's correlation token.
+
+        :param response: The error response from Overdrive.
+        :param default_message: The message to use when the response has none.
+        :raise CirculationException: For an error code with a specific exception.
+        :raise OverdriveResponseException: For any other error.
         """
         if default_message is None:
             default_message = "Unknown Overdrive error"
@@ -128,6 +137,18 @@ class ErrorResponse(BaseOverdriveModel, LoggerMixin):
             raise PatronHoldLimitReached()
         elif error_code == "PatronTitleProcessingFailed":
             raise FormatNotAvailable()
+
+        # Log the token here, and do not rely on callers to keep it. It is
+        # Overdrive's own correlation ID, which their support needs to trace
+        # the request. A body that cannot be parsed is logged by
+        # from_response_data instead.
+        if error is not None:
+            cls.logger().warning(
+                "Unrecognized Overdrive error response. "
+                f"Status code: {response.status_code}. URL: {response.url}. "
+                f"Error code: '{error_code}'. Message: '{error_message}'. "
+                f"Token: '{error_token}'."
+            )
 
         if error_message is None:
             error_message = default_message
