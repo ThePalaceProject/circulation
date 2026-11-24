@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import datetime
 from functools import partial
 from uuid import uuid4
@@ -14,6 +15,7 @@ from palace.manager.api.circulation.exceptions import (
     AlreadyCheckedOut,
     AlreadyOnHold,
     CannotRenew,
+    CirculationException,
     NoAvailableCopies,
     PatronHoldLimitReached,
     PatronLoanLimitReached,
@@ -108,6 +110,8 @@ class TestErrorResponse:
 
         # The error is logged.
         assert "Error parsing Overdrive response" in caplog.text
+        assert "URL: http://example.com/api/endpoint" in caplog.text
+        assert "Unrecognized Overdrive error response" not in caplog.text
 
         # If no default message is supplied, we should get a generic message.
         with pytest.raises(OverdriveResponseException, match="Unknown Overdrive error"):
@@ -154,6 +158,68 @@ class TestErrorResponse:
             ErrorResponse.raise_from_response_data(
                 error_response_fixture.mock_error("TitleAlreadyCheckedOut")
             )
+
+    def test_unrecognized_error_logged(
+        self,
+        caplog: pytest.LogCaptureFixture,
+        error_response_fixture: ErrorResponseFixture,
+    ) -> None:
+        caplog.set_level(logging.WARNING)
+        response = error_response_fixture.mock_response(
+            status_code=404,
+            content=json.dumps(
+                {
+                    "errorCode": "TitleNotFoundError",
+                    "message": "The requested title was not found.",
+                    "token": "7a646b0e-8d8a-4a0b-8cfa-bea89a8983cb",
+                }
+            ),
+        )
+        with pytest.raises(OverdriveResponseException):
+            ErrorResponse.raise_from_response_data(response)
+
+        [record] = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert record.getMessage() == (
+            "Unrecognized Overdrive error response. "
+            "Status code: 404. URL: http://example.com/api/endpoint. "
+            "Error code: 'TitleNotFoundError'. "
+            "Message: 'The requested title was not found.'. "
+            "Token: '7a646b0e-8d8a-4a0b-8cfa-bea89a8983cb'."
+        )
+
+    @pytest.mark.parametrize(
+        "error_code",
+        [
+            pytest.param("TitleNotCheckedOut", id="title-not-checked-out"),
+            pytest.param("NoCopiesAvailable", id="no-copies-available"),
+            pytest.param(
+                "PatronHasExceededCheckoutLimit", id="exceeded-checkout-limit"
+            ),
+            pytest.param(
+                "PatronHasExceededCheckoutLimit_ForCPC",
+                id="exceeded-checkout-limit-for-cpc",
+            ),
+            pytest.param("TitleAlreadyCheckedOut", id="title-already-checked-out"),
+            pytest.param("AlreadyOnWaitList", id="already-on-wait-list"),
+            pytest.param("NotWithinRenewalWindow", id="not-within-renewal-window"),
+            pytest.param("PatronExceededHoldLimit", id="exceeded-hold-limit"),
+            pytest.param(
+                "PatronTitleProcessingFailed", id="patron-title-processing-failed"
+            ),
+        ],
+    )
+    def test_recognized_error_not_logged(
+        self,
+        caplog: pytest.LogCaptureFixture,
+        error_response_fixture: ErrorResponseFixture,
+        error_code: str,
+    ) -> None:
+        caplog.set_level(logging.WARNING)
+        with pytest.raises(CirculationException):
+            ErrorResponse.raise_from_response_data(
+                error_response_fixture.mock_error(error_code)
+            )
+        assert "Unrecognized Overdrive error response" not in caplog.text
 
     def test_process_place_hold_response(
         self, error_response_fixture: ErrorResponseFixture
