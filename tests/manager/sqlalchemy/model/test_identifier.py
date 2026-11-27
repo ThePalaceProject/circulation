@@ -13,6 +13,7 @@ from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import (
     Equivalency,
     Identifier,
+    ISSNURNIdentifierParser,
     ProQuestIdentifierParser,
     RecursiveEquivalencyCache,
     isbn_for_identifier,
@@ -85,6 +86,43 @@ class TestIdentifier:
             Identifier.for_foreign_id(db.session, Identifier.BIBLIOTHECA_ID, "foo/bar")
         assert '"foo/bar" is not a valid Bibliotheca ID.' in str(excinfo.value)
 
+    def test_for_foreign_id_normalizes_issn(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        # However an ISSN is written, we end up with a single identifier for it.
+        canonical, was_new = Identifier.for_foreign_id(
+            db.session, Identifier.ISSN, "0317-8471"
+        )
+        assert Identifier.ISSN == canonical.type
+        assert "0317-8471" == canonical.identifier
+        assert True == was_new
+
+        # The hyphen is optional on the way in, and always there on the way out.
+        unhyphenated, was_new = Identifier.for_foreign_id(
+            db.session, Identifier.ISSN, "03178471"
+        )
+        assert canonical == unhyphenated
+        assert False == was_new
+
+        # An "X" check character is uppercased.
+        with_x, was_new = Identifier.for_foreign_id(
+            db.session, Identifier.ISSN, "2434561x"
+        )
+        assert "2434-561X" == with_x.identifier
+        assert True == was_new
+
+    def test_for_foreign_id_rejects_invalid_issn(
+        self, db: DatabaseTransactionFixture
+    ) -> None:
+        # This ISSN's check character doesn't match the rest of the number.
+        with pytest.raises(ValueError) as excinfo:
+            Identifier.for_foreign_id(db.session, Identifier.ISSN, "0317-8470")
+        assert '"0317-8470" is not a valid ISSN.' in str(excinfo.value)
+
+        with pytest.raises(ValueError) as excinfo:
+            Identifier.for_foreign_id(db.session, Identifier.ISSN, "notanissn")
+        assert '"notanissn" is not a valid ISSN.' in str(excinfo.value)
+
     def test_valid_as_foreign_identifier(self, db: DatabaseTransactionFixture):
         m = Identifier.valid_as_foreign_identifier
 
@@ -113,6 +151,12 @@ class TestIdentifier:
             db.session, Identifier.ISBN, "9781449358068"
         )
         assert "urn:isbn:9781449358068" == identifier.urn
+
+        # ISSN identifiers use the ISSN URN scheme.
+        identifier, ignore = Identifier.for_foreign_id(
+            db.session, Identifier.ISSN, "0317-8471"
+        )
+        assert "urn:issn:0317-8471" == identifier.urn
 
         # URI identifiers don't need a URN scheme.
         identifier, ignore = Identifier.for_foreign_id(
@@ -279,6 +323,28 @@ class TestIdentifier:
             db.session,
             isbn_urn,
             must_support_license_pools=True,
+        )
+
+    def test_parse_urn_issn(self, db: DatabaseTransactionFixture) -> None:
+        # An ISSN URN becomes an ISSN identifier, in canonical form.
+        identifier, is_new = Identifier.parse_urn(db.session, "urn:issn:0317-8471")
+        assert isinstance(identifier, Identifier)
+        assert Identifier.ISSN == identifier.type
+        assert "0317-8471" == identifier.identifier
+        assert True == is_new
+
+        # The same ISSN written without its hyphen, behind an uppercase URN
+        # prefix, gives back the identifier we already have.
+        same_identifier, is_new = Identifier.parse_urn(db.session, "URN:ISSN:03178471")
+        assert same_identifier == identifier
+        assert False == is_new
+
+        # A malformed ISSN raises an exception instead of being stored.
+        pytest.raises(
+            ValueError, Identifier.parse_urn, db.session, "urn:issn:0317-8470"
+        )
+        pytest.raises(
+            ValueError, Identifier.parse_urn, db.session, "urn:issn:notanissn"
         )
 
     def test_recursively_equivalent_identifier_ids(
@@ -818,3 +884,56 @@ class TestProQuestIdentifierParser:
         parser = ProQuestIdentifierParser()
         result = parser.parse(identifier_string)
         assert expected_result == result
+
+
+class TestISSNURNIdentifierParser:
+    @pytest.mark.parametrize(
+        "identifier_string,expected_result",
+        [
+            pytest.param(
+                "urn:librarysimplified.org/terms/id/Overdrive%20ID/adfcc11a-cc5b-4c82-8048-e005e4a90222",
+                None,
+                id="incorrect_identifier",
+            ),
+            pytest.param("urn:isbn:9781449358068", None, id="isbn_urn"),
+            pytest.param(
+                "urn:issn:0317-8471",
+                (Identifier.ISSN, "0317-8471"),
+                id="correct_identifier",
+            ),
+            pytest.param(
+                "urn:issn:03178471",
+                (Identifier.ISSN, "0317-8471"),
+                id="unhyphenated_identifier",
+            ),
+            pytest.param(
+                "URN:ISSN:2434-561x",
+                (Identifier.ISSN, "2434-561X"),
+                id="uppercase_prefix_and_lowercase_check_character",
+            ),
+            pytest.param(
+                "urn:issn:0317%2D8471",
+                (Identifier.ISSN, "0317-8471"),
+                id="percent_encoded_hyphen",
+            ),
+        ],
+    )
+    def test_parse(
+        self, identifier_string: str, expected_result: tuple[str, str] | None
+    ) -> None:
+        parser = ISSNURNIdentifierParser()
+        result = parser.parse(identifier_string)
+        assert expected_result == result
+
+    @pytest.mark.parametrize(
+        "identifier_string",
+        [
+            pytest.param("urn:issn:0317-8470", id="bad_check_character"),
+            pytest.param("urn:issn:notanissn", id="not_a_number"),
+            pytest.param("urn:issn:", id="empty"),
+        ],
+    )
+    def test_parse_rejects_malformed_issn(self, identifier_string: str) -> None:
+        parser = ISSNURNIdentifierParser()
+        with pytest.raises(ValueError):
+            parser.parse(identifier_string)
