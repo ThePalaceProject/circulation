@@ -2116,11 +2116,11 @@ wheels = [
 
 [[package]]
 name = "nameparser"
-version = "3.1.0"
+version = "3.2.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/70/69/0fd7c74074fee7650c2799b87944b19cb0ae9fff1e3b8a147fbf1fd0c2c0/nameparser-3.1.0.tar.gz", hash = "sha256:68eca50ea8c987a3c4f50ffd15be88ce13fbea6245bc333cca8d559dc41dbace", size = 2018513, upload-time = "2026-11-17T03:44:20.21Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/36/b8/f9be5a761a2311e25fd7cd5efdeb57044b5356c5cb128f0df5a6f0fa1538/nameparser-3.2.0.tar.gz", hash = "sha256:bdf442a88959c60df9bb78a63697d47883fc6c1e604e7550dd37cff08dcbe7a6", size = 2228402, upload-time = "2026-11-23T01:16:40.102Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/09/b8/70197be237531f2226d3904d7358a4631fccf9cfacadf73798f73a192f56/nameparser-3.1.0-py3-none-any.whl", hash = "sha256:229c547a4f372ce441b01e2e7d812ccfc4f9d7e78064580666b59e0a74ae8bf4", size = 794112, upload-time = "2026-11-17T03:44:18.644Z" },
+    { url = "https://files.pythonhosted.org/packages/dc/8c/7e5cbd49b3c067e72d9493357beb3a3d5464780256ca8beac0b2d4330c9c/nameparser-3.2.0-py3-none-any.whl", hash = "sha256:9321a5793961cc40eca0d6f6da93621e750ac03a22252389864a41652604064f", size = 885499, upload-time = "2026-11-23T01:16:38.409Z" },
 ]
 
 [[package]]
