@@ -23,6 +23,7 @@ from palace.manager.core.classifier import Classifier
 from palace.manager.data_layer.identifier import IdentifierData
 from palace.manager.feed.facets.constants import FacetConstants
 from palace.manager.search.query_helpers import match_range
+from palace.manager.service.sitewide import periodicals_enabled
 from palace.manager.sqlalchemy.constants import IntegrationConfigurationConstants
 from palace.manager.sqlalchemy.model.contributor import Contributor
 from palace.manager.sqlalchemy.model.edition import Edition
@@ -550,6 +551,26 @@ class Filter:
 
         # We only want to show works that are presentation-ready.
         base_filter = _chain_filters(base_filter, Term(**{"presentation_ready": True}))
+
+        # Periodicals are indexed whether or not they are being shown, and left
+        # out of the results here when they are not. That is what lets the
+        # setting be turned on without reindexing anything.
+        #
+        # This takes periodicals away rather than restricting the query to the
+        # media it asked for, because a query gets to choose its own media: the
+        # ?media= argument, an entry point and the "all media" facet each assign
+        # Filter.media, and the last of those clears it. An exclusion survives
+        # all three.
+        #
+        # It lives here rather than in build() because build() is not the one
+        # thing every search passes through. SuppressedWorkFilter overrides it
+        # without calling us, and a search with no Filter at all skips it
+        # entirely. Query.build() applies this method to both.
+        if not periodicals_enabled():
+            base_filter = _chain_filters(
+                base_filter,
+                Bool(must_not=[Term(medium=cls._scrub(Edition.PERIODICAL_MEDIUM))]),
+            )
 
         return base_filter
 

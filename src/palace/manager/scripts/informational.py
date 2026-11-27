@@ -20,6 +20,7 @@ from palace.manager.scripts.input import (
 )
 from palace.manager.search.external_search import ExternalSearchIndex
 from palace.manager.search.filter import Filter
+from palace.manager.service.sitewide import periodicals_enabled
 from palace.manager.sqlalchemy.model.circulationevent import CirculationEvent
 from palace.manager.sqlalchemy.model.collection import Collection
 from palace.manager.sqlalchemy.model.edition import Edition
@@ -538,10 +539,29 @@ class WhereAreMyBooksScript(CollectionInputScript):
                 not_owned,
             )
 
+        # Periodicals are put in the index whether or not they are being
+        # shown, but a search leaves them out while they are off. Without this
+        # the count below looks short against the number of presentation-ready
+        # works, and nothing says why.
+        hidden_periodicals = 0
+        if not periodicals_enabled():
+            hidden_periodicals = ready.filter(
+                Work.presentation_edition.has(
+                    Edition.medium == Edition.PERIODICAL_MEDIUM
+                )
+            ).count()
+            if hidden_periodicals > 0:
+                self.out(
+                    " %d periodicals are in the index but are not being shown.",
+                    hidden_periodicals,
+                )
+
         filter = Filter(collections=[collection])
         count = self.search.count_works(filter)
         self.out(
-            " %d works in the search index, expected around %d.", count, ready_count
+            " %d works in the search index, expected around %d.",
+            count,
+            ready_count - hidden_periodicals,
         )
 
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Literal
 from urllib.parse import urlparse
 
+from dependency_injector.wiring import Provide, inject
 from pydantic import field_validator, model_validator
 
 from palace.util.log import LoggerMixin
@@ -23,6 +24,13 @@ class SitewideConfiguration(ServiceConfiguration, LoggerMixin):
     # Deprecated name for web_catalog_default_url, used only when that is unset.
     patron_web_default_url: HttpUrl | None = None
     quicksight_authorized_arns: dict[str, list[str]] | None = None
+
+    # Whether periodicals are shown to patrons. Periodicals are imported and
+    # indexed whatever this is set to; it only decides whether a search or a
+    # feed is allowed to return them, and whether one can be borrowed or
+    # fulfilled. Turning it on therefore takes effect without a reindex, but it
+    # is read once at startup, so it does need a restart.
+    periodicals_enabled: bool = False
 
     @model_validator(mode="before")
     @classmethod
@@ -70,3 +78,16 @@ class SitewideConfiguration(ServiceConfiguration, LoggerMixin):
                         f"Invalid patron web hostname {url}, path is not allowed ({path})."
                     )
         return v
+
+
+@inject
+def periodicals_enabled(
+    *, enabled: bool = Provide["config.sitewide.periodicals_enabled"]
+) -> bool:
+    """Whether periodicals are shown to patrons.
+
+    Anything other than ``True`` counts as off, so a caller that runs before the
+    service container has been wired keeps periodicals hidden instead of
+    revealing them.
+    """
+    return enabled is True

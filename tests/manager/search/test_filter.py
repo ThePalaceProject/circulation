@@ -28,6 +28,7 @@ from palace.manager.sqlalchemy.util import get_one_or_create
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.library import LibraryFixture
 from tests.fixtures.search import EndToEndSearchFixture
+from tests.fixtures.services import ServicesFixture
 from tests.manager.search.test_external_search import RESEARCH
 
 
@@ -1216,10 +1217,23 @@ class TestFilter:
         # filters.
         assert chained == f1 & f2
 
-    def test_universal_base_filter(self):
+    def test_universal_base_filter(self, services_fixture: ServicesFixture):
         # Test the base filters that are always applied.
 
-        # We only want to show works that are presentation ready.
+        # We only want to show works that are presentation ready. Periodicals
+        # are off by default, so they are taken out of every search as well.
+        #
+        # Note the lower-cased medium: the index analyses that field, and a
+        # clause naming "Periodical" would quietly match nothing at all,
+        # leaving the setting with no effect.
+        base = Filter.universal_base_filter(self._mock_chain)
+        assert [
+            Term(presentation_ready=True),
+            Bool(must_not=[Term(medium="periodical")]),
+        ] == base
+
+        # With periodicals turned on, nothing is taken away.
+        services_fixture.set_sitewide_config_option("periodicals_enabled", True)
         base = Filter.universal_base_filter(self._mock_chain)
         assert [Term(presentation_ready=True)] == base
 

@@ -17,6 +17,7 @@ from palace.util.log import LogLevel
 
 from palace import manager
 from palace.manager.api.admin.config import Configuration as AdminUiConfig
+from palace.manager.api.problem_details import FILTERED_BY_LIBRARY_POLICY
 from palace.manager.api.util.flask import PalaceFlask
 from palace.manager.core.app_server import (
     ApplicationVersionController,
@@ -42,6 +43,7 @@ from palace.manager.feed.facets.search import SearchFacets
 from palace.manager.feed.worklist.base import WorkList
 from palace.manager.search.pagination import Pagination
 from palace.manager.service.redis.exception import TRANSIENT_REDIS_ERRORS
+from palace.manager.sqlalchemy.model.edition import Edition
 from palace.manager.sqlalchemy.model.identifier import Identifier
 from palace.manager.util.opds_writer import OPDSFeed, OPDSMessage
 from palace.manager.util.problem_detail import (
@@ -52,6 +54,7 @@ from palace.manager.util.problem_detail import (
 from tests.fixtures.database import DatabaseTransactionFixture
 from tests.fixtures.flask import FlaskAppFixture
 from tests.fixtures.library import LibraryFixture
+from tests.fixtures.services import ServicesFixture
 
 
 class TestApplicationVersionController:
@@ -244,6 +247,33 @@ class TestURNLookupHandler:
 
         work = data.transaction.work(with_license_pool=True)
         identifier = work.license_pools[0].identifier
+        data.handler.process_identifier(identifier, identifier.urn)
+        assert [] == data.handler.precomposed_entries
+        assert [
+            (work.presentation_edition.primary_identifier, work)
+        ] == data.handler.works
+
+    def test_process_identifier_periodical(
+        self,
+        urn_lookup_handler_fixture: URNLookupHandlerFixture,
+        services_fixture: ServicesFixture,
+    ):
+        # A periodical is refused while periodicals are off. Hiding it from
+        # the feeds is not enough on its own, because the URN is a way of
+        # asking for one work by name.
+        data = urn_lookup_handler_fixture
+        work = data.transaction.work(with_license_pool=True)
+        work.presentation_edition.medium = Edition.PERIODICAL_MEDIUM
+        identifier = work.license_pools[0].identifier
+
+        data.handler.process_identifier(identifier, identifier.urn)
+        self.assert_one_message(
+            identifier.urn, 404, FILTERED_BY_LIBRARY_POLICY.detail, data
+        )
+
+        # Turning periodicals on returns the same issue.
+        services_fixture.set_sitewide_config_option("periodicals_enabled", True)
+        data.handler.precomposed_entries = []
         data.handler.process_identifier(identifier, identifier.urn)
         assert [] == data.handler.precomposed_entries
         assert [

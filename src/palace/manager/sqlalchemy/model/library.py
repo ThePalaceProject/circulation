@@ -23,7 +23,7 @@ from sqlalchemy.orm.session import Session
 from sqlalchemy.sql import Select
 from sqlalchemy.sql.functions import func
 
-from palace.manager.core.entrypoint import EntryPoint
+from palace.manager.core.entrypoint import EntryPoint, PeriodicalsEntryPoint
 from palace.manager.feed.facets.constants import FacetConstants
 from palace.manager.integration.base import (
     integration_settings_load,
@@ -31,6 +31,7 @@ from palace.manager.integration.base import (
 )
 from palace.manager.integration.configuration.library import LibrarySettings
 from palace.manager.integration.goals import Goals
+from palace.manager.service.sitewide import periodicals_enabled
 from palace.manager.sqlalchemy.hassessioncache import HasSessionCache
 from palace.manager.sqlalchemy.hybrid import hybrid_property
 from palace.manager.sqlalchemy.model.announcements import Announcement
@@ -331,10 +332,18 @@ class Library(Base, HasSessionCache):
     def entrypoints(self) -> Generator[type[EntryPoint]]:
         """The EntryPoints enabled for this library."""
         values = self.settings.enabled_entry_points
+        show_periodicals = periodicals_enabled()
         for v in values:
             cls = EntryPoint.BY_INTERNAL_NAME.get(v)
-            if cls:
-                yield cls
+            if cls is None:
+                continue
+            # While periodicals are off there is nothing behind this entry
+            # point, so patrons are not offered it. Leaving it out here covers
+            # both the facet links in a feed and the entry points a search can
+            # select, since both read this property.
+            if cls is PeriodicalsEntryPoint and not show_periodicals:
+                continue
+            yield cls
 
     def enabled_facets(self, group_name: str) -> list[str]:
         """Look up the enabled facets for a given facet group."""

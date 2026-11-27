@@ -30,6 +30,7 @@ from tests.fixtures.search import (
     EndToEndSearchFixture,
     ExternalSearchFixtureFake,
 )
+from tests.fixtures.services import ServicesFixture
 from tests.mocks.search import SearchServiceFailureMode
 
 RESEARCH = Term(audience=Classifier.AUDIENCE_RESEARCH.lower())
@@ -1190,3 +1191,136 @@ class TestSearchErrors:
         assert [work.id] == [
             docs["_id"] for docs in search.service.document_submission_attempts
         ]
+
+
+class TestPeriodicalsFlag:
+    """Periodicals go into the search index whether or not they are being
+    shown. Turning them on has to make them searchable straight away, without
+    reindexing or reimporting anything."""
+
+    @staticmethod
+    def _three_works(
+        fixture: EndToEndSearchFixture, db: DatabaseTransactionFixture
+    ) -> tuple[Work, Work, Work]:
+        """One work of each medium, all of them presentation ready."""
+        book = fixture.external_search.default_work(title="A book")
+        audiobook = fixture.external_search.default_work(title="An audiobook")
+        audiobook.presentation_edition.medium = Edition.AUDIO_MEDIUM
+        issue = fixture.external_search.default_work(title="An issue")
+        issue.presentation_edition.medium = Edition.PERIODICAL_MEDIUM
+        db.session.flush()
+        db.session.expire_all()
+        return book, audiobook, issue
+
+    def test_flipping_the_flag_needs_no_reindex(
+        self,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+        services_fixture: ServicesFixture,
+        db: DatabaseTransactionFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        fixture = end_to_end_search_fixture
+        client = fixture.external_search.write_client
+        prefix = fixture.external_search.index_prefix
+        book, audiobook, issue = self._three_works(fixture, db)
+
+        # Periodicals start off.
+        assert services_fixture.services.config.sitewide.periodicals_enabled() is False
+
+        # The index is written exactly once, while they are off...
+        fixture.populate_search_index()
+
+        # ...and nothing writes to it again for the rest of the test. If the
+        # flag only appeared to work because something reindexed, this fails.
+        def no_more_writes(*args: object, **kwargs: object) -> None:
+            raise AssertionError("the index was written again")
+
+        monkeypatch.setattr(
+            fixture.external_search_index, "add_documents", no_more_writes
+        )
+
+        # The issue is in the index. This is asked of OpenSearch directly,
+        # because asking through query_works would only tell us what the thing
+        # we are testing decided to return.
+        indexed = client.count(
+            index=f"{prefix}*",
+            body={"query": {"term": {"medium": "periodical"}}},
+        )
+        assert indexed["count"] == 1
+
+        # While periodicals are off, nothing returns the issue -- and the book
+        # and the audiobook still come back, so an empty result cannot be
+        # mistaken for the whole query matching nothing.
+        # A search with no media restriction at all.
+        fixture.expect_results([book, audiobook], filter=Filter(), ordered=False)
+
+        # A search that asks for periodicals by name gets nothing. The two
+        # restrictions are combined, not traded off against each other.
+        fixture.expect_results([], filter=Filter(media=[Edition.PERIODICAL_MEDIUM]))
+
+        # The same through the facets a request really builds, rather than a
+        # Filter put together by hand.
+        fixture.expect_results(
+            [], filter=Filter(facets=SearchFacets(media=Edition.PERIODICAL_MEDIUM))
+        )
+
+        # ALL_MEDIUM is the interesting one: it clears Filter.media outright,
+        # so there is no media restriction left to combine with. Periodicals
+        # still do not come through, because they are taken away rather than
+        # left out of a list.
+        fixture.expect_results(
+            [book, audiobook],
+            filter=Filter(facets=SearchFacets(media=Edition.ALL_MEDIUM)),
+            ordered=False,
+        )
+
+        # Turn periodicals on. Nothing else changes: no reindex, no reimport,
+        # not even a database write.
+        services_fixture.set_sitewide_config_option("periodicals_enabled", True)
+
+        # The issue is searchable immediately, and so are the other two.
+        fixture.expect_results([book, audiobook, issue], filter=Filter(), ordered=False)
+        fixture.expect_results(
+            [issue], filter=Filter(media=[Edition.PERIODICAL_MEDIUM])
+        )
+
+    def test_books_and_audiobooks_are_unaffected(
+        self,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+        services_fixture: ServicesFixture,
+        db: DatabaseTransactionFixture,
+    ) -> None:
+        # Whatever the flag says, books and audiobooks behave identically.
+        fixture = end_to_end_search_fixture
+        book, audiobook, _ = self._three_works(fixture, db)
+        fixture.populate_search_index()
+
+        for enabled in (False, True):
+            services_fixture.set_sitewide_config_option("periodicals_enabled", enabled)
+            fixture.expect_results([book], filter=Filter(media=[Edition.BOOK_MEDIUM]))
+            fixture.expect_results(
+                [audiobook], filter=Filter(media=[Edition.AUDIO_MEDIUM])
+            )
+
+    def test_custom_list_query_cannot_reach_periodicals(
+        self,
+        end_to_end_search_fixture: EndToEndSearchFixture,
+        services_fixture: ServicesFixture,
+        db: DatabaseTransactionFixture,
+    ) -> None:
+        # An auto-updating custom list runs a JSON query through the same
+        # Filter, so a saved query naming the medium finds nothing while
+        # periodicals are off.
+        fixture = end_to_end_search_fixture
+        _, _, issue = self._three_works(fixture, db)
+        fixture.populate_search_index()
+
+        json_query = '{"query": {"key": "medium", "value": "Periodical"}}'
+        fixture.expect_results(
+            [], json_query, filter=Filter(facets=SearchFacets(search_type="json"))
+        )
+
+        services_fixture.set_sitewide_config_option("periodicals_enabled", True)
+        fixture.expect_results(
+            [issue], json_query, filter=Filter(facets=SearchFacets(search_type="json"))
+        )

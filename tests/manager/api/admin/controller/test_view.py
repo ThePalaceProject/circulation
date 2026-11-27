@@ -13,6 +13,7 @@ from palace.manager.api.admin.password_admin_authentication_provider import (
 from palace.manager.sqlalchemy.model.admin import AdminRole
 from palace.manager.sqlalchemy.model.library import Library
 from tests.fixtures.api_admin import AdminControllerFixture
+from tests.fixtures.services import ServicesFixture
 from tests.fixtures.test_utils import MonkeyPatchEnvFixture
 
 
@@ -333,6 +334,35 @@ class TestViewController:
             assert '"showCircEventsDownload":true' in feature_flags
             assert '"reportsOnlyForSysadmins":true' in feature_flags
             assert '"quicksightOnlyForSysadmins":true' in feature_flags
+            assert '"showPeriodicals":false' in feature_flags
+
+    def test_feature_flags_periodicals(
+        self,
+        admin_ctrl_fixture: AdminControllerFixture,
+        services_fixture: ServicesFixture,
+    ):
+        # The periodicals setting is not an admin client setting -- it decides
+        # what patrons are shown -- but the admin client reads its flags from
+        # this one payload, so it is added to it.
+        admin_ctrl_fixture.admin.password_hashed = None
+        html_feature_flags_re = re.compile(
+            r"featureFlags: {(.*)?}", re.MULTILINE | re.DOTALL
+        )
+
+        services_fixture.set_sitewide_config_option("periodicals_enabled", True)
+
+        with admin_ctrl_fixture.ctrl.app.test_request_context("/admin"):
+            response = admin_ctrl_fixture.manager.admin_view_controller(None, None)
+            assert 200 == response.status_code
+            html = response.get_data(as_text=True)
+
+            match = html_feature_flags_re.search(html)
+            assert match is not None
+            feature_flags: str = match.groups(0)[0]  # type: ignore[assignment]
+            assert '"showPeriodicals":true' in feature_flags
+
+            # The flags that come from AdminClientFeatureFlags are still there.
+            assert '"showCircEventsDownload":true' in feature_flags
 
     def test_feature_flags_overridden(
         self,

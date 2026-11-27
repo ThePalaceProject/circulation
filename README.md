@@ -266,6 +266,12 @@ Celery and caching, we recommend that you use a separate database for each purpo
 #### General
 
 - `PALACE_BASE_URL`: The base URL of the application. Used to create absolute links. (optional)
+- `PALACE_PERIODICALS_ENABLED`: Whether periodicals (magazines, journals, newspapers) are shown to
+   patrons. Defaults to `false`. Periodicals are imported and added to the search index whatever this
+   is set to; it decides only whether a feed or a search may return them, whether one can be borrowed
+   or fulfilled, and whether the Periodicals entry point is offered. Turning it on therefore takes
+   effect without reindexing anything, but the value is read once when a process starts, so every web
+   and scripts process has to be restarted for a change to take effect (optional).
 - `PALACE_PATRON_WEB_HOSTNAMES`: Only web applications from these hosts can call the endpoints that manage patron
    data, such as loans, holds, and the patron profile. This can be a single hostname (`http://catalog.library.org`)
    or a pipe-separated list of hostnames (`http://catalog.library.org|https://beta.library.org`). You can also set

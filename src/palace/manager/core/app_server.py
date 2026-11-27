@@ -481,6 +481,12 @@ class URNLookupHandler:
             # Treat it as if it doesn't exist.
             return self.add_message(urn, 404, FILTERED_BY_LIBRARY_POLICY.detail)
 
+        if work.is_hidden_periodical:
+            # Periodicals are not being shown. Looking one up by URN has to be
+            # refused and not merely left out of the feeds, or the identifier
+            # is a way around them being hidden.
+            return self.add_message(urn, 404, FILTERED_BY_LIBRARY_POLICY.detail)
+
         # The work is ready for use in an OPDS feed!
         return self.add_work(identifier, work)
 
